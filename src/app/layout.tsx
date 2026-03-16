@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Starfield } from '@/components/starfield';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { Header } from '@/components/header';
+import { LiveStreamersProvider } from '@/contexts/live-streamers-context';
 
 export const metadata: Metadata = {
   title: 'Astro Twitch Clash',
@@ -25,12 +26,14 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen bg-background relative">
         <FirebaseClientProvider>
-          <Starfield />
-          <div className="relative z-10">
-            <Header />
-            {children}
-          </div>
-          <Toaster />
+          <LiveStreamersProvider>
+            <Starfield />
+            <div className="relative z-10">
+              <Header />
+              {children}
+            </div>
+            <Toaster />
+          </LiveStreamersProvider>
         </FirebaseClientProvider>
       </body>
     </html>

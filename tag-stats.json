@@ -1,0 +1,2679 @@
+{
+  "players": [
+    {
+      "id": "user_757276653",
+      "username": "fatkid4ev4",
+      "avatar": "",
+      "joinedAt": 1768464204478
+    },
+    {
+      "id": "user_818793169",
+      "username": "fidget_4_gadget",
+      "avatar": "",
+      "joinedAt": 1768495672588
+    },
+    {
+      "id": "user_579836981",
+      "username": "lunaloveday",
+      "avatar": "",
+      "joinedAt": 1768497192386
+    },
+    {
+      "id": "user_146962746",
+      "username": "TheRockinDman",
+      "avatar": "",
+      "joinedAt": 1768497327364
+    },
+    {
+      "id": "user_236050731",
+      "username": "SwordsmanEB",
+      "avatar": "",
+      "joinedAt": 1768497485428
+    },
+    {
+      "id": "user_898304760",
+      "username": "infuse_carnage",
+      "avatar": "",
+      "joinedAt": 1768499896106
+    },
+    {
+      "id": "user_865640856",
+      "username": "coriumboy95",
+      "avatar": "",
+      "joinedAt": 1768506873733
+    },
+    {
+      "id": "user_62633402",
+      "username": "MotherMayrien",
+      "avatar": "",
+      "joinedAt": 1768508452259
+    },
+    {
+      "id": "user_188587641",
+      "username": "pablogoldbloom",
+      "avatar": "",
+      "joinedAt": 1768511051694
+    },
+    {
+      "id": "user_1026453815",
+      "username": "MamaFeisty",
+      "avatar": "",
+      "joinedAt": 1768511990146
+    },
+    {
+      "id": "user_762943894",
+      "username": "MsFeisty13",
+      "avatar": "",
+      "joinedAt": 1768511999536
+    },
+    {
+      "id": "user_240849967",
+      "username": "Mattflowzz",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/39b41be7-5e38-4101-97a1-55e5210e82c6-profile_image-300x300.png",
+      "joinedAt": 1768532000000
+    },
+    {
+      "id": "user_641102500",
+      "username": "TotalHomeGrown",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/f7ba5c1a-7ccb-45c4-a441-88c0c60f010b-profile_image-300x300.png",
+      "joinedAt": 1768532000001
+    },
+    {
+      "id": "user_900513945",
+      "username": "thg_caver250",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/1941aaed-1358-419a-bd8d-979c71b441fb-profile_image-300x300.jpeg",
+      "joinedAt": 1768532000002
+    },
+    {
+      "id": "user_420331646",
+      "username": "shadow10163",
+      "avatar": "",
+      "joinedAt": 1768533873719
+    },
+    {
+      "id": "user_1005720090",
+      "username": "Turtlebeast621",
+      "avatar": "",
+      "joinedAt": 1768534142303
+    },
+    {
+      "id": "user_799426694",
+      "username": "shadowedhuman",
+      "avatar": "",
+      "joinedAt": 1768536659039
+    },
+    {
+      "id": "user_1369564816",
+      "username": "MousseeMouse",
+      "avatar": "",
+      "joinedAt": 1768537562066
+    },
+    {
+      "id": "user_266696867",
+      "username": "zekeweav",
+      "avatar": "",
+      "joinedAt": 1768538456602
+    },
+    {
+      "id": "user_970767043",
+      "username": "Daddy_Gandy",
+      "avatar": "",
+      "joinedAt": 1768538468222
+    },
+    {
+      "id": "user_1223678433",
+      "username": "pinscorpion6521",
+      "avatar": "",
+      "joinedAt": 1768538541704
+    },
+    {
+      "id": "user_603742785",
+      "username": "canerdian97",
+      "avatar": "",
+      "joinedAt": 1768538564512
+    },
+    {
+      "id": "user_69079706",
+      "username": "Davonedge",
+      "avatar": "",
+      "joinedAt": 1768539528507
+    },
+    {
+      "id": "user_1209028797",
+      "username": "Loone23",
+      "avatar": "",
+      "joinedAt": 1768539660632
+    },
+    {
+      "id": "user_536517327",
+      "username": "TwinCitiesKing",
+      "avatar": "",
+      "joinedAt": 1768546018029
+    },
+    {
+      "id": "user_851007802",
+      "username": "Dream_Paladin",
+      "avatar": "",
+      "joinedAt": 1768546116250
+    },
+    {
+      "id": "user_1101223723",
+      "username": "bigmouthdev",
+      "avatar": "",
+      "joinedAt": 1768546191715
+    },
+    {
+      "id": "user_619060654",
+      "username": "Van_Braak",
+      "avatar": "",
+      "joinedAt": 1768548350304
+    },
+    {
+      "id": "user_1231952737",
+      "username": "aliendiamondqueen",
+      "avatar": "",
+      "joinedAt": 1768549526387
+    },
+    {
+      "id": "user_86182883",
+      "username": "eki11a",
+      "avatar": "",
+      "joinedAt": 1768554168531
+    },
+    {
+      "id": "user_490611599",
+      "username": "NINJAY_23",
+      "avatar": "",
+      "joinedAt": 1768560150528
+    },
+    {
+      "id": "user_818352657",
+      "username": "Blessed1NYC",
+      "avatar": "",
+      "joinedAt": 1768567466294
+    },
+    {
+      "id": "user_56783338",
+      "username": "XRedhottx",
+      "avatar": "",
+      "joinedAt": 1768576287971
+    },
+    {
+      "id": "user_463887098",
+      "username": "aangelbaby357",
+      "avatar": "",
+      "joinedAt": 1768580868160
+    },
+    {
+      "id": "user_673235142",
+      "username": "mrslagg16",
+      "avatar": "",
+      "joinedAt": 1768583969717
+    },
+    {
+      "id": "user_416571103",
+      "username": "NRDeDan",
+      "avatar": "",
+      "joinedAt": 1768586068321
+    },
+    {
+      "id": "user_609149789",
+      "username": "hellkracken",
+      "avatar": "",
+      "joinedAt": 1768586535280
+    },
+    {
+      "id": "user_428161033",
+      "username": "The_Lovely_Princess_Snow",
+      "avatar": "",
+      "joinedAt": 1768589619745
+    },
+    {
+      "id": "user_94371378",
+      "username": "Mtman1987",
+      "avatar": "",
+      "joinedAt": 1768606613618
+    },
+    {
+      "id": "user_1003822873",
+      "username": "madired29",
+      "avatar": "",
+      "joinedAt": 1768606618610
+    },
+    {
+      "id": "user_130552869",
+      "username": "differentdecree",
+      "avatar": "",
+      "joinedAt": 1768618516100
+    },
+    {
+      "id": "user_1768618558639",
+      "username": "xetrovrellik",
+      "avatar": "https://ui-avatars.com/api/?name=xetrovrellik&background=random",
+      "joinedAt": 1768618558640
+    },
+    {
+      "id": "user_1768621348504",
+      "username": "gondorduck",
+      "avatar": "https://ui-avatars.com/api/?name=gondorduck&background=random",
+      "joinedAt": 1768621349294
+    },
+    {
+      "id": "user_1077924569",
+      "username": "Gen_gen92",
+      "avatar": "",
+      "joinedAt": 1768637654950
+    },
+    {
+      "id": "user_788076469",
+      "username": "RiverSong309",
+      "avatar": "",
+      "joinedAt": 1768644675151
+    },
+    {
+      "id": "user_502381201",
+      "username": "Ripcord_z99",
+      "avatar": "",
+      "joinedAt": 1768646648437
+    },
+    {
+      "id": "user_71186736",
+      "username": "EmIsTheLetterM",
+      "avatar": "",
+      "joinedAt": 1768687216398
+    },
+    {
+      "id": "user_1045065857",
+      "username": "Playdedd",
+      "avatar": "",
+      "joinedAt": 1768731480055
+    },
+    {
+      "id": "user_20443295",
+      "username": "Ansatsujin",
+      "avatar": "",
+      "joinedAt": 1768734302597
+    },
+    {
+      "id": "user_23727694",
+      "username": "MasterTubbie",
+      "avatar": "",
+      "joinedAt": 1768742214637
+    },
+    {
+      "id": "user_624953535",
+      "username": "N0_HA",
+      "avatar": "",
+      "joinedAt": 1768753152435
+    },
+    {
+      "id": "user_90992721",
+      "username": "BrotherDavid09",
+      "avatar": "",
+      "joinedAt": 1768757114537
+    },
+    {
+      "id": "user_675110322",
+      "username": "OceanicMoon8144",
+      "avatar": "",
+      "joinedAt": 1768797826810
+    },
+    {
+      "id": "user_1768807322076",
+      "username": "mrmonstermunch2000",
+      "avatar": "https://ui-avatars.com/api/?name=mrmonstermunch2000&background=random",
+      "joinedAt": 1768807322077
+    },
+    {
+      "id": "user_1768814577268",
+      "username": "akhiteddy",
+      "avatar": "https://ui-avatars.com/api/?name=akhiteddy&background=random",
+      "joinedAt": 1768814577269
+    },
+    {
+      "id": "user_710192883",
+      "username": "ChrissyBaaby_",
+      "avatar": "",
+      "joinedAt": 1768825048495
+    },
+    {
+      "id": "user_130372842",
+      "username": "TheCaptainDash",
+      "avatar": "",
+      "joinedAt": 1768864317605
+    },
+    {
+      "id": "user_81186795",
+      "username": "MechMikeD",
+      "avatar": "",
+      "joinedAt": 1768866156367
+    },
+    {
+      "id": "user_1081595811",
+      "username": "toxiktweet",
+      "avatar": "",
+      "joinedAt": 1768867282452
+    },
+    {
+      "id": "user_859440207",
+      "username": "ThrFatGuy",
+      "avatar": "",
+      "joinedAt": 1768870166539
+    },
+    {
+      "id": "user_81283839",
+      "username": "Kyouya66",
+      "avatar": "",
+      "joinedAt": 1768872584350
+    },
+    {
+      "id": "user_415313047",
+      "username": "shadowninja__xd",
+      "avatar": "",
+      "joinedAt": 1768878090719
+    },
+    {
+      "id": "user_146392919",
+      "username": "armybigworm09",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/5af8bc48-ede2-4a43-91e8-ac15189b86fb-profile_image-300x300.jpeg",
+      "joinedAt": 1768878251945
+    },
+    {
+      "id": "user_1210161743",
+      "username": "bellgirlttv069",
+      "avatar": "",
+      "joinedAt": 1768878744124
+    },
+    {
+      "id": "user_926747888",
+      "username": "lippyyybish",
+      "avatar": "",
+      "joinedAt": 1768884645995
+    },
+    {
+      "id": "user_189848595",
+      "username": "AthenaHighwind",
+      "avatar": "",
+      "joinedAt": 1768911010117
+    },
+    {
+      "id": "user_113993807",
+      "username": "CodeSierraAlpha",
+      "avatar": "",
+      "joinedAt": 1768957219675
+    },
+    {
+      "id": "user_1212769598",
+      "username": "7bracingjjkk",
+      "avatar": "",
+      "joinedAt": 1768967605060
+    },
+    {
+      "id": "user_1046441468",
+      "username": "wopvilla",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/6e3263f7-7047-49a9-8ae4-5db30d6507eb-profile_image-300x300.png",
+      "joinedAt": 1769028710843
+    },
+    {
+      "id": "user_747437350",
+      "username": "BluEyeBeauty420",
+      "avatar": "",
+      "joinedAt": 1769034306316
+    },
+    {
+      "id": "user_130088464",
+      "username": "scarletkitty1313",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/880cadf2-3b2a-46d1-84ba-32e3a67ddfbd-profile_image-300x300.jpeg",
+      "joinedAt": 1769037383833,
+      "score": 0
+    },
+    {
+      "id": "user_130088464",
+      "username": "scarletkitty1313",
+      "avatar": "https://static-cdn.jtvnw.net/jtv_user_pictures/880cadf2-3b2a-46d1-84ba-32e3a67ddfbd-profile_image-300x300.jpeg",
+      "joinedAt": 1769041716558,
+      "score": 0
+    },
+    {
+      "id": "user_920558196",
+      "username": "CrisPy42oH",
+      "avatar": "",
+      "joinedAt": 1769070843684
+    }
+  ],
+  "currentIt": "user_69079706",
+  "tags": [
+    {
+      "from": "user_94371378",
+      "to": "user_62633402",
+      "timestamp": 1768510260991,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_865640856",
+      "timestamp": 1768510335954,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_90992721",
+      "timestamp": 1768510381987,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_90992721",
+      "to": "user_757276653",
+      "timestamp": 1768512166067,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_1026453815",
+      "timestamp": 1768512453558,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_762943894",
+      "timestamp": 1768512548478,
+      "channel": "#msfeisty13"
+    },
+    {
+      "from": "user_762943894",
+      "to": "user_94371378",
+      "timestamp": 1768512564061,
+      "channel": "#msfeisty13"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_62633402",
+      "timestamp": 1768513170368,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_1026453815",
+      "timestamp": 1768513351499,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_146962746",
+      "timestamp": 1768513452628,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_94371378",
+      "timestamp": 1768513779162,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_762943894",
+      "timestamp": 1768514575258,
+      "channel": "#msfeisty13"
+    },
+    {
+      "from": "user_762943894",
+      "to": "user_1026453815",
+      "timestamp": 1768514657938,
+      "channel": "#msfeisty13"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_818793169",
+      "timestamp": 1768514709561,
+      "channel": "#msfeisty13"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_865640856",
+      "timestamp": 1768515257909,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_62633402",
+      "timestamp": 1768517566988,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_188587641",
+      "timestamp": 1768517626950,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_236050731",
+      "timestamp": 1768524653324,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_236050731",
+      "to": "user_90992721",
+      "timestamp": 1768531272270,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_90992721",
+      "to": "user_94371378",
+      "timestamp": 1768531975993,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_240849967",
+      "timestamp": 1768533261313,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_240849967",
+      "to": "user_420331646",
+      "timestamp": 1768535876117,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_757276653",
+      "timestamp": 1768538565373,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_90992721",
+      "timestamp": 1768538643235,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "timestamp": 1768547859402,
+      "newIt": "Mtman1987",
+      "channel": "Davonedge"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_970767043",
+      "timestamp": 1768548268354,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_619060654",
+      "timestamp": 1768548375988,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_266696867",
+      "timestamp": 1768548571483,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_757276653",
+      "timestamp": 1768549360545,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_619060654",
+      "timestamp": 1768549404116,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_970767043",
+      "timestamp": 1768549441307,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_757276653",
+      "timestamp": 1768549522657,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_619060654",
+      "timestamp": 1768549694502,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_420331646",
+      "timestamp": 1768550199739,
+      "channel": "#shadow10163"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_970767043",
+      "timestamp": 1768550293026,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_1026453815",
+      "timestamp": 1768550660980,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_1231952737",
+      "timestamp": 1768551382423,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_536517327",
+      "timestamp": 1768552318132,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_86182883",
+      "timestamp": 1768555776411,
+      "channel": "#eki11a"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_490611599",
+      "timestamp": 1768560395777,
+      "channel": "#ninjay_23"
+    },
+    {
+      "from": "user_490611599",
+      "to": "user_818352657",
+      "timestamp": 1768567856126,
+      "channel": "#ninjay_23"
+    },
+    {
+      "from": "user_818352657",
+      "to": "user_490611599",
+      "timestamp": 1768567883519,
+      "channel": "#ninjay_23"
+    },
+    {
+      "from": "user_490611599",
+      "to": "user_818352657",
+      "timestamp": 1768567931393,
+      "channel": "#ninjay_23"
+    },
+    {
+      "timestamp": 1768577027993,
+      "newIt": "Mtman1987",
+      "channel": "XRedhottx"
+    },
+    {
+      "timestamp": 1768577090373,
+      "newIt": "Mtman1987",
+      "channel": "XRedhottx"
+    },
+    {
+      "timestamp": 1768577386384,
+      "newIt": "BrotherDavid09",
+      "channel": "TwinCitiesKing"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_56783338",
+      "timestamp": 1768577569843,
+      "channel": "#xredhottx"
+    },
+    {
+      "from": "user_56783338",
+      "to": "user_579836981",
+      "timestamp": 1768579846484,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_463887098",
+      "timestamp": 1768580922591,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_62633402",
+      "timestamp": 1768582168299,
+      "channel": "#xredhottx"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_579836981",
+      "timestamp": 1768582802959,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_818793169",
+      "timestamp": 1768582850449,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_416571103",
+      "timestamp": 1768586115585,
+      "channel": "#nrdedan"
+    },
+    {
+      "from": "user_416571103",
+      "to": "user_536517327",
+      "timestamp": 1768587046933,
+      "channel": "#hellkracken"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1768587650688,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_970767043",
+      "timestamp": 1768590449729,
+      "channel": "#the_lovely_princess_snow"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_90992721",
+      "timestamp": 1768590640574,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "timestamp": 1768596904718,
+      "newIt": "Davonedge",
+      "channel": "Vonage35"
+    },
+    {
+      "from": "system",
+      "to": "user_240849967",
+      "timestamp": 1768604388369,
+      "channel": "auto-rotate"
+    },
+    {
+      "timestamp": 1768610177403,
+      "newIt": "aliendiamondqueen",
+      "channel": "toxiktweet"
+    },
+    {
+      "timestamp": 1768610298579,
+      "newIt": "Daddy_Gandy",
+      "channel": "Mattflowzz"
+    },
+    {
+      "timestamp": 1768610307766,
+      "newIt": "Daddy_Gandy",
+      "channel": "Mattflowzz"
+    },
+    {
+      "from": "system",
+      "to": "user_1003822873",
+      "timestamp": 1768610878084,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_463887098",
+      "timestamp": 1768611242560,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_490611599",
+      "timestamp": 1768611737602,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_865640856",
+      "timestamp": 1768613102218,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_188587641",
+      "timestamp": 1768614739031,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_641102500",
+      "timestamp": 1768615000000,
+      "channel": "manual-fix"
+    },
+    {
+      "from": "user_641102500",
+      "to": "user_240849967",
+      "timestamp": 1768617029403,
+      "channel": "#totalhomegrown"
+    },
+    {
+      "from": "user_240849967",
+      "to": "user_188587641",
+      "timestamp": 1768617773872,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_188587641",
+      "to": "user_94371378",
+      "timestamp": 1768618357135,
+      "channel": "#pablogoldbloom"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_757276653",
+      "timestamp": 1768618846654,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_130552869",
+      "timestamp": 1768619288957,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_1768619251611",
+      "to": "user_970767043",
+      "timestamp": 1768625322313,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_619060654",
+      "timestamp": 1768625582350,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_757276653",
+      "timestamp": 1768625628059,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_188587641",
+      "timestamp": 1768626374982,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "system",
+      "to": "user_1369564816",
+      "timestamp": 1768630823843,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768636810710,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_188587641",
+      "timestamp": 1768636922064,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_818352657",
+      "timestamp": 1768637480124,
+      "channel": "#blessed1nyc"
+    },
+    {
+      "from": "system",
+      "to": "user_818352657",
+      "timestamp": 1768640410724,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_818352657",
+      "to": "user_490611599",
+      "timestamp": 1768640641656,
+      "channel": "#blessed1nyc"
+    },
+    {
+      "from": "system",
+      "to": "user_69079706",
+      "timestamp": 1768643410721,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_788076469",
+      "timestamp": 1768645254007,
+      "channel": "#riversong309"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768648210776,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1768648393006,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "user_463887098",
+      "timestamp": 1768649804648,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768652410855,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_788076469",
+      "timestamp": 1768655148880,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768657694330,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768657807918,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768660694346,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_898304760",
+      "timestamp": 1768663626250,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768666089788,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1768666257609,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "user_900513945",
+      "timestamp": 1768669089811,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_900513945",
+      "timestamp": 1768672089887,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_865640856",
+      "timestamp": 1768675089904,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_62633402",
+      "timestamp": 1768675107697,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_428161033",
+      "timestamp": 1768675287781,
+      "channel": "#the_lovely_princess_snow"
+    },
+    {
+      "from": "system",
+      "to": "user_240849967",
+      "timestamp": 1768678089952,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_240849967",
+      "to": "user_94371378",
+      "timestamp": 1768678244593,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "system",
+      "to": "user_900513945",
+      "timestamp": 1768681090044,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_641102500",
+      "timestamp": 1768684090085,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_416571103",
+      "timestamp": 1768687090074,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_641102500",
+      "timestamp": 1768690090091,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_240849967",
+      "timestamp": 1768693090129,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_416571103",
+      "timestamp": 1768696090095,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_416571103",
+      "to": "user_1768618558639",
+      "timestamp": 1768696261425,
+      "channel": "#madired29"
+    },
+    {
+      "from": "system",
+      "to": "user_900513945",
+      "timestamp": 1768699090189,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_1768618558639",
+      "timestamp": 1768702090215,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_900513945",
+      "timestamp": 1768705090276,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_757276653",
+      "timestamp": 1768708090263,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768711090346,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1768711148530,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_851007802",
+      "to": "user_799426694",
+      "timestamp": 1768711378057,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "user_799426694",
+      "timestamp": 1768714090323,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_757276653",
+      "timestamp": 1768717090396,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_1026453815",
+      "timestamp": 1768717314563,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_818793169",
+      "timestamp": 1768717661413,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "system",
+      "to": "user_1768618558639",
+      "timestamp": 1768720088956,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768723088977,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_898304760",
+      "timestamp": 1768723161297,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "user_788076469",
+      "timestamp": 1768726089001,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768729089236,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_188587641",
+      "timestamp": 1768729505165,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1026453815",
+      "timestamp": 1768730350702,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_851007802",
+      "timestamp": 1768730545357,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "system",
+      "to": "user_788076469",
+      "timestamp": 1768733289256,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_788076469",
+      "to": "user_1045065857",
+      "timestamp": 1768733858482,
+      "channel": "#riversong309"
+    },
+    {
+      "from": "user_1045065857",
+      "to": "user_62633402",
+      "timestamp": 1768734295158,
+      "channel": "#playdedd"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768736833629,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_788076469",
+      "timestamp": 1768739833594,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_23727694",
+      "timestamp": 1768742461179,
+      "channel": "#mastertubbie"
+    },
+    {
+      "from": "user_23727694",
+      "to": "user_536517327",
+      "timestamp": 1768742995749,
+      "channel": "#mastertubbie"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768745919782,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_536517327",
+      "timestamp": 1768748339416,
+      "channel": "auto-rotate"
+    },
+    {
+      "from": "system",
+      "to": "user_188587641",
+      "timestamp": 1768748988351,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_865640856",
+      "timestamp": 1768750462771,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_1768621348504",
+      "timestamp": 1768751160643,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "user_1231952737",
+      "timestamp": 1768752101805,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768754772869,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768754974934,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768755647819,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_641102500",
+      "to": "user_865640856",
+      "timestamp": 1768755683053,
+      "channel": "#totalhomegrown",
+      "doublePoints": true
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_94371378",
+      "timestamp": 1768755846273,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_90992721",
+      "timestamp": 1768756219154,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "system",
+      "to": "user_130552869",
+      "timestamp": 1768756976317,
+      "channel": "randomize"
+    },
+    {
+      "from": "user_624953535",
+      "to": "user_757276653",
+      "timestamp": 1768759713661,
+      "channel": "#n0_ha",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768760511832,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_865640856",
+      "timestamp": 1768761426668,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_62633402",
+      "timestamp": 1768761465469,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_90992721",
+      "timestamp": 1768761498214,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_90992721",
+      "to": "user_188587641",
+      "timestamp": 1768761598176,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_188587641",
+      "to": "user_90992721",
+      "timestamp": 1768761642242,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_90992721",
+      "to": "user_757276653",
+      "timestamp": 1768761677695,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_416571103",
+      "timestamp": 1768762951304,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768765906111,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_536517327",
+      "timestamp": 1768776566415,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_420331646",
+      "timestamp": 1768776719956,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_757276653",
+      "timestamp": 1768776783085,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_1003822873",
+      "timestamp": 1768777251089,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_1003822873",
+      "to": "user_1026453815",
+      "timestamp": 1768777379912,
+      "channel": "#madired29"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_818793169",
+      "timestamp": 1768777437611,
+      "channel": "#madired29"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_579836981",
+      "timestamp": 1768778160527,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768780906291,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_619060654",
+      "timestamp": 1768782815047,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_900513945",
+      "timestamp": 1768785700314,
+      "channel": "#thg_caver250"
+    },
+    {
+      "from": "user_900513945",
+      "to": "user_619060654",
+      "timestamp": 1768786026044,
+      "channel": "#thg_caver250"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_757276653",
+      "timestamp": 1768788316911,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_240849967",
+      "timestamp": 1768788449479,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_240849967",
+      "to": "user_757276653",
+      "timestamp": 1768789960367,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768792906427,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_1005720090",
+      "timestamp": 1768793836284,
+      "channel": "#shadow10163",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768796506458,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_675110322",
+      "timestamp": 1768798252095,
+      "channel": "#shadow10163",
+      "doublePoints": true
+    },
+    {
+      "from": "user_675110322",
+      "to": "user_1005720090",
+      "timestamp": 1768798325355,
+      "channel": "#shadow10163"
+    },
+    {
+      "from": "user_1005720090",
+      "to": "user_420331646",
+      "timestamp": 1768798872532,
+      "channel": "#shadow10163"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_94371378",
+      "timestamp": 1768798925714,
+      "channel": "#shadow10163"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_86182883",
+      "timestamp": 1768806685113,
+      "channel": "#eki11a"
+    },
+    {
+      "from": "user_86182883",
+      "to": "user_970767043",
+      "timestamp": 1768808482407,
+      "channel": "#eki11a"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_619060654",
+      "timestamp": 1768808687157,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768811506685,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1768814577268",
+      "timestamp": 1768814603899,
+      "channel": "#mamafeisty",
+      "doublePoints": true
+    },
+    {
+      "from": "user_1768814577268",
+      "to": "user_1026453815",
+      "timestamp": 1768814791073,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_673235142",
+      "timestamp": 1768814879541,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_673235142",
+      "to": "user_818793169",
+      "timestamp": 1768816145908,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_1768814577268",
+      "timestamp": 1768816255249,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_1768814577268",
+      "to": "user_86182883",
+      "timestamp": 1768816294404,
+      "channel": "#mamafeisty"
+    },
+    {
+      "from": "user_86182883",
+      "to": "user_536517327",
+      "timestamp": 1768816403982,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_1768814577268",
+      "timestamp": 1768816476235,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_1768814577268",
+      "to": "user_94371378",
+      "timestamp": 1768816501365,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1026453815",
+      "timestamp": 1768817555470,
+      "channel": "#hijinks"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_536517327",
+      "timestamp": 1768817692945,
+      "channel": "#hijinks"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_1768807322076",
+      "timestamp": 1768818873846,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768821710211,
+      "channel": "auto-timeout"
+    },
+    {
+      "timestamp": 1768824015118,
+      "newIt": "NINJAY_23",
+      "channel": "NINJAY_23"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768825468386,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_710192883",
+      "timestamp": 1768825525383,
+      "channel": "#ninjay_23",
+      "doublePoints": true
+    },
+    {
+      "from": "user_710192883",
+      "to": "user_490611599",
+      "timestamp": 1768825559686,
+      "channel": "#ninjay_23"
+    },
+    {
+      "from": "user_490611599",
+      "to": "user_94371378",
+      "timestamp": 1768826060606,
+      "channel": "#ninjay_23"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768828910296,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_898304760",
+      "timestamp": 1768828945843,
+      "channel": "#ninjay_23",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768831910341,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768832099555,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768840518358,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_579836981",
+      "timestamp": 1768840542964,
+      "channel": "#lunaloveday",
+      "doublePoints": true
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_94371378",
+      "timestamp": 1768840623494,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_536517327",
+      "timestamp": 1768841667586,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768842958034,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768843028431,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768843377687,
+      "channel": "#twincitiesking",
+      "blocked": "sleeping"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1768843409104,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "user_851007802",
+      "to": "user_1768621348504",
+      "timestamp": 1768843464165,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768846357056,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_865640856",
+      "timestamp": 1768846379745,
+      "channel": "#coriumboy95",
+      "doublePoints": true
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_1768807322076",
+      "timestamp": 1768846835969,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768849357098,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_188587641",
+      "timestamp": 1768849463578,
+      "channel": "#coriumboy95",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768852357140,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_62633402",
+      "timestamp": 1768852389861,
+      "channel": "#coriumboy95",
+      "doublePoints": true
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_130552869",
+      "timestamp": 1768852417571,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_130552869",
+      "to": "user_865640856",
+      "timestamp": 1768852476641,
+      "channel": "#differentdecree"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768855357186,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "system",
+      "to": "user_420331646",
+      "timestamp": 1768857418389,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768858732575,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_1768814577268",
+      "timestamp": 1768863840000,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768867857064,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768867894069,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_240849967",
+      "timestamp": 1768868297640,
+      "channel": "#thecaptaindash"
+    },
+    {
+      "from": "user_240849967",
+      "to": "user_130372842",
+      "timestamp": 1768868400000,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_1768619251611",
+      "timestamp": 1768869084779,
+      "channel": "#thecaptaindash"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768871116167,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_240849967",
+      "to": "user_94371378",
+      "timestamp": 1768871142775,
+      "channel": "#mattflowzz",
+      "doublePoints": true
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_818793169",
+      "timestamp": 1768872044591,
+      "channel": "#chronic_medusa"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_579836981",
+      "timestamp": 1768872131827,
+      "channel": "#fidget_4_gadget"
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_1768619251611",
+      "timestamp": 1768872191889,
+      "channel": "#fidget_4_gadget",
+      "blocked": "blacklisted"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_130372842",
+      "timestamp": 1768873435973,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_428161033",
+      "timestamp": 1768873468642,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_428161033",
+      "to": "user_94371378",
+      "timestamp": 1768873515668,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_757276653",
+      "timestamp": 1768873768735,
+      "channel": "#mattflowzz"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_859440207",
+      "timestamp": 1768873862933,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768878057217,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_1026453815",
+      "timestamp": 1768878096647,
+      "channel": "#fidget_4_gadget",
+      "doublePoints": true
+    },
+    {
+      "from": "user_1026453815",
+      "to": "user_81283839",
+      "timestamp": 1768879038666,
+      "channel": "#fidget_4_gadget"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1210161743",
+      "timestamp": 1768879222135,
+      "channel": "#shadowninja__xd"
+    },
+    {
+      "from": "user_1210161743",
+      "to": "user_415313047",
+      "timestamp": 1768879251349,
+      "channel": "#shadowninja__xd"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768884045076,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768884182369,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_970767043",
+      "timestamp": 1768884548262,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_926747888",
+      "timestamp": 1768884661916,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768887064768,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1026453815",
+      "timestamp": 1768887196137,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "user_762943894",
+      "timestamp": 1768888324943,
+      "channel": "randomize"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768888556970,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_94371378",
+      "timestamp": 1768888615035,
+      "channel": "#daddy_gandy",
+      "doublePoints": true
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_926747888",
+      "timestamp": 1768889493542,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_926747888",
+      "to": "user_757276653",
+      "timestamp": 1768890331116,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_970767043",
+      "timestamp": 1768890504168,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768894480270,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_189848595",
+      "timestamp": 1768911138953,
+      "channel": "#athenahighwind",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768915105933,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1026453815",
+      "timestamp": 1768915188596,
+      "channel": "#athenahighwind",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768918643281,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_94371378",
+      "timestamp": 1768918660509,
+      "channel": "#athenahighwind",
+      "doublePoints": true
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_189848595",
+      "timestamp": 1768919920179,
+      "channel": "#athenahighwind"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768924106030,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_818793169",
+      "timestamp": 1768924116544,
+      "channel": "#fidget_4_gadget",
+      "doublePoints": true
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_579836981",
+      "timestamp": 1768924183064,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_1081595811",
+      "timestamp": 1768924326297,
+      "channel": "#lunaloveday"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768928115164,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_579836981",
+      "to": "user_818793169",
+      "timestamp": 1768928162663,
+      "channel": "#lunaloveday",
+      "doublePoints": true
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_428161033",
+      "timestamp": 1768928215749,
+      "channel": "#the_lovely_princess_snow"
+    },
+    {
+      "from": "user_428161033",
+      "to": "user_130372842",
+      "timestamp": 1768928279104,
+      "channel": "#the_lovely_princess_snow"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_463887098",
+      "timestamp": 1768928327473,
+      "channel": "#the_lovely_princess_snow"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768932315200,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_818793169",
+      "to": "user_188587641",
+      "timestamp": 1768932439501,
+      "channel": "#fidget_4_gadget",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768936515259,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768936540489,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768940054735,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_188587641",
+      "timestamp": 1768940081681,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768944013534,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_189848595",
+      "timestamp": 1768944050876,
+      "channel": "#thecaptaindash",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768948210926,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_236050731",
+      "timestamp": 1768948276518,
+      "channel": "#thecaptaindash",
+      "doublePoints": true
+    },
+    {
+      "from": "user_236050731",
+      "to": "user_62633402",
+      "timestamp": 1768948643455,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_130552869",
+      "timestamp": 1768949881323,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_130552869",
+      "to": "user_130372842",
+      "timestamp": 1768950022794,
+      "channel": "#swordsmaneb"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_1768807322076",
+      "timestamp": 1768950076910,
+      "channel": "#thecaptaindash"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768954211016,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1768954305359,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768958411081,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_236050731",
+      "timestamp": 1768958445824,
+      "channel": "#swordsmaneb",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768962611127,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768962631269,
+      "channel": "#twincitiesking",
+      "blocked": "sleeping"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_188587641",
+      "timestamp": 1768962641372,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768966811159,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_865640856",
+      "to": "user_62633402",
+      "timestamp": 1768966825278,
+      "channel": "#coriumboy95",
+      "doublePoints": true
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_236050731",
+      "timestamp": 1768966865265,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_236050731",
+      "to": "user_90992721",
+      "timestamp": 1768966890094,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_90992721",
+      "to": "user_757276653",
+      "timestamp": 1768966943785,
+      "channel": "#coriumboy95"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_970767043",
+      "timestamp": 1768967147280,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_266696867",
+      "timestamp": 1768967318120,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_266696867",
+      "to": "user_428161033",
+      "timestamp": 1768967514531,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_428161033",
+      "to": "user_130372842",
+      "timestamp": 1768967606352,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_130372842",
+      "to": "user_1212769598",
+      "timestamp": 1768967647446,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_1212769598",
+      "to": "user_970767043",
+      "timestamp": 1768969143679,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_757276653",
+      "timestamp": 1768969184469,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_1768807322076",
+      "timestamp": 1768969319586,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_1768807322076",
+      "to": "user_865640856",
+      "timestamp": 1768969458562,
+      "channel": "#mrmonstermunch2000"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768973411275,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_428161033",
+      "to": "user_970767043",
+      "timestamp": 1768973429592,
+      "channel": "#daddy_gandy",
+      "doublePoints": true
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_619060654",
+      "timestamp": 1768973442315,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768977611336,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_81283839",
+      "to": "user_579836981",
+      "timestamp": 1768981084295,
+      "channel": "#kyouya66",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768984811435,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_851007802",
+      "to": "user_536517327",
+      "timestamp": 1768984847006,
+      "channel": "#dream_paladin",
+      "doublePoints": true
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_94371378",
+      "timestamp": 1768984888642,
+      "channel": "#twincitiesking",
+      "blocked": "sleeping"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_818352657",
+      "timestamp": 1768984942646,
+      "channel": "#twincitiesking"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1768989011494,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769016572270,
+      "channel": "manual-timeout"
+    },
+    {
+      "from": "user_536517327",
+      "to": "user_851007802",
+      "timestamp": 1769016618730,
+      "channel": "#twincitiesking",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769020437384,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_236050731",
+      "timestamp": 1769020478494,
+      "channel": "#differentdecree",
+      "doublePoints": true
+    },
+    {
+      "from": "user_236050731",
+      "to": "user_130552869",
+      "timestamp": 1769020573603,
+      "channel": "#differentdecree"
+    },
+    {
+      "from": "user_130552869",
+      "to": "user_240849967",
+      "timestamp": 1769021485038,
+      "channel": "#differentdecree"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769025237459,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_1768807322076",
+      "to": "user_90992721",
+      "timestamp": 1769025265752,
+      "channel": "#mrmonstermunch2000",
+      "doublePoints": true
+    },
+    {
+      "from": "user_90992721",
+      "to": "user_757276653",
+      "timestamp": 1769026703027,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_762943894",
+      "timestamp": 1769027595709,
+      "channel": "#fatkid4ev4"
+    },
+    {
+      "from": "user_762943894",
+      "to": "user_94371378",
+      "timestamp": 1769027654474,
+      "channel": "#msfeisty13"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_1046441468",
+      "timestamp": 1769028725635,
+      "channel": "#wopvilla"
+    },
+    {
+      "from": "user_1046441468",
+      "to": "user_757276653",
+      "timestamp": 1769030069800,
+      "channel": "#wopvilla"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769034237668,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_1768807322076",
+      "timestamp": 1769034255129,
+      "channel": "#mrmonstermunch2000",
+      "doublePoints": true
+    },
+    {
+      "from": "user_549531897",
+      "to": "user_90992721",
+      "timestamp": 1769034392630,
+      "channel": "#mrmonstermunch2000"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_130088464",
+      "timestamp": 1769037645760,
+      "channel": "#scarletkitty1313"
+    },
+    {
+      "from": "user_130088464",
+      "to": "user_1768807322076",
+      "timestamp": 1769037781134,
+      "channel": "#scarletkitty1313"
+    },
+    {
+      "from": "user_549531897",
+      "to": "user_62633402",
+      "timestamp": 1769037828913,
+      "channel": "#scarletkitty1313"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_641102500",
+      "timestamp": 1769038018835,
+      "channel": "#totalhomegrown"
+    },
+    {
+      "from": "user_641102500",
+      "to": "user_130372842",
+      "timestamp": 1769038052527,
+      "channel": "#totalhomegrown"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769041800994,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_641102500",
+      "to": "user_146392919",
+      "timestamp": 1769041829974,
+      "channel": "#totalhomegrown",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769046001067,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_747437350",
+      "timestamp": 1769046073954,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769049783193,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_62633402",
+      "to": "user_189848595",
+      "timestamp": 1769049823195,
+      "channel": "#totalhomegrown",
+      "doublePoints": true
+    },
+    {
+      "from": "user_189848595",
+      "to": "user_1026453815",
+      "timestamp": 1769050443663,
+      "channel": "#athenahighwind"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769054068140,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_146962746",
+      "to": "user_94371378",
+      "timestamp": 1769054112659,
+      "channel": "#therockindman",
+      "doublePoints": true
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_970767043",
+      "timestamp": 1769054443104,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_970767043",
+      "to": "user_1223678433",
+      "timestamp": 1769054601346,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_1223678433",
+      "to": "user_619060654",
+      "timestamp": 1769054779024,
+      "channel": "#daddy_gandy"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_818352657",
+      "timestamp": 1769055259478,
+      "channel": "#blessed1nyc"
+    },
+    {
+      "from": "user_94371378",
+      "to": "user_146962746",
+      "timestamp": 1769056878020,
+      "channel": "#therockindman"
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769060859885,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_619060654",
+      "to": "user_113993807",
+      "timestamp": 1769060911187,
+      "channel": "#daddy_gandy",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769064914826,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_619060654",
+      "timestamp": 1769065433581,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "system",
+      "to": "free-for-all",
+      "timestamp": 1769069548077,
+      "channel": "auto-timeout"
+    },
+    {
+      "from": "user_757276653",
+      "to": "user_420331646",
+      "timestamp": 1769070747024,
+      "channel": "#fatkid4ev4",
+      "doublePoints": true
+    },
+    {
+      "from": "user_420331646",
+      "to": "user_69079706",
+      "timestamp": 1769070833765,
+      "channel": "#shadow10163"
+    }
+  ],
+  "immunity": {
+    "user_146962746_offline": true,
+    "user_113993807_offline": true,
+    "user_619060654_offline": true,
+    "user_420331646": "user_757276653",
+    "user_757276653_timed": 1769071947024,
+    "user_69079706": "user_420331646",
+    "user_420331646_timed": 1769072033765
+  },
+  "lastUpdate": 1769070843684
+}

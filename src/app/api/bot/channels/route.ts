@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeAdminApp } from '@/lib/firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { readAppState } from '@/lib/volume-store';
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    const usersSnap = await db.collection('users').get();
-    const channels = usersSnap.docs.map(doc => ({
-      id: doc.id,
-      username: doc.data().twitchUsername,
-      isActive: doc.data().isActive || false
-    }));
-    
-    return NextResponse.json({ channels });
+    const state = await readAppState();
+    const blacklist = new Set(
+      (state.botSettings.blacklistedChannels.channels || []).map((c: string) => c.toLowerCase())
+    );
+    const allChannels = Object.keys(state.botChannels).filter((ch) => !blacklist.has(ch.toLowerCase()));
+    const joinedChannels = new Set(
+      (state.botRuntime.joinedChannels || []).map((c: string) => c.toLowerCase())
+    );
+
+    return NextResponse.json({
+      channels: allChannels.map((name) => ({
+        name,
+        status: joinedChannels.has(name.toLowerCase()) ? 'joined' : state.botChannels[name]?.status || 'pending',
+      })),
+    });
   } catch (error: any) {
-    console.error('Bot channels API error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

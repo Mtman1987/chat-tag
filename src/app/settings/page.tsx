@@ -21,7 +21,7 @@ import { useFirestore, useDoc, useMemoFirebase, useFirebaseApp } from "@/firebas
 import { doc, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { Share2, AlertTriangle, MessageSquare } from "lucide-react";
+import { Share2, AlertTriangle, MessageSquare, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { Player, GameSettings } from "@/lib/types";
 
@@ -48,6 +48,9 @@ export default function SettingsPage() {
   const firebaseApp = useFirebaseApp();
   const [isTestingWrite, setIsTestingWrite] = useState(false);
   const [isPostingToDiscord, setIsPostingToDiscord] = useState(false);
+  const [isClearingAway, setIsClearingAway] = useState(false);
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(true);
   
   const settingsDocRef = useMemoFirebase(
     () => (firestore ? doc(firestore, "gameSettings", "default") : null),
@@ -89,6 +92,54 @@ export default function SettingsPage() {
       form.reset(settings);
     }
   }, [settings, form]);
+
+  useEffect(() => {
+    fetchSupportTickets();
+  }, []);
+
+  const fetchSupportTickets = async () => {
+    try {
+      console.log('[Settings] Fetching support tickets...');
+      const response = await fetch('/api/bot/state');
+      console.log('[Settings] Response status:', response.status);
+      const data = await response.json();
+      console.log('[Settings] Data:', data);
+      const tickets = data.supportTickets || {};
+      console.log('[Settings] Tickets object:', tickets);
+      const ticketList = Object.values(tickets).filter((t: any) => !t.resolved);
+      console.log('[Settings] Open tickets:', ticketList);
+      setSupportTickets(ticketList);
+    } catch (error) {
+      console.error('Failed to fetch support tickets:', error);
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
+  const handleResolveTicket = async (messageId: string) => {
+    try {
+      const response = await fetch('/api/discord/resolve-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId })
+      });
+
+      if (!response.ok) throw new Error('Failed to resolve ticket');
+
+      toast({
+        title: 'Ticket Resolved',
+        description: 'Support ticket has been deleted from Discord.'
+      });
+
+      fetchSupportTickets();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to Resolve',
+        description: error.message
+      });
+    }
+  };
 
   const onSubmit = async (data: SettingsForm) => {
     if (!settingsDocRef) {
@@ -141,6 +192,34 @@ export default function SettingsPage() {
       });
     } finally {
       setIsTestingWrite(false);
+    }
+  };
+
+  const handleClearAllAway = async () => {
+    setIsClearingAway(true);
+    try {
+      const response = await fetch('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear-all-away' })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to clear away status');
+      }
+      
+      toast({
+        title: "Away Status Cleared!",
+        description: "All players' immunity has been cleared."
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Clear Away Failed',
+        description: error.message || 'Could not clear away status.'
+      });
+    } finally {
+      setIsClearingAway(false);
     }
   };
 
@@ -436,6 +515,50 @@ export default function SettingsPage() {
                   {isTestingWrite ? 'Testing...' : 'Test Firestore Write'}
                 </Button>
             </div>
+            <Separator />
+            <div className="flex items-center justify-between gap-4">
+               <p className="text-sm text-muted-foreground">Clear all players' away/immunity status (offline, sleeping, timed, no-tagback).</p>
+               <Button onClick={handleClearAllAway} disabled={isClearingAway} variant="destructive">
+                  <AlertTriangle className={`mr-2 h-4 w-4 ${isClearingAway ? 'animate-spin' : ''}`} />
+                  {isClearingAway ? 'Clearing...' : 'Clear All Away'}
+                </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/80 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="font-headline">Support Tickets</CardTitle>
+            <CardDescription>Manage support requests from players</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingTickets ? (
+              <p className="text-sm text-muted-foreground">Loading tickets...</p>
+            ) : supportTickets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No open support tickets</p>
+            ) : (
+              <div className="space-y-3">
+                {supportTickets.map((ticket: any) => (
+                  <div key={ticket.messageId} className="flex items-start justify-between gap-4 p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <p className="font-medium">{ticket.requester}</p>
+                      <p className="text-sm text-muted-foreground">Channel: {ticket.channel}</p>
+                      {ticket.note && <p className="text-sm mt-1">{ticket.note}</p>}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(ticket.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleResolveTicket(ticket.messageId)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

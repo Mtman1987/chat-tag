@@ -1,28 +1,20 @@
+'use client';
 
-"use client";
-
-import { useState, useEffect } from 'react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Plus, Shuffle, Check } from 'lucide-react';
-import { commonBingoPhrases } from '@/lib/data';
-import { BingoCell } from './bingo-cell';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Plus, Shuffle, RefreshCw } from 'lucide-react';
+import { commonBingoPhrases } from '@/lib/bingo-data';
+import { BingoCell } from '@/components/bingo-cell';
 import { useToast } from '@/hooks/use-toast';
-import type { Player, BingoCardState } from '@/lib/types';
-import { useFirestore, useDoc, useMemoFirebase, useUser, useCollection } from '@/firebase';
-import { doc, setDoc, serverTimestamp, collection, addDoc, updateDoc, increment } from 'firebase/firestore';
+import { useLiveStreamers } from '@/contexts/live-streamers-context';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-interface BingoCardProps {
-  onBingo: (bingoWinnerId: string) => void;
-  onSquareClaim: (claimerId: string) => void;
-  liveStreamers: Player[];
-}
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 const BINGO_SIZE = 5;
 
@@ -35,190 +27,323 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return newArray;
 };
 
-const generateNewCardState = (): BingoCardState => {
-    const shuffledPhrases = shuffleArray(commonBingoPhrases).slice(0, BINGO_SIZE * BINGO_SIZE - 1);
-    const newPhrases = [...shuffledPhrases];
-    const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
-    newPhrases.splice(centerIndex, 0, 'FREE SPACE');
-
-    const covered = Array(BINGO_SIZE * BINGO_SIZE).fill(null);
-    covered[centerIndex] = 'FREE';
-
-    return {
-        phrases: newPhrases,
-        covered: covered,
-        lastGenerated: serverTimestamp(),
-    };
+interface LiveStreamer {
+  id: string;
+  username: string;
 }
 
-// Helper function to trigger the Discord update
-const triggerDiscordUpdate = () => {
-  fetch('/api/update-discord', { method: 'POST' }).catch(console.error);
-};
+interface CoveredInfo {
+    userId: string;
+    avatar: string;
+    username: string;
+}
 
-export function BingoCard({ onBingo, onSquareClaim, liveStreamers }: BingoCardProps) {
+export function BingoCard() {
+  const [phrases, setPhrases] = useState<string[]>([]);
+  const [covered, setCovered] = useState<Record<number, CoveredInfo>>({});
   const [customPhrase, setCustomPhrase] = useState('');
+  const [currentUser, setCurrentUser] = useState({
+      id: 'user_default',
+      username: 'Player',
+      avatar: 'https://ui-avatars.com/api/?name=Player&background=random'
+  });
   const { toast } = useToast();
-  const firestore = useFirestore();
-  const { user } = useUser();
-  const [usedStreamers, setUsedStreamers] = useState<Set<string>>(new Set());
+  const { liveStreamers } = useLiveStreamers();
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const bingoCardDocRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, 'gameState', 'bingoCard') : null),
-    [firestore]
-  );
-  
-  const usersCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
-  );
-  
-  const { data: bingoCard, isLoading } = useDoc<BingoCardState>(bingoCardDocRef);
-  const { data: allPlayers } = useCollection<Player>(usersCollection);
+  // Fetch user profile on mount
+  useEffect(() => {
+      async function fetchUserProfile() {
+          try {
+              const response = await fetch('/api/user-profile');
+              if (response.ok) {
+                  const data = await response.json();
+                  if (data.twitch) {
+                      setCurrentUser({
+                          id: `twitch_${data.twitch.name}`,
+                          username: data.twitch.name,
+                          avatar: data.twitch.avatar
+                      });
+                  }
+              }
+          } catch (e) {
+              console.error('Failed to fetch user profile for bingo:', e);
+          }
+      }
+      fetchUserProfile();
+  }, []);
+
+  const fetchState = useCallback(async () => {
+      try {
+          const res = await fetch('/api/bingo/state');
+          if (res.ok) {
+              const data = await res.json();
+              if (data.bingo && data.bingo.phrases && data.bingo.phrases.length > 0) {
+                  setPhrases(data.bingo.phrases);
+                  setCovered(data.bingo.covered || {});
+              }
+          }
+      } catch (e) {
+          console.error('Failed to fetch bingo state', e);
+          // Fallback to default phrases if API fails
+          if (phrases.length === 0) {
+              const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
+              shuffled.splice(12, 0, 'FREE SPACE');
+              setPhrases(shuffled);
+          }
+      }
+  }, [phrases.length]);
 
   useEffect(() => {
-    if (!isLoading && !bingoCard && bingoCardDocRef) {
-      // If no card exists in the DB, create one.
-      setDoc(bingoCardDocRef, generateNewCardState());
-    }
-    // Reset used streamers when a new card is loaded from the DB
-    setUsedStreamers(new Set());
-  }, [isLoading, bingoCard, bingoCardDocRef]);
+      // Initialize with default phrases immediately
+      if (phrases.length === 0) {
+          const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
+          shuffled.splice(12, 0, 'FREE SPACE');
+          setPhrases(shuffled);
+      }
+      
+      fetchState();
 
+      if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+      }
 
-  const handleSetCustomPhrase = () => {
-    if (!customPhrase.trim() || !bingoCardDocRef || !bingoCard) return;
-    const newPhrases = [...bingoCard.phrases];
-    const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
-    newPhrases[centerIndex] = customPhrase;
-    setDoc(bingoCardDocRef, { phrases: newPhrases }, { merge: true });
-    setCustomPhrase('');
-  };
+      intervalRef.current = setInterval(() => {
+          fetchState();
+      }, 30000);
 
-  const checkBingo = (currentCovered: (string | null)[]) => {
-     // Check rows
+      return () => {
+          if (intervalRef.current) {
+              clearInterval(intervalRef.current);
+              intervalRef.current = null;
+          }
+      };
+  }, [fetchState]);
+
+  const checkBingo = (currentCovered: Record<number, CoveredInfo>) => {
+    const isCovered = (idx: number) => !!currentCovered[idx];
+
     for (let i = 0; i < BINGO_SIZE; i++) {
-        const row = currentCovered.slice(i * BINGO_SIZE, (i + 1) * BINGO_SIZE);
-        if (row.every(Boolean)) return true;
+      const row = Array.from({ length: BINGO_SIZE }, (_, j) => i * BINGO_SIZE + j);
+      if (row.every(isCovered)) return true;
     }
-    // Check columns
     for (let i = 0; i < BINGO_SIZE; i++) {
-        const col = Array.from({ length: BINGO_SIZE }, (_, j) => currentCovered[j * BINGO_SIZE + i]);
-        if (col.every(Boolean)) return true;
+      const col = Array.from({ length: BINGO_SIZE }, (_, j) => j * BINGO_SIZE + i);
+      if (col.every(isCovered)) return true;
     }
-    // Check diagonals
-    const diag1 = Array.from({ length: BINGO_SIZE }, (_, i) => currentCovered[i * BINGO_SIZE + i]);
-    if (diag1.every(Boolean)) return true;
+    const diag1 = Array.from({ length: BINGO_SIZE }, (_, i) => i * BINGO_SIZE + i);
+    if (diag1.every(isCovered)) return true;
     
-    const diag2 = Array.from({ length: BINGO_SIZE }, (_, i) => currentCovered[i * BINGO_SIZE + (BINGO_SIZE - 1 - i)]);
-    if (diag2.every(Boolean)) return true;
+    const diag2 = Array.from({ length: BINGO_SIZE }, (_, i) => i * BINGO_SIZE + (BINGO_SIZE - 1 - i));
+    if (diag2.every(isCovered)) return true;
 
     return false;
   };
 
-  const handleCellClick = async (index: number, streamer: Player) => {
-    if (!bingoCardDocRef || !bingoCard || !firestore || !user) return;
+  const handleCellClick = async (index: number, streamer: LiveStreamer) => {
+    if (covered[index]) return;
 
-    if (usedStreamers.has(streamer.id)) {
-        toast({
-            variant: "destructive",
-            title: "Streamer Already Used",
-            description: `You have already used ${streamer.twitchUsername}'s stream to claim a square on this card.`,
-        });
-        return;
+    // Check if user already claimed a square in this stream
+    const userSquaresInStream = Object.values(covered).filter(
+      (square: any) => square.username === currentUser.username && square.streamerChannel === streamer.username
+    );
+    
+    if (userSquaresInStream.length > 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Already Claimed',
+        description: `You already claimed a square in ${streamer.username}'s stream.`,
+      });
+      return;
     }
 
-    const newCovered = [...bingoCard.covered];
-    newCovered[index] = user.uid; // Claim with current user's ID
-    
-    const phrase = bingoCard.phrases[index];
-    toast({
-      title: 'Square Claimed!',
-      description: `You claimed "${phrase}" from ${streamer.twitchUsername}'s stream.`,
-    });
+    const info: CoveredInfo = {
+        userId: currentUser.id,
+        username: currentUser.username,
+        avatar: currentUser.avatar
+    };
 
-    onSquareClaim(user.uid);
-    setUsedStreamers(prev => new Set(prev).add(streamer.id));
+    // Optimistic update
+    const newCovered = { ...covered, [index]: info };
+    setCovered(newCovered);
 
+    const phrase = phrases[index];
 
-    const claimEventCollection = collection(firestore, 'bingoSquareClaims');
-    await addDoc(claimEventCollection, {
-      claimerId: user.uid,
-      streamerId: streamer.id,
-      phrase: phrase,
-      timestamp: serverTimestamp(),
-    });
+    // persist move
+    try {
+      await fetch('/api/bingo/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'claim',
+            squareIndex: index,
+            userId: currentUser.id,
+            username: currentUser.username,
+            avatar: currentUser.avatar,
+            streamerChannel: streamer.username
+        })
+      });
+      
+      toast({
+        title: 'Square Claimed!',
+        description: `You claimed "${phrase}" from ${streamer.username}'s stream.`,
+      });
+    } catch (e) {
+      console.warn('Failed to save bingo move', e);
+    }
 
-    triggerDiscordUpdate();
-    
     if (checkBingo(newCovered)) {
       toast({
         title: "BINGO!",
-        description: "A new card will be generated shortly.",
+        description: "You got a bingo! New card in 5 seconds.",
       });
-      onBingo(user.uid); // Pass the winner's ID
-      
-      const settingsDocRef = doc(firestore, 'gameSettings', 'default');
-      updateDoc(settingsDocRef, { bingoCardsCompleted: increment(1) });
 
-      // The Discord update will be triggered again by the score update for the bingo win
-      
-      // Generate a new card after a delay
       setTimeout(() => {
-        setDoc(bingoCardDocRef, generateNewCardState());
+        // handleNewCard(); // Optional auto-reset
       }, 5000);
-    } else {
-      await setDoc(bingoCardDocRef, { covered: newCovered }, { merge: true });
     }
   };
 
-  const handleNewCard = () => {
-    if (bingoCardDocRef) {
-        setDoc(bingoCardDocRef, generateNewCardState());
-        setUsedStreamers(new Set());
-        toast({ title: "New Bingo Card Generated!" });
-    }
+  const handleSetCustomPhrase = async () => {
+    if (!customPhrase.trim()) return;
+    const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
+    
+    try {
+        await fetch('/api/bingo/state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'update-phrase',
+                index: centerIndex,
+                phrase: customPhrase
+            })
+        });
+        setCustomPhrase('');
+        fetchState();
+    } catch {}
   };
 
+  const handleNewCard = async () => {
+    toast({ title: "Generating new board...", description: "AI is creating fresh phrases" });
+    
+    try {
+      // Call AI to generate 24 new phrases
+      const aiResponse = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: 'Generate exactly 24 short bingo phrases (2-5 words each) commonly said by Twitch streamers or heard in Twitch streams. Make them funny, relatable, and varied. Examples: "First donation hype", "Chat goes wild", "Streamer laughs hard", "Technical difficulties", "Pet appears on cam". Return ONLY the phrases as a JSON array with no other text.',
+          temperature: 0.9,
+          maxOutputTokens: 500
+        })
+      });
+      
+      if (!aiResponse.ok) throw new Error('AI generation failed');
+      
+      const aiData = await aiResponse.json();
+      let newPhrases: string[] = [];
+      
+      // Try to parse AI response as JSON array
+      try {
+        const text = aiData.text || '';
+        const jsonMatch = text.match(/\[.*\]/s);
+        if (jsonMatch) {
+          newPhrases = JSON.parse(jsonMatch[0]);
+        }
+      } catch {
+        // Fallback: split by newlines and clean
+        newPhrases = (aiData.text || '')
+          .split('\n')
+          .map((line: string) => line.replace(/^[\d\-\.\*\s]+/, '').replace(/["']/g, '').trim())
+          .filter((line: string) => line.length > 0 && line.length < 50)
+          .slice(0, 24);
+      }
+      
+      // Ensure we have exactly 24 phrases
+      if (newPhrases.length < 24) {
+        const fallback = shuffleArray(commonBingoPhrases).slice(0, 24 - newPhrases.length);
+        newPhrases = [...newPhrases, ...fallback];
+      }
+      newPhrases = newPhrases.slice(0, 24);
+      
+      // Insert FREE SPACE at center
+      const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
+      newPhrases.splice(centerIndex, 0, 'FREE SPACE');
+      
+      // Save to Discord
+      await fetch('/api/bingo/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reset',
+          phrases: newPhrases
+        })
+      });
+      
+      fetchState();
+      toast({ title: "New Shared Board Generated!", description: "Fresh AI-generated phrases" });
+    } catch (error) {
+      console.error('Failed to generate new board:', error);
+      toast({ 
+        variant: 'destructive',
+        title: "Generation Failed", 
+        description: "Using shuffled phrases instead" 
+      });
+      
+      // Fallback to shuffle
+      const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
+      const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
+      shuffled.splice(centerIndex, 0, 'FREE SPACE');
+      
+      await fetch('/api/bingo/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset', phrases: shuffled })
+      });
+      fetchState();
+    }
+  };
 
   const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
 
-  if (isLoading || !bingoCard || !allPlayers) {
-    return <div className="text-center animate-pulse">Loading Bingo Card...</div>;
-  }
+  if (phrases.length === 0) return <div>Loading Bingo Board...</div>;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-5 gap-2 aspect-square">
-        {bingoCard.phrases.map((phrase, index) => {
-          const claimerId = bingoCard.covered[index];
-          const isCovered = !!claimerId;
+        {phrases.map((phrase, index) => {
+          const info = covered[index];
+          const isCovered = !!info;
           const isFreeSpace = index === centerIndex;
           
           return (
             <DropdownMenu key={index}>
               <DropdownMenuTrigger asChild disabled={isCovered}>
-                <div>
+                <div className="relative h-full w-full">
                   <BingoCell
                     phrase={phrase || ''}
                     isCovered={isCovered}
                     isFreeSpace={isFreeSpace}
-                    claimerId={claimerId}
-                    players={allPlayers}
                   />
+                  {isCovered && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md backdrop-blur-[1px]">
+                          <Avatar className="h-8 w-8 border-2 border-white shadow-lg">
+                              <AvatarImage src={info.avatar} />
+                              <AvatarFallback>{info.username.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                      </div>
+                  )}
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
+              <DropdownMenuContent className="max-h-48 !overflow-y-auto w-56 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200">
                 <DropdownMenuItem disabled>Who's stream?</DropdownMenuItem>
                 {liveStreamers.length > 0 ? (
-                  liveStreamers.map((player) => (
+                  liveStreamers.map((streamer) => (
                     <DropdownMenuItem
-                      key={player.id}
-                      onClick={() => handleCellClick(index, player)}
-                      disabled={usedStreamers.has(player.id)}
+                      key={streamer.id}
+                      onClick={() => handleCellClick(index, { id: streamer.id, username: streamer.username })}
                     >
-                      {player.twitchUsername}
-                      {usedStreamers.has(player.id) && <Check className="ml-auto h-4 w-4" />}
+                      {streamer.username}
                     </DropdownMenuItem>
                   ))
                 ) : (
@@ -240,7 +365,7 @@ export function BingoCard({ onBingo, onSquareClaim, liveStreamers }: BingoCardPr
           <Plus className="mr-2 h-4 w-4" /> Set Phrase
         </Button>
         <Button onClick={handleNewCard} variant="secondary" className="w-full sm:w-auto">
-          <Shuffle className="mr-2 h-4 w-4" /> New Card
+          <Shuffle className="mr-2 h-4 w-4" /> New Shared Board
         </Button>
       </div>
     </div>

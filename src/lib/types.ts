@@ -13,11 +13,16 @@ export type Player = {
   isActive: boolean;
   tagImmunityUntil?: Timestamp | null;
   lastTaggedInStreamId?: string | null;
+  sleepingImmunity?: boolean; // New: sleeping immunity
+  offlineImmunity?: boolean; // New: offline immunity
+  noTagbackFrom?: string | null; // New: can't be tagged by this user ID
+  timedImmunityUntil?: Timestamp | null; // New: 20-min timed immunity
 };
 
 // Firestore Admin version of Player
-export type AdminPlayer = Omit<Player, 'tagImmunityUntil'> & {
+export type AdminPlayer = Omit<Player, 'tagImmunityUntil' | 'timedImmunityUntil'> & {
   tagImmunityUntil?: AdminTimestamp | null;
+  timedImmunityUntil?: AdminTimestamp | null;
 };
 
 

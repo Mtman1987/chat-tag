@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signInWithCustomToken } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -8,7 +8,7 @@ import { useAuth, useFirestore, useFirebaseApp } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const auth = useAuth();
@@ -66,5 +66,19 @@ export default function AuthCallbackPage() {
         Finalizing login, please wait...
       </div>
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-2xl font-headline animate-pulse">
+          Loading...
+        </div>
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   );
 }

@@ -1,146 +1,97 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeAdminApp } from '@/lib/firebase-admin';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { makeId, readAppState, updateAppState } from '@/lib/volume-store';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    const settingsDoc = await db.collection('gameSettings').doc('default').get();
-    const settings = settingsDoc.data() || {};
-    
-    const usersSnap = await db.collection('users').get();
-    const players = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    const currentIt = players.find(p => p.isIt);
-    const immunity: Record<string, any> = {};
-    
-    players.forEach(p => {
-      // Permanent immunity (no tagbacks)
-      if (p.immuneToUserId) {
-        immunity[p.id] = p.immuneToUserId;
-      }
-      // Timed immunity (20 min)
-      if (p.timedImmunityUntil && p.timedImmunityUntil.toDate() > new Date()) {
-        immunity[`${p.id}_timed`] = p.timedImmunityUntil.toMillis();
-      }
-      // Sleeping immunity (permanent until removed)
-      if (p.tagImmunityUntil && p.tagImmunityUntil.toDate() > new Date()) {
-        immunity[p.id] = 'sleeping';
-      }
-    });
-    
-    const tagsSnap = await db.collection('chatTags').orderBy('timestamp', 'desc').limit(100).get();
-    const tags = tagsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    return NextResponse.json({
-      tag: {
-        players,
-        currentIt: currentIt?.id || null,
-        immunity,
-        tags
-      },
-      bingo: settings
-    });
+    const state = await readAppState();
+    const card = state.bingoCards.current_user;
+
+    if (!card) {
+      return NextResponse.json({ bingo: { phrases: [], covered: {} } });
+    }
+
+    return NextResponse.json({ bingo: card });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
+function checkBingo(covered: Record<string, any>, username: string): boolean {
+  const userSquares = Object.keys(covered)
+    .filter((key) => covered[key]?.username === username)
+    .map((key) => parseInt(key, 10));
+
+  for (let row = 0; row < 5; row += 1) {
+    const rowSquares = [row * 5, row * 5 + 1, row * 5 + 2, row * 5 + 3, row * 5 + 4];
+    if (rowSquares.every((s) => userSquares.includes(s))) return true;
+  }
+
+  for (let col = 0; col < 5; col += 1) {
+    const colSquares = [col, col + 5, col + 10, col + 15, col + 20];
+    if (colSquares.every((s) => userSquares.includes(s))) return true;
+  }
+
+  const diag1 = [0, 6, 12, 18, 24];
+  const diag2 = [4, 8, 12, 16, 20];
+  if (diag1.every((s) => userSquares.includes(s))) return true;
+  if (diag2.every((s) => userSquares.includes(s))) return true;
+
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { action, userId, targetUserId, streamerChannel } = await req.json();
-    
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    if (action === 'tag') {
-      const usersRef = db.collection('users');
-      const taggerDoc = await usersRef.doc(userId).get();
-      const targetDoc = await usersRef.doc(targetUserId).get();
-      
-      if (!taggerDoc.exists || !targetDoc.exists) {
-        return NextResponse.json({ error: 'Player not found' }, { status: 404 });
-      }
-      
-      const tagger = taggerDoc.data();
-      const target = targetDoc.data();
-      
-      if (!tagger?.isIt) {
-        return NextResponse.json({ error: 'You are not it!' }, { status: 400 });
-      }
-      
-      if (target?.tagImmunityUntil && target.tagImmunityUntil.toDate() > new Date()) {
-        return NextResponse.json({ error: 'MTMAN IS SLEEPING' }, { status: 400 });
-      }
-      
-      if (target?.immuneToUserId === userId) {
-        return NextResponse.json({ error: 'Target is immune to your tags!' }, { status: 400 });
-      }
-      
-      if (target?.timedImmunityUntil && target.timedImmunityUntil.toDate() > new Date()) {
-        const remainingMins = Math.ceil((target.timedImmunityUntil.toDate().getTime() - Date.now()) / 60000);
-        return NextResponse.json({ error: `Target is immune for ${remainingMins} more minutes!` }, { status: 400 });
-      }
-      
-      const isFreeForAll = !tagger.isIt;
-      
-      await db.collection('chatTags').add({
-        taggerId: userId,
-        taggedId: targetUserId,
-        streamerId: streamerChannel,
-        doublePoints: isFreeForAll,
-        timestamp: FieldValue.serverTimestamp()
+    const { action, squareIndex, userId, username, avatar, streamerChannel, phrases } = await req.json();
+
+    if (action === 'claim') {
+      const result = await updateAppState((state) => {
+        const card = state.bingoCards.current_user || { phrases: [], covered: {} };
+
+        if (card.covered?.[squareIndex]) {
+          return { status: 400, error: 'Square already claimed' };
+        }
+
+        const covered = { ...(card.covered || {}) };
+        covered[squareIndex] = { userId, username, avatar, streamerChannel };
+        state.bingoCards.current_user = { ...card, covered, updatedAt: new Date().toISOString() };
+
+        const hasBingo = checkBingo(covered, username);
+        if (hasBingo) {
+          const player = state.tagPlayers[username] || state.tagPlayers[userId];
+          if (player) {
+            player.score = (player.score || 0) + 100;
+            player.bingoWins = (player.bingoWins || 0) + 1;
+          }
+          state.bingoEvents.push({
+            id: makeId('bingo'),
+            userId: userId || username,
+            points: 100,
+            timestamp: Date.now(),
+          });
+        }
+
+        return { success: true, bingo: hasBingo };
       });
-      
-      const batch = db.batch();
-      const timedImmunityExpires = Timestamp.fromMillis(Date.now() + 20 * 60 * 1000);
-      
-      batch.update(taggerDoc.ref, {
-        isIt: false,
-        timedImmunityUntil: timedImmunityExpires,
-        immuneToUserId: null
-      });
-      
-      batch.update(targetDoc.ref, {
-        isIt: true,
-        immuneToUserId: userId
-      });
-      
-      await batch.commit();
-      
-      return NextResponse.json({ success: true, doublePoints: isFreeForAll });
+
+      if ((result as any).error) {
+        return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
+      }
+
+      return NextResponse.json(result);
     }
-    
-    if (action === 'set-it') {
-      const batch = db.batch();
-      const allUsers = await db.collection('users').get();
-      
-      allUsers.docs.forEach(doc => {
-        batch.update(doc.ref, { isIt: doc.id === userId });
+
+    if (action === 'reset') {
+      await updateAppState((state) => {
+        state.bingoCards.current_user = {
+          phrases,
+          covered: {},
+          updatedAt: new Date().toISOString(),
+        };
       });
-      
-      await batch.commit();
+
       return NextResponse.json({ success: true });
     }
-    
-    if (action === 'set-immunity') {
-      const userRef = db.collection('users').doc(userId);
-      const immunityExpires = Timestamp.fromMillis(Date.now() + 365 * 24 * 60 * 60 * 1000);
-      
-      await userRef.update({ tagImmunityUntil: immunityExpires });
-      
-      return NextResponse.json({ success: true });
-    }
-    
-    if (action === 'remove-immunity') {
-      const userRef = db.collection('users').doc(userId);
-      await userRef.update({ tagImmunityUntil: null });
-      
-      return NextResponse.json({ success: true });
-    }
-    
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

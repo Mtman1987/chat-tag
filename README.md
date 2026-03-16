@@ -1,6 +1,10 @@
 
 # Astro Twitch Clash: Game Design Document
 
+## Deployment Note (Fly.io Volumes)
+
+Runtime game/bot state can now be persisted on Fly.io volumes. See [VOLUME_MIGRATION.md](./VOLUME_MIGRATION.md) for setup and data migration steps.
+
 ## 1. Core Concept
 
 Astro Twitch Clash is an interactive, browser-based game suite designed to foster a more engaging, interconnected, and community-driven experience for a group of Twitch streamers and their viewers. The application serves as a central hub where community members can participate in two main games, **Chat Tag** and **Chat Bingo**, that are played across multiple Twitch streams simultaneously.

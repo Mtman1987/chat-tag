@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readAppState, updateAppState } from '@/lib/volume-store';
 
 export async function POST(req: NextRequest) {
   try {
-    const { liveUsernames } = await req.json();
-    
-    // Forward to bot process (assumes bot is running)
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/bot/join-channels`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channels: liveUsernames })
+    const { channels } = await req.json();
+    await updateAppState((state) => {
+      state.botRuntime.joinedChannels = Array.isArray(channels) ? channels : [];
     });
-    
-    if (!res.ok) {
-      return NextResponse.json({ error: 'Failed to auto-join' }, { status: 500 });
-    }
-    
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+export async function GET() {
+  const state = await readAppState();
+  return NextResponse.json({ joined: state.botRuntime.joinedChannels || [] });
 }

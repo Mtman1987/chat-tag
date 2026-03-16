@@ -1,69 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeAdminApp } from '@/lib/firebase-admin';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { makeId, updateAppState } from '@/lib/volume-store';
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    const usersSnap = await db.collection('users').get();
-    const mtman = usersSnap.docs.find(doc => doc.data().twitchUsername?.toLowerCase() === 'mtman1987');
-    
-    if (!mtman) {
-      return NextResponse.json({ error: 'mtman1987 not found' }, { status: 404 });
-    }
-    
-    const batch = db.batch();
-    usersSnap.docs.forEach(doc => {
-      batch.update(doc.ref, { 
-        isIt: doc.id === mtman.id,
-        immuneToUserId: null
-      });
+    const result = await updateAppState((state) => {
+      const entries = Object.entries(state.users);
+      const mtman = entries.find(([, user]) => String((user as any).twitchUsername || '').toLowerCase() === 'mtman1987');
+
+      if (!mtman) {
+        return { status: 404, error: 'mtman1987 not found' };
+      }
+
+      for (const [, user] of entries) {
+        (user as any).isIt = false;
+      }
+      (mtman[1] as any).isIt = true;
+
+      return { success: true, message: 'mtman1987 is now it!' };
     });
-    
-    await batch.commit();
-    
-    return NextResponse.json({ success: true, message: 'mtman1987 is now it!' });
+
+    if ((result as any).error) {
+      return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
+    }
+
+    return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(_request: NextRequest) {
   try {
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    const usersSnap = await db.collection('users').get();
-    const currentIt = usersSnap.docs.find(doc => doc.data().isIt);
-    
-    const batch = db.batch();
-    usersSnap.docs.forEach(doc => {
-      batch.update(doc.ref, { 
-        isIt: false,
-        immuneToUserId: null,
-        timedImmunityUntil: null
+    const result = await updateAppState((state) => {
+      let previousIt: string | undefined;
+
+      for (const user of Object.values(state.users) as any[]) {
+        if (user.isIt) {
+          previousIt = user.twitchUsername;
+          user.offlineImmunity = true;
+        }
+        user.isIt = false;
+      }
+
+      state.chatTags.push({
+        id: makeId('tag'),
+        taggerId: 'system',
+        taggedId: 'free-for-all',
+        streamerId: 'manual-timeout',
+        doublePoints: true,
+        timestamp: Date.now(),
       });
+
+      return {
+        success: true,
+        previousIt,
+        announcement: `🔥 FREE FOR ALL! ${previousIt || 'Someone'} timed out. Anyone can tag for DOUBLE POINTS! 🔥`,
+      };
     });
-    
-    await batch.commit();
-    
-    await db.collection('chatTags').add({
-      taggerId: 'system',
-      taggedId: 'free-for-all',
-      streamerId: 'manual-timeout',
-      doublePoints: true,
-      timestamp: FieldValue.serverTimestamp()
-    });
-    
-    const announcement = `🔥 FREE FOR ALL! ${currentIt?.data().twitchUsername || 'Someone'} timed out. Anyone can tag for DOUBLE POINTS! 🔥`;
-    
-    return NextResponse.json({ 
-      success: true, 
-      previousIt: currentIt?.data().twitchUsername,
-      announcement 
-    });
+
+    return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

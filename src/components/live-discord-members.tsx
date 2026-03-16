@@ -16,6 +16,8 @@ interface LiveMember {
   gameName: string;
   viewerCount: number;
   thumbnailUrl: string;
+  isSharedChat?: boolean;
+  sharedWith?: string[];
 }
 
 export function LiveDiscordMembers() {
@@ -118,6 +120,11 @@ export function LiveDiscordMembers() {
                       <Badge variant="secondary">
                         @{member.twitchUsername}
                       </Badge>
+                      {member.isSharedChat && (
+                        <Badge variant="outline" title={`Shared with: ${(member.sharedWith || []).join(', ') || 'unknown'}`}>
+                          Shared Chat
+                        </Badge>
+                      )}
                     </div>
                     
                     <p className="text-sm text-muted-foreground mb-2">

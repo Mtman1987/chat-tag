@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeAdminApp } from '@/lib/firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { readAppState, updateAppState } from '@/lib/volume-store';
 
 const DEFAULT_COMMANDS = [
   { name: 'join', description: 'Join the tag game', enabled: true },
@@ -9,6 +8,8 @@ const DEFAULT_COMMANDS = [
   { name: 'tag @user', description: 'Tag another player', enabled: true },
   { name: 'status', description: 'Show who is currently "it"', enabled: true },
   { name: 'help', description: 'List all available commands', enabled: true },
+  { name: 'mod', description: 'Mod/Broadcaster command list', enabled: true },
+  { name: 'support', description: 'Mod/Broadcaster: Open support ticket', enabled: true },
   { name: 'players', description: 'Show all players in the game', enabled: true },
   { name: 'live', description: 'Show live players', enabled: true },
   { name: 'score', description: 'Show your points and rank', enabled: true },
@@ -24,18 +25,14 @@ const DEFAULT_COMMANDS = [
   { name: 'reset', description: 'Admin: Reset game', enabled: true },
   { name: 'card', description: 'Show bingo card status', enabled: true },
   { name: 'claim [0-24]', description: 'Claim a bingo square', enabled: true },
-  { name: 'bingo', description: 'Bingo game command', enabled: true }
+  { name: 'bingo', description: 'Bingo game command', enabled: true },
 ];
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    const commandsDoc = await db.collection('settings').doc('botCommands').get();
-    const commands = commandsDoc.exists ? commandsDoc.data()?.commands : DEFAULT_COMMANDS;
-    
-    return NextResponse.json({ commands: commands || DEFAULT_COMMANDS });
+    const state = await readAppState();
+    const commands = state.settings.botCommands?.commands || DEFAULT_COMMANDS;
+    return NextResponse.json({ commands });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -49,26 +46,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Command name is required' }, { status: 400 });
     }
 
-    const adminApp = initializeAdminApp();
-    const db = getFirestore(adminApp);
-    
-    const commandsDoc = await db.collection('settings').doc('botCommands').get();
-    const commands = commandsDoc.exists ? commandsDoc.data()?.commands || [] : [...DEFAULT_COMMANDS];
+    const result = await updateAppState((state) => {
+      const commands = state.settings.botCommands?.commands || [...DEFAULT_COMMANDS];
 
-    if (commands.find((cmd: any) => cmd.name.toLowerCase() === name.toLowerCase())) {
-      return NextResponse.json({ error: 'Command already exists' }, { status: 400 });
+      if (commands.find((cmd: any) => cmd.name.toLowerCase() === name.toLowerCase())) {
+        return { status: 400, error: 'Command already exists' };
+      }
+
+      const newCommand = {
+        name: name.toLowerCase().trim(),
+        description: description || 'Custom command',
+        enabled: true,
+      };
+
+      commands.push(newCommand);
+      state.settings.botCommands = { commands };
+      return { command: newCommand };
+    });
+
+    if ((result as any).error) {
+      return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
     }
 
-    const newCommand = {
-      name: name.toLowerCase().trim(),
-      description: description || 'Custom command',
-      enabled: true
-    };
-
-    commands.push(newCommand);
-    await db.collection('settings').doc('botCommands').set({ commands });
-
-    return NextResponse.json({ command: newCommand });
+    return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

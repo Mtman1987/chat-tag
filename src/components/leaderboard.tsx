@@ -1,20 +1,16 @@
+'use client';
 
 import type { Player } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Trophy, Star, Server, Gem } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
-import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
-import { doc } from "firebase/firestore";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { useState, useEffect } from "react";
 
 interface LeaderboardProps {
-  players: Player[];
+  players?: Player[];
 }
-
-type GameSettings = {
-  bingoCardsCompleted?: number;
-};
 
 const rankIcons = [
   <Trophy key="1" className="w-5 h-5 text-yellow-400" />,
@@ -22,16 +18,41 @@ const rankIcons = [
   <Star key="3" className="w-5 h-5 text-orange-400 fill-orange-400" />,
 ];
 
-export function Leaderboard({ players }: LeaderboardProps) {
-  const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
-  const firestore = useFirestore();
+export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
+  const [tagPlayers, setTagPlayers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const settingsDocRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, 'gameSettings', 'default') : null),
-    [firestore]
-  );
-  const { data: settings } = useDoc<GameSettings>(settingsDocRef);
-  const bingoCardsCompleted = settings?.bingoCardsCompleted ?? 0;
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      try {
+        const res = await fetch('/api/tag');
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[Leaderboard] Fetched players:', data.players);
+          console.log('[Leaderboard] Player count:', data.players?.length);
+          // Ensure scores are calculated from tags/tagged counts
+          const playersWithScores = (data.players || []).map((p: any) => ({
+            ...p,
+            score: ((p.tags || 0) * 100) - ((p.tagged || 0) * 50)
+          }));
+          setTagPlayers(playersWithScores);
+        }
+      } catch (e) {
+        console.error('Failed to fetch tag players', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPlayers();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPlayers, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const players = tagPlayers.length > 0 ? tagPlayers : (propPlayers || []);
+  console.log('[Leaderboard] Rendering with players:', players.length);
+  const sortedPlayers = [...players].filter(p => (p.twitchUsername || p.username)?.toLowerCase() !== 'mtman1987').sort((a, b) => (b.score || 0) - (a.score || 0));
 
   return (
     <Card className="bg-card/80 backdrop-blur-sm flex flex-col">
@@ -40,45 +61,53 @@ export function Leaderboard({ players }: LeaderboardProps) {
         <CardTitle className="font-headline">Leaderboard</CardTitle>
       </CardHeader>
       <CardContent className="flex-grow">
-        <ScrollArea className="h-56">
-          <TooltipProvider>
-            <ol className="space-y-3">
+        <div className="overflow-x-auto">
+          <div className="min-w-[560px]">
+            <ScrollArea className="h-56">
+              <TooltipProvider>
+                <ol className="space-y-3 pr-2">
               {sortedPlayers.map((player, index) => (
                 <li key={player.id} className="flex items-center justify-between gap-3 p-2 rounded-md transition-colors hover:bg-accent/50">
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-lg w-6 text-center">{index < 3 ? rankIcons[index] : index + 1}</span>
                     <Avatar className="h-9 w-9">
                       <AvatarImage src={player.avatarUrl} alt={player.twitchUsername} data-ai-hint="profile picture" />
-                      <AvatarFallback>{player.twitchUsername.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>{player.twitchUsername?.charAt(0) || '?'}</AvatarFallback>
                     </Avatar>
-                    <span className="font-medium truncate">{player.twitchUsername}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium truncate max-w-[240px]">{player.twitchUsername}</span>
+                      {player.isIt && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-red-500 text-red-500">IT</span>
+                      )}
+                      {(player.offlineImmunity || player.sleepingImmunity) && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-cyan-500 text-cyan-500">AWAY</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-4">
-                     <Tooltip>
-                        <TooltipTrigger>
-                           <div className="flex items-center gap-1.5 font-mono">
-                              <Gem className="w-4 h-4 text-cyan-400"/>
-                              <span className="font-bold text-cyan-400">{ (player.communityPoints || 0).toLocaleString()}</span>
-                            </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Community Points</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    <span className="font-bold text-primary font-mono w-20 text-right">{(player.score || 0).toLocaleString()} pts</span>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-[72px] justify-end">
+                          <span className="text-green-500">+{player.tags || 0}</span>
+                          <span>/</span>
+                          <span className="text-red-500">-{player.tagged || 0}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Tags: {player.tags || 0} (+{(player.tags || 0) * 100} pts)</p>
+                        <p>Tagged: {player.tagged || 0} (-{(player.tagged || 0) * 50} pts)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className="font-bold text-primary font-mono w-32 text-right whitespace-nowrap">{(player.score || 0).toLocaleString()} pts</span>
                   </div>
                 </li>
               ))}
-            </ol>
-          </TooltipProvider>
-        </ScrollArea>
-      </CardContent>
-      <CardFooter className="border-t pt-4">
-        <div className="flex items-center justify-center w-full gap-2 text-muted-foreground">
-            <Server className="w-5 h-5 text-primary" />
-            <p className="font-headline">Community Bingos: <span className="font-bold text-foreground">{bingoCardsCompleted}</span></p>
+                </ol>
+              </TooltipProvider>
+            </ScrollArea>
+          </div>
         </div>
-      </CardFooter>
+      </CardContent>
     </Card>
   );
 }

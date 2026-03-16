@@ -61,3 +61,6 @@ pnpm-debug.log*
 .genkit/cache
 .genkit/log
 .genkit/state
+
+# Volume-backed runtime state
+data/app-state.json

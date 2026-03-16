@@ -24,12 +24,7 @@ import { DiscordEmbedPoster } from '@/components/discord-embed-poster';
 import { Card } from '@/components/ui/card';
 import TwitchLoginButton from '@/components/TwitchLoginButton';
 import { useToast } from '@/hooks/use-toast';
-
-// Helper function to trigger the Discord update
-const triggerDiscordUpdate = () => {
-  fetch('/api/update-discord', { method: 'POST' }).catch(console.error);
-};
-
+import { useLiveStreamers } from '@/contexts/live-streamers-context';
 
 function getNewPlayer(userId: string, username: string | null, avatar: string | null): Player {
   return {
@@ -53,6 +48,7 @@ export function MainDashboard() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const { allCommunityMembers } = useLiveStreamers();
 
   const usersCollection = useMemoFirebase(
     () => (firestore ? collection(firestore, 'users') : null),
@@ -70,13 +66,16 @@ export function MainDashboard() {
   const memoizedPlayers = useMemo(() => players || [], [players]);
 
   useEffect(() => {
-    // This effect creates a player profile in Firestore if one doesn't exist for the logged-in user.
+    if (!user && !isUserLoading && auth) {
+      signInAnonymously(auth).catch(console.error);
+    }
+  }, [user, isUserLoading, auth]);
+
+  useEffect(() => {
     if (user && !user.isAnonymous && firestore && players && !players.find(p => p.id === user.uid)) {
       const userDocRef = doc(firestore, 'users', user.uid);
       const newPlayerData = getNewPlayer(user.uid, user.displayName, user.photoURL);
 
-      // If no one is "It" across the entire community, make the new player "It".
-      // This ensures the game can always start.
       const isAnyoneIt = players.some(p => p.isIt);
       if (!isAnyoneIt) {
         newPlayerData.isIt = true;
@@ -88,7 +87,6 @@ export function MainDashboard() {
 
   const liveStreamers = useMemo(() => memoizedPlayers.filter(p => p.isActive) || [], [memoizedPlayers]);
   const allPlayers = useMemo(() => memoizedPlayers || [], [memoizedPlayers]);
-
 
   const bingoSquarePoints = settings?.bingoSquarePoints ?? 10;
   const bingoWinPoints = settings?.bingoWinPoints ?? 250;
@@ -106,7 +104,6 @@ export function MainDashboard() {
   const handleSquareClaim = (claimerId: string) => {
     if (!user) return;
     handleScoreUpdate(claimerId, bingoSquarePoints);
-    // The Discord update is now triggered inside the BingoCard component.
   };
 
   const handleBingo = async (bingoWinnerId: string) => {
@@ -118,8 +115,6 @@ export function MainDashboard() {
       points: bingoWinPoints,
       timestamp: serverTimestamp(),
     });
-    // Trigger update after bingo win, as this is a major event
-    triggerDiscordUpdate();
   };
   
   if (isUserLoading || (user && playersIsLoading)) {
@@ -129,29 +124,17 @@ export function MainDashboard() {
         </div>
       );
   }
-
-  if (!user) {
-     return (
-      <div className="flex flex-col gap-4 justify-center items-center min-h-screen">
-        <h1 className="text-4xl font-headline text-primary">Welcome to Astro Twitch Clash</h1>
-        <p className="text-lg text-muted-foreground">Sign in with Twitch to join the game.</p>
-        <div className="flex gap-4 items-center">
-            <TwitchLoginButton />
-        </div>
-      </div>
-    )
-  }
   
   return (
     <div className="grid md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] gap-6 p-4 md:p-6">
       <aside className="flex flex-col gap-6">
-        <CommunityList players={memoizedPlayers} />
+        <CommunityList players={allCommunityMembers as Player[]} />
         <Leaderboard players={memoizedPlayers} />
       </aside>
       
       <div className="min-w-0">
         <Card className="p-4 sm:p-6 bg-card/80 backdrop-blur-sm">
-          <Tabs defaultValue="bingo" className="w-full">
+          <Tabs defaultValue="chat-tag" className="w-full">
             <TabsList className="grid w-full grid-cols-5 bg-secondary/50">
               <TabsTrigger value="bingo" className="font-headline">Chat Bingo</TabsTrigger>
               <TabsTrigger value="chat-tag" className="font-headline">Chat Tag</TabsTrigger>
