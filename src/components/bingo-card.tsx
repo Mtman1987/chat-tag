@@ -246,7 +246,7 @@ export function BingoCard() {
       // Try to parse AI response as JSON array
       try {
         const text = aiData.text || '';
-        const jsonMatch = text.match(/\[.*\]/s);
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           newPhrases = JSON.parse(jsonMatch[0]);
         }

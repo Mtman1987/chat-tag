@@ -9,6 +9,9 @@ const API_BASE = process.env.API_BASE || 'https://chat-tag.fly.dev';
 const BLACKLIST = ['streamelements', 'nightbot', 'moobot', 'fossabot'];
 const AUTO_ROTATE_MINUTES = 40;
 const STALE_LAST_TAG_HOURS = 6;
+const FORCE_RANDOM_IT_HOURS = 5;
+const FFA_REANNOUNCE_MINUTES = 60;
+let lastFfaAnnouncedAt = 0;
 
 async function refreshToken(refreshToken, clientId, clientSecret) {
   const res = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -25,8 +28,9 @@ async function refreshToken(refreshToken, clientId, clientSecret) {
 }
 
 async function updateEnvToken(key, value) {
-  // In production, tokens are managed via secrets
-  console.log(`[Bot] Token refresh: ${key} updated`);
+  // Update in-memory so subsequent getValidToken() calls see the new value
+  process.env[key] = value;
+  console.log(`[Bot] Token refresh: ${key} updated in memory`);
 }
 
 async function getValidToken() {
@@ -112,7 +116,7 @@ async function maybeAnnounceDailyActivation(client, channelName) {
     await sendChatWithSharedFallback(
       client,
       channel,
-      'chat-tag now active in chat. Type @spmt help for all commands.'
+      '🏷️ Chat Tag by MtMan1987 is active! Type "@spmt join" to play, "@spmt help" for commands.'
     );
     console.log(`[Bot] Sent first-live announcement for ${channel}`);
   } catch (e) {
@@ -400,9 +404,51 @@ console.log = (...args) => {
 };
 
 (async () => {
-  const token = await getValidToken();
+  let token = await getValidToken();
   console.log('[Bot] Username:', username);
   console.log('[Bot] Token:', token.substring(0, 10) + '...');
+
+  // Refresh token every 2 hours to prevent stale Helix calls
+  setInterval(async () => {
+    try {
+      token = await getValidToken();
+      console.log('[Bot] Token refreshed (periodic)');
+    } catch (e) {
+      console.error('[Bot] Periodic token refresh failed:', e.message);
+    }
+  }, 2 * 60 * 60 * 1000);
+
+  async function helixGetUser(loginOrId, byId = false) {
+    // Use app access token (client credentials) - more reliable than user token
+    if (!appToken) appToken = await getAppAccessToken();
+    const clientId = env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
+    const param = byId ? `id=${loginOrId}` : `login=${loginOrId.toLowerCase()}`;
+    
+    let res = await fetch(`https://api.twitch.tv/helix/users?${param}`, {
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${appToken}`
+      }
+    });
+    
+    if (res.status === 401) {
+      // App token expired, refresh and retry
+      appToken = await getAppAccessToken();
+      res = await fetch(`https://api.twitch.tv/helix/users?${param}`, {
+        headers: {
+          'Client-ID': clientId,
+          'Authorization': `Bearer ${appToken}`
+        }
+      });
+    }
+    
+    if (!res.ok) {
+      console.log(`[Bot] helixGetUser failed: ${res.status} for ${param}`);
+      return null;
+    }
+    const data = await res.json();
+    return data.data?.[0] || null;
+  }
 
   const client = new tmi.Client({
     options: { debug: false },
@@ -544,31 +590,124 @@ console.log = (...args) => {
   setInterval(async () => {
     try {
       console.log('[Bot] Running periodic check...');
-      // Auto-rotate check
       const data = await apiCall('/api/tag');
+      
       if (data?.currentIt && data?.lastTagTime) {
         const elapsed = Date.now() - data.lastTagTime;
-        console.log(`[Bot] Current it: ${data.currentIt}, elapsed: ${Math.floor(elapsed / 60000)} minutes`);
-        if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000) {
+        const elapsedMin = Math.floor(elapsed / 60000);
+        console.log(`[Bot] Current it: ${data.currentIt}, elapsed: ${elapsedMin} minutes`);
+        
+        const itPlayer = data.players?.find(p => p.id === data.currentIt);
+        const itUsername = itPlayer?.twitchUsername || 'unknown';
+        
+        // Check if "it" person is currently live OR active in chat
+        const liveNow = await getLiveMembersCached(true);
+        const itIsLive = liveNow.some(m => (m.twitchUsername || '').toLowerCase() === itUsername.toLowerCase());
+        const itLastChat = itPlayer?.lastChatAt || 0;
+        const itIsActive = itIsLive || (Date.now() - itLastChat < AUTO_ROTATE_MINUTES * 60 * 1000);
+        
+        // FORCE RANDOM after 4-6 hours — no matter what
+        if (elapsed > FORCE_RANDOM_IT_HOURS * 60 * 60 * 1000) {
           const isStaleTimeout = elapsed > STALE_LAST_TAG_HOURS * 60 * 60 * 1000;
-          console.log(`[Bot] Triggering auto-rotate! stale=${isStaleTimeout}`);
-          await apiCall('/api/tag', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'auto-rotate' })
-          });
-
-          // Prevent spam after redeploy/restart with very old state.
-          if (!isStaleTimeout) {
-            console.log('[Bot] Broadcasting free-for-all message...');
-            await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
-            console.log('[Bot] Auto-rotate complete');
+          console.log(`[Bot] Force random assign after ${elapsedMin} min, stale=${isStaleTimeout}`);
+          
+          // Pick a random non-immune, non-sleeping player (prefer live ones)
+          const eligible = (data.players || []).filter(p => 
+            p.id !== data.currentIt && !p.sleepingImmunity && !p.offlineImmunity
+          );
+          const liveEligible = eligible.filter(p => 
+            liveNow.some(m => (m.twitchUsername || '').toLowerCase() === (p.twitchUsername || '').toLowerCase())
+          );
+          const pool = liveEligible.length > 0 ? liveEligible : eligible;
+          
+          if (pool.length > 0) {
+            const chosen = pool[Math.floor(Math.random() * pool.length)];
+            console.log(`[Bot] Random assign to ${chosen.twitchUsername} (${chosen.id})`);
+            await apiCall('/api/tag', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'set-it', userId: chosen.id })
+            });
+            
+            if (!isStaleTimeout) {
+              const msg = `🎲 ${itUsername} held it too long! ${chosen.twitchUsername} was randomly selected as it! Tag someone!`;
+              await broadcastToPlayers(client, msg);
+              await apiCall('/api/discord/announce', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tagger: 'System', tagged: chosen.twitchUsername, doublePoints: false, message: 'Random rotation' })
+              });
+            }
           } else {
-            console.log('[Bot] Stale timeout detected; skipped global broadcast.');
+            // No eligible players, go to FFA
+            await apiCall('/api/tag', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'auto-rotate' })
+            });
+            if (!isStaleTimeout) {
+              await broadcastToPlayers(client, '⏰ No eligible players — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
+            }
+          }
+          lastFfaAnnouncedAt = 0;
+          
+        } else if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000) {
+          // 40+ min timeout
+          if (itIsActive) {
+            // IT person is ACTIVE (live or chatting) and holding — assign to random player, no double points exploit
+            console.log(`[Bot] ${itUsername} is active and holding it — random assign (live=${itIsLive}, chatting=${!itIsLive && itIsActive})`);
+            const eligible = (data.players || []).filter(p => 
+              p.id !== data.currentIt && !p.sleepingImmunity && !p.offlineImmunity
+            );
+            const liveEligible = eligible.filter(p => 
+              liveNow.some(m => (m.twitchUsername || '').toLowerCase() === (p.twitchUsername || '').toLowerCase())
+            );
+            const pool = liveEligible.length > 0 ? liveEligible : eligible;
+            
+            if (pool.length > 0) {
+              const chosen = pool[Math.floor(Math.random() * pool.length)];
+              await apiCall('/api/tag', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'set-it', userId: chosen.id })
+              });
+              const msg = `⏰ ${itUsername} didn't tag anyone! ${chosen.twitchUsername} is now randomly it! Tag someone!`;
+              await broadcastToPlayers(client, msg);
+              lastFfaAnnouncedAt = 0;
+            } else {
+              // No one to assign to, go FFA
+              await apiCall('/api/tag', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'auto-rotate' })
+              });
+              await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
+              lastFfaAnnouncedAt = Date.now();
+            }
+          } else {
+            // IT person is INACTIVE (not live, not chatting) — go to FFA with double points
+            console.log(`[Bot] ${itUsername} is inactive, triggering FFA`);
+            await apiCall('/api/tag', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'auto-rotate' })
+            });
+            await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
+            lastFfaAnnouncedAt = Date.now();
           }
         }
       } else {
+        // No one is it — FFA mode
         console.log('[Bot] No current it or lastTagTime');
+        
+        // Re-announce FFA every 60 minutes
+        if (lastFfaAnnouncedAt > 0 && Date.now() - lastFfaAnnouncedAt > FFA_REANNOUNCE_MINUTES * 60 * 1000) {
+          console.log('[Bot] Re-announcing FFA (60 min reminder)');
+          await broadcastToPlayers(client, '🔥 Reminder: FREE FOR ALL is active! Type "@spmt tag @username" for DOUBLE POINTS! Type "@spmt join" to play! 🔥');
+          lastFfaAnnouncedAt = Date.now();
+        } else if (lastFfaAnnouncedAt === 0) {
+          lastFfaAnnouncedAt = Date.now();
+        }
       }
 
       // Channel management - join new live, leave offline
@@ -673,8 +812,73 @@ console.log = (...args) => {
     }
   }, 60000);
 
+  // --- Gifted sub / bits / hype train pass tracking ---
+  client.on('submysterygift', async (channel, username, numbOfSubs, methods, userstate) => {
+    const login = (userstate['login'] || username || '').toLowerCase();
+    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
+    if (!login || !uid) return;
+    console.log(`[Bot] Gift sub detected: ${login} gifted ${numbOfSubs} subs`);
+    apiCall('/api/tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: `gifted ${numbOfSubs} subs` })
+    }).catch(() => {});
+  });
+
+  client.on('cheer', async (channel, userstate, message) => {
+    const bits = parseInt(userstate.bits || '0');
+    if (bits < 100) return; // minimum 100 bits for a pass
+    const login = (userstate['username'] || '').toLowerCase();
+    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
+    if (!login || !uid) return;
+    console.log(`[Bot] Cheer detected: ${login} cheered ${bits} bits`);
+    apiCall('/api/tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: `cheered ${bits} bits` })
+    }).catch(() => {});
+  });
+
+  // Raw message handler for hype train events (TMI doesn't have a dedicated event)
+  client.on('raw_message', async (messageCloned, message) => {
+    try {
+      const raw = message?.raw || '';
+      if (!raw.includes('msg-id=hype-train')) return;
+      // Hype train participation — extract user from tags if possible
+      const userIdMatch = raw.match(/user-id=(\d+)/);
+      const loginMatch = raw.match(/login=([\w]+)/);
+      if (userIdMatch && loginMatch) {
+        const uid = `user_${userIdMatch[1]}`;
+        const login = loginMatch[1].toLowerCase();
+        console.log(`[Bot] Hype train participation: ${login}`);
+        apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: 'hype train' })
+        }).catch(() => {});
+      }
+    } catch {}
+  });
+
   client.on('message', async (channel, tags, message, self) => {
     if (self) return;
+    
+    const senderLogin = (tags['username'] || '').toLowerCase();
+    const senderUserId = tags['user-id'] ? `user_${tags['user-id']}` : null;
+    
+    // Track chat activity for ALL messages from players (not just commands)
+    if (senderLogin && senderUserId && !BLACKLIST.includes(senderLogin)) {
+      apiCall('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'chat-activity', 
+          userId: senderUserId, 
+          twitchUsername: senderLogin,
+          channel: channel.replace('#', '').toLowerCase()
+        })
+      }).catch(() => {}); // fire and forget
+    }
     
     const msg = message.toLowerCase().trim();
     if (!msg.startsWith('@spmt ')) return;
@@ -732,52 +936,62 @@ console.log = (...args) => {
       
       if (targetUser) {
         console.log(`[Bot] Admin adding ${targetUser}`);
-        // Admin adding someone else
-        const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${targetUser.toLowerCase()}`, {
-          headers: {
-            'Client-ID': env.NEXT_PUBLIC_TWITCH_CLIENT_ID,
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const userData = await userRes.json();
+        const twitchUser = await helixGetUser(targetUser.toLowerCase());
         
-        if (!userData.data?.[0]) {
-          console.log(`[Bot] User ${targetUser} not found`);
-          reply( `@${user} User ${targetUser} not found!`);
+        if (!twitchUser) {
+          console.log(`[Bot] User ${targetUser} not found on Twitch`);
+          reply( `@${user} User ${targetUser} not found on Twitch!`);
           return;
         }
         
-        const targetId = `user_${userData.data[0].id}`;
-        const targetName = userData.data[0].display_name;
+        const targetId = `user_${twitchUser.id}`;
+        const targetLogin = twitchUser.login.toLowerCase();
+        const targetDisplay = twitchUser.display_name;
+        const targetAvatar = twitchUser.profile_image_url || '';
         
         const res = await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'join', userId: targetId, twitchUsername: targetName, avatar: '' })
+          body: JSON.stringify({ action: 'join', userId: targetId, twitchUsername: targetLogin, avatar: targetAvatar })
         });
         console.log(`[Bot] Join result: ${JSON.stringify(res)}`);
-        reply( res?.error ? `@${user} ${res.error}` : `@${targetName} joined the tag game! 🎯`);
+        
+        // Also add to bot channels so the bot tracks their live status
+        if (!res?.error) {
+          await apiCall('/api/bot/channels/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: targetLogin })
+          });
+        }
+        
+        reply( res?.error ? `@${user} ${res.error}` : `@${targetDisplay} joined the tag game! 🎯 Type "@spmt join" to play too!`);
       } else {
         console.log(`[Bot] ${user} joining themselves`);
-        // User joining themselves - get their avatar from Twitch
-        const userRes = await fetch(`https://api.twitch.tv/helix/users?id=${tags['user-id']}`, {
-          headers: {
-            'Client-ID': env.NEXT_PUBLIC_TWITCH_CLIENT_ID,
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        const userData = await userRes.json();
-        const avatarUrl = userData.data?.[0]?.profile_image_url || '';
-        console.log(`[Bot] Got avatar: ${avatarUrl}`);
+        // User joining themselves - get their avatar and login from Twitch
+        const twitchUser = await helixGetUser(tags['user-id'], true);
+        const avatarUrl = twitchUser?.profile_image_url || '';
+        const loginName = twitchUser?.login?.toLowerCase() || user.toLowerCase();
+        console.log(`[Bot] Got avatar: ${avatarUrl}, login: ${loginName}`);
         
         const res = await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'join', userId, twitchUsername: user, avatar: avatarUrl })
+          body: JSON.stringify({ action: 'join', userId, twitchUsername: loginName, avatar: avatarUrl })
         });
         console.log(`[Bot] Join result: ${JSON.stringify(res)}`);
+        
+        // Also add to bot channels so the bot tracks their live status
+        if (!res?.error) {
+          await apiCall('/api/bot/channels/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: loginName })
+          });
+        }
+        
         try {
-          await reply( res?.error ? `@${user} ${res.error}` : `@${user} joined the tag game! 🎯`);
+          await reply( res?.error ? `@${user} ${res.error}` : `@${user} joined the tag game! 🎯 Type "@spmt join" to play too!`);
           console.log('[Bot] Join message sent');
         } catch (e) {
           console.error('[Bot] Error sending message:', e.message);
@@ -891,6 +1105,11 @@ console.log = (...args) => {
         return;
       }
       
+      // Check if tagger is in the game and log their state
+      const taggerPlayer = playersData?.players?.find(p => p.id === userId);
+      const anyoneIsIt = playersData?.players?.some(p => p.isIt);
+      console.log(`[Bot] Tagger ${user} (${userId}): isIt=${taggerPlayer?.isIt}, anyoneIt=${anyoneIsIt}, targetId=${targetPlayer.id}`);
+      
       console.log(`[Bot] Calling tag API...`);
       const res = await apiCall('/api/tag', {
         method: 'POST',
@@ -905,8 +1124,8 @@ console.log = (...args) => {
         return;
       } else {
         const msg = res.doublePoints 
-          ? `🔥 ${user} tagged @${target} for DOUBLE POINTS! @${target} is now it! 🔥`
-          : `🎯 ${user} tagged @${target}! @${target} is now it!`;
+          ? `🔥 ${user} tagged @${target} for DOUBLE POINTS! @${target} is now it! 🔥 Type "@spmt join" to play!`
+          : `🎯 ${user} tagged @${target}! @${target} is now it! Type "@spmt join" to play!`;
         console.log(`[Bot] Sending tag message in current channel`);
         await reply( msg);
         if (!isMuted) {
@@ -1002,50 +1221,48 @@ console.log = (...args) => {
       console.log('[Bot] Status sent');
     }
     
-    else if (cmd === 'players') {
+    else if (cmd === 'players' || cmd === 'more') {
       const data = await apiCall('/api/tag');
       const players = data?.players || [];
-      const awake = players.filter(p => !p.isSleeping && !p.offlineImmunity);
-      const asleep = players.filter(p => p.isSleeping || p.offlineImmunity);
-      const total = players.length;
+      const liveNow = await getLiveMembersCached();
+      const liveSet = new Set(liveNow.map(m => (m.twitchUsername || '').toLowerCase()));
+      const now = Date.now();
+      const ACTIVE_THRESHOLD = 40 * 60 * 1000; // 40 min (same as auto-rotate timer)
+      
+      // Categorize: live > chatting (active in last 30 min) > offline
+      const live = [];
+      const chatting = [];
+      const offline = [];
+      
+      for (const p of players) {
+        const username = (p.twitchUsername || p.username || '').toLowerCase();
+        const lastChat = p.lastChatAt || 0;
+        const isLive = liveSet.has(username);
+        const isChatting = !isLive && lastChat && (now - lastChat < ACTIVE_THRESHOLD);
+        const isSleeping = p.sleepingImmunity || p.offlineImmunity;
+        
+        if (isLive) live.push({ ...p, _status: '🟢' });
+        else if (isChatting) chatting.push({ ...p, _status: '💬' });
+        else offline.push({ ...p, _status: isSleeping ? '😴' : '' });
+      }
+      
+      const allSorted = [...live, ...chatting, ...offline];
+      const total = allSorted.length;
       const perPage = 15;
       
       if (!global.playerPages) global.playerPages = {};
       if (!global.playerPages[userId]) global.playerPages[userId] = 0;
       
       const page = global.playerPages[userId];
-      const allSorted = [...awake, ...asleep];
-      const totalPages = Math.ceil(allSorted.length / perPage);
+      const totalPages = Math.max(1, Math.ceil(total / perPage));
       const start = page * perPage;
-      const end = Math.min(start + perPage, allSorted.length);
-      const pageNames = allSorted.slice(start, end).map(p => p.twitchUsername || p.username).join(', ');
+      const end = Math.min(start + perPage, total);
+      const pageNames = allSorted.slice(start, end).map(p => {
+        const name = p.twitchUsername || p.username;
+        return p._status ? `${p._status}${name}` : name;
+      }).join(', ');
       
-      const sleepNote = asleep.length > 0 && end > awake.length ? ` (${asleep.length} asleep at end)` : '';
-      reply( `@${user} ${total} players (${page + 1}/${totalPages}): ${pageNames}${sleepNote}${page + 1 < totalPages ? ' | Type "@spmt more" for next page' : ''}`);
-      
-      global.playerPages[userId] = (page + 1) % totalPages;
-    }
-    
-    else if (cmd === 'more') {
-      const data = await apiCall('/api/tag');
-      const players = data?.players || [];
-      const awake = players.filter(p => !p.isSleeping && !p.offlineImmunity);
-      const asleep = players.filter(p => p.isSleeping || p.offlineImmunity);
-      const total = players.length;
-      const perPage = 15;
-      
-      if (!global.playerPages) global.playerPages = {};
-      if (!global.playerPages[userId]) global.playerPages[userId] = 0;
-      
-      const page = global.playerPages[userId];
-      const allSorted = [...awake, ...asleep];
-      const totalPages = Math.ceil(allSorted.length / perPage);
-      const start = page * perPage;
-      const end = Math.min(start + perPage, allSorted.length);
-      const pageNames = allSorted.slice(start, end).map(p => p.twitchUsername || p.username).join(', ');
-      
-      const sleepNote = asleep.length > 0 && end > awake.length ? ` (${asleep.length} asleep at end)` : '';
-      reply( `@${user} ${total} players (${page + 1}/${totalPages}): ${pageNames}${sleepNote}${page + 1 < totalPages ? ' | Type "@spmt more" for next page' : ''}`);
+      reply(`@${user} ${total} players [🟢${live.length} live, 💬${chatting.length} chatting] (${page + 1}/${totalPages}): ${pageNames}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
       
       global.playerPages[userId] = (page + 1) % totalPages;
     }
@@ -1059,7 +1276,7 @@ console.log = (...args) => {
       }
       console.log('[Bot] Sending admin command list');
       await reply(
-        `@${user} Mod/Admin: "@spmt support" = Open help ticket | "@spmt sleep @user" = Set away | "@spmt wake @user" = Clear away | "@spmt leave" = Leave game | "@spmt mute" = Mute bot | "@spmt unmute" = Unmute bot | "@spmt card" = Bingo card | "@spmt claim [0-24]" = Claim bingo square`
+        `@${user} Mod/Admin: "@spmt newcard" = New bingo card | "@spmt newcard phrase1|phrase2|..." = Custom 25 phrases | "@spmt support" = Help ticket | "@spmt sleep @user" = Set away | "@spmt wake @user" = Clear away | "@spmt mute" = Mute bot | "@spmt unmute" = Unmute`
       );
       console.log('[Bot] Admin command complete');
     }
@@ -1158,7 +1375,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'rules') {
-      reply( `@${user} Tag Rules: Tag someone by typing "@spmt tag @username" in their chat. If you're it, tag someone else! Use "@spmt sleep" to go immune. Type "@spmt help" for all commands.`);
+      reply( `@${user} Tag Rules: Tag someone with "@spmt tag @user" in their chat. If you're it, tag someone else! "@spmt sleep" = go immune. "@spmt pass @user" = earned double-points tag. Full guide: https://chat-tag.fly.dev/about`);
     }
     
     else if (cmd === 'info') {
@@ -1187,23 +1404,88 @@ console.log = (...args) => {
       const data = await apiCall('/api/bingo/state');
       const card = data?.bingo;
       
-      if (!card?.phrases) {
-        reply( `@${user} No bingo card found!`);
+      if (!card?.phrases || card.phrases.length === 0) {
+        reply(`@${user} No bingo card yet! An admin can create one with "@spmt newcard"`);
         return;
       }
       
-      // Build compact single-line format
-      const rows = [];
+      // Send 5 rows as separate messages for a visual grid
+      const covered = card.covered || {};
       for (let row = 0; row < 5; row++) {
         const cells = [];
         for (let col = 0; col < 5; col++) {
           const idx = row * 5 + col;
-          cells.push(card.covered[idx] ? 'X' : idx.toString());
+          if (covered[idx]) {
+            cells.push(`[X${String(idx).padStart(2,'0')}]`);
+          } else {
+            // Abbreviate phrase to 4 chars
+            const abbr = (card.phrases[idx] || '??').substring(0, 4);
+            cells.push(`[${String(idx).padStart(2,'0')}${abbr.length < 4 ? ' ' : ''}]`);
+          }
         }
-        rows.push('[' + cells.join('|') + ']');
+        await reply(cells.join(' '));
+        await sleep(600);
+      }
+      await reply(`@${user} X=claimed. "@spmt phrases" to see full text. "@spmt claim [0-24]" to mark.`);
+    }
+    
+    else if (cmd === 'phrases') {
+      const data = await apiCall('/api/bingo/state');
+      const card = data?.bingo;
+      
+      if (!card?.phrases || card.phrases.length === 0) {
+        reply(`@${user} No bingo card yet!`);
+        return;
       }
       
-      reply( `@${user} Bingo Card: ${rows.join(' ')} | Use "@spmt claim [0-24]" to mark. X=claimed`);
+      // Show phrases in pages of 5
+      if (!global.phrasePages) global.phrasePages = {};
+      if (!global.phrasePages[userId]) global.phrasePages[userId] = 0;
+      
+      const page = global.phrasePages[userId];
+      const start = page * 5;
+      const end = Math.min(start + 5, card.phrases.length);
+      const covered = card.covered || {};
+      
+      const lines = [];
+      for (let i = start; i < end; i++) {
+        const mark = covered[i] ? '✅' : '⬜';
+        lines.push(`${mark}${i}: ${card.phrases[i]}`);
+      }
+      
+      const totalPages = Math.ceil(card.phrases.length / 5);
+      reply(`@${user} Bingo (${page + 1}/${totalPages}): ${lines.join(' | ')}${page + 1 < totalPages ? ' — "@spmt phrases" for more' : ''}`);
+      
+      global.phrasePages[userId] = (page + 1) % totalPages;
+    }
+    
+    else if (cmd === 'newcard') {
+      if (!isAdminUser) {
+        reply(`@${user} Only mods/admins can create a new bingo card.`);
+        return;
+      }
+      
+      // Custom phrases from args or use defaults
+      const customPhrases = args.slice(1).join(' ').split('|').map(p => p.trim()).filter(Boolean);
+      
+      if (customPhrases.length > 0 && customPhrases.length < 25) {
+        reply(`@${user} Need exactly 25 phrases separated by | (got ${customPhrases.length}). Or use "@spmt newcard" with no args for defaults.`);
+        return;
+      }
+      
+      if (customPhrases.length === 25) {
+        // Use custom phrases
+        await apiCall('/api/bingo/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset', phrases: customPhrases })
+        });
+        reply(`@${user} New bingo card created with custom phrases! Type "@spmt card" to see it.`);
+      } else {
+        // Generate default card
+        await apiCall('/api/bingo/generate', { method: 'POST' });
+        reply(`@${user} New bingo card generated! Type "@spmt card" to see it, "@spmt phrases" for the full list.`);
+      }
     }
     
     else if (cmd === 'claim') {
@@ -1231,10 +1513,47 @@ console.log = (...args) => {
         : `@${user} ${res?.error || 'Error claiming square'}`);
     }
     
+    else if (cmd === 'pass') {
+      const target = args[1]?.replace('@', '').toLowerCase();
+      console.log(`[Bot] Pass command from ${user}, target=${target}`);
+      if (!target) {
+        reply(`@${user} Usage: "@spmt pass @username" — Pass your tag to someone for DOUBLE POINTS! Earned by gifting subs, cheering 100+ bits, or hype train.`);
+        return;
+      }
+      
+      const playersData = await apiCall('/api/tag');
+      const targetPlayer = playersData?.players?.find(p => (p.twitchUsername || p.username)?.toLowerCase() === target);
+      if (!targetPlayer) {
+        reply(`@${user} ${target} is not in the game!`);
+        return;
+      }
+      
+      const res = await apiCall('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'use-pass', userId, targetUserId: targetPlayer.id, streamerId: channelName })
+      });
+      
+      if (res?.error) {
+        reply(`@${user} ${res.error}`);
+      } else {
+        const msg = `🎟️ ${user} used a PASS on @${target} for DOUBLE POINTS! @${target} is now it!`;
+        await reply(msg);
+        if (!isMuted) {
+          await broadcastToPlayers(client, msg, channelName);
+        }
+        await apiCall('/api/discord/announce', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tagger: user, tagged: target, doublePoints: true, message: 'Used a Pass' })
+        });
+      }
+    }
+    
     else if (cmd === 'help') {
       console.log(`[Bot] Attempting to send help to ${channel}`);
       try {
-        await reply( `@${user} "@spmt join" = Join game | "@spmt tag @user" = Tag someone | "@spmt status" = Who's it | "@spmt score" = Your stats | "@spmt rank" = Your rank | "@spmt players" = Player count | "@spmt live" = Live streamers | "@spmt sleep" = Go immune | "@spmt wake" = Remove immunity | "@spmt rules" = Rules | Mods: "@spmt mod"`);
+        await reply( `@${user} "@spmt join" = Join | "@spmt tag @user" = Tag | "@spmt pass @user" = Pass tag (earned) | "@spmt status" = Who's it | "@spmt score" = Stats | "@spmt rank" = Top 3 | "@spmt players" = List | "@spmt live" = Live | "@spmt sleep" = Immune | "@spmt wake" = Unimmune | "@spmt rules" = Rules | Mods: "@spmt mod"`);
         console.log(`[Bot] Help message sent successfully`);
       } catch (e) {
         console.error('[Bot] Error sending help:', e.message);

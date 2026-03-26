@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      await fetch('http://localhost:8091/broadcast', {
+      const botUrl = process.env.BOT_URL || 'http://chat-tag-bot.internal:8091';
+      await fetch(`${botUrl}/broadcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'community-update' }),

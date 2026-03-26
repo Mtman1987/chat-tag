@@ -22,9 +22,6 @@ import { LiveDiscordMembers } from '@/components/live-discord-members';
 import { BotChannelManager } from '@/components/bot-channel-manager';
 import { DiscordEmbedPoster } from '@/components/discord-embed-poster';
 import { Card } from '@/components/ui/card';
-import TwitchLoginButton from '@/components/TwitchLoginButton';
-import { useToast } from '@/hooks/use-toast';
-import { useLiveStreamers } from '@/contexts/live-streamers-context';
 
 function getNewPlayer(userId: string, username: string | null, avatar: string | null): Player {
   return {
@@ -47,8 +44,6 @@ export function MainDashboard() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
-  const { toast } = useToast();
-  const { allCommunityMembers } = useLiveStreamers();
 
   const usersCollection = useMemoFirebase(
     () => (firestore ? collection(firestore, 'users') : null),
@@ -84,9 +79,6 @@ export function MainDashboard() {
       setDoc(userDocRef, newPlayerData, { merge: true });
     }
   }, [user, firestore, players]);
-
-  const liveStreamers = useMemo(() => memoizedPlayers.filter(p => p.isActive) || [], [memoizedPlayers]);
-  const allPlayers = useMemo(() => memoizedPlayers || [], [memoizedPlayers]);
 
   const bingoSquarePoints = settings?.bingoSquarePoints ?? 10;
   const bingoWinPoints = settings?.bingoWinPoints ?? 250;
@@ -128,7 +120,7 @@ export function MainDashboard() {
   return (
     <div className="grid md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] gap-6 p-4 md:p-6">
       <aside className="flex flex-col gap-6">
-        <CommunityList players={allCommunityMembers as Player[]} />
+        <CommunityList />
         <Leaderboard players={memoizedPlayers} />
       </aside>
       
@@ -143,14 +135,10 @@ export function MainDashboard() {
               <TabsTrigger value="share" className="font-headline">Share</TabsTrigger>
             </TabsList>
             <TabsContent value="bingo" className="mt-6">
-              <BingoCard 
-                onBingo={handleBingo}
-                onSquareClaim={handleSquareClaim}
-                liveStreamers={liveStreamers}
-              />
+              <BingoCard />
             </TabsContent>
             <TabsContent value="chat-tag" className="mt-6">
-              <ChatTagGame players={allPlayers} />
+              <ChatTagGame players={memoizedPlayers} />
             </TabsContent>
             <TabsContent value="live-members" className="mt-6">
               <LiveDiscordMembers />

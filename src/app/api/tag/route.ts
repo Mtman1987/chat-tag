@@ -34,7 +34,7 @@ export async function GET() {
     players = players.map((p: any) => {
       const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
       const score = counts.tags * 100 - counts.tagged * 50;
-      return { ...p, score, tags: counts.tags, tagged: counts.tagged };
+      return { ...p, score, tags: counts.tags, tagged: counts.tagged, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: Boolean(p.hasPass), passGrantedAt: p.passGrantedAt || 0 };
     });
 
     const userMap: Record<string, string> = {};
@@ -71,6 +71,114 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, userId, username, twitchUsername, avatar, targetUserId, streamerId } = body;
 
+    if (action === 'chat-activity') {
+      await updateAppState((state) => {
+        const player = state.tagPlayers[userId];
+        if (!player) return;
+        
+        player.lastChatAt = Date.now();
+        player.lastSeenChannel = body.channel || null;
+        
+        if (player.sleepingImmunity || player.offlineImmunity) {
+          player.sleepingImmunity = false;
+          player.offlineImmunity = false;
+        }
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'grant-pass') {
+      const PASS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+      const result = await updateAppState((state) => {
+        const player = state.tagPlayers[userId];
+        if (!player) return { granted: false, reason: 'not-a-player' };
+        
+        const lastGranted = player.passGrantedAt || 0;
+        if (Date.now() - lastGranted < PASS_COOLDOWN_MS) {
+          return { granted: false, reason: 'cooldown', hoursLeft: Math.ceil((PASS_COOLDOWN_MS - (Date.now() - lastGranted)) / 3600000) };
+        }
+        
+        player.hasPass = true;
+        player.passGrantedAt = Date.now();
+        player.passReason = body.reason || 'unknown';
+        return { granted: true };
+      });
+      return NextResponse.json({ success: true, ...result });
+    }
+
+    if (action === 'use-pass') {
+      const result = await updateAppState((state) => {
+        const tagger = state.tagPlayers[userId];
+        const target = state.tagPlayers[targetUserId];
+        if (!tagger) return { status: 404, error: 'You are not in the game!' };
+        if (!target) return { status: 404, error: 'Target not in the game!' };
+        if (!tagger.hasPass) return { status: 400, error: 'You don\'t have a pass! Earn one by gifting a sub, cheering 100+ bits, or joining a hype train.' };
+        if (userId === targetUserId) return { status: 400, error: 'You can\'t pass to yourself!' };
+        
+        const immuneCheck = isPlayerImmune(target, userId);
+        if (immuneCheck.immune) {
+          let errorMsg = 'Target is immune';
+          if (immuneCheck.reason === 'sleeping') errorMsg = `${target.twitchUsername || 'Target'} is immune (sleeping)`;
+          if (immuneCheck.reason === 'offline') errorMsg = `${target.twitchUsername || 'Target'} is away/offline`;
+          if (immuneCheck.reason === 'no-tagback') errorMsg = `${target.twitchUsername || 'Target'} is immune (no-tagback)`;
+          if (immuneCheck.reason === 'timed') errorMsg = `${target.twitchUsername || 'Target'} is immune (20-min cooldown)`;
+          return { status: 400, error: errorMsg };
+        }
+        
+        // Use the pass — always double points
+        tagger.hasPass = false;
+        tagger.passUsedAt = Date.now();
+        
+        // Record in history
+        state.tagHistory.push({
+          id: makeId('hist'),
+          taggerId: userId,
+          taggedId: targetUserId,
+          streamerId,
+          timestamp: Date.now(),
+          doublePoints: true,
+          passUsed: true,
+        });
+        state.chatTags.push({
+          id: makeId('tag'),
+          taggerId: userId,
+          taggedId: targetUserId,
+          streamerId,
+          timestamp: Date.now(),
+          doublePoints: true,
+          passUsed: true,
+        });
+        
+        // Clear current it
+        const currentItPlayer = Object.values(state.tagPlayers).find((p: any) => p.isIt) as any;
+        if (currentItPlayer) {
+          currentItPlayer.isIt = false;
+        }
+        
+        // Set target as it
+        state.tagGame.state.currentIt = targetUserId;
+        state.tagGame.state.lastTagTime = Date.now();
+        
+        tagger.score = (tagger.score || 0) + 200; // always double
+        tagger.tags = (tagger.tags || 0) + 1;
+        tagger.isIt = false;
+        tagger.timedImmunityUntil = Date.now() + 20 * 60 * 1000;
+        
+        target.score = (target.score || 0) - 50;
+        target.tagged = (target.tagged || 0) + 1;
+        target.isIt = true;
+        target.noTagbackFrom = userId;
+        target.lastTaggedInStreamId = streamerId;
+        
+        return { success: true, doublePoints: true };
+      });
+      
+      if ((result as any).error) {
+        return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
+      }
+      return NextResponse.json(result);
+    }
+
     if (action === 'fix-user') {
       await updateAppState((state) => {
         if (state.tagPlayers[userId]) state.tagPlayers[userId].twitchUsername = twitchUsername;
@@ -83,9 +191,10 @@ export async function POST(req: NextRequest) {
         if (state.tagPlayers[userId]) return { error: 'Already in game' };
 
         const isAnyoneIt = Object.values(state.tagPlayers).some((p: any) => p.isIt);
+        const normalizedUsername = (twitchUsername || username || userId).toLowerCase();
         state.tagPlayers[userId] = {
           id: userId,
-          twitchUsername: (twitchUsername || username || userId).toLowerCase(),
+          twitchUsername: normalizedUsername,
           avatarUrl: avatar || '',
           score: 0,
           tags: 0,
@@ -94,6 +203,17 @@ export async function POST(req: NextRequest) {
           isActive: false,
           isPlayer: true,
         };
+
+        // Also add to botChannels so live status is tracked
+        if (normalizedUsername) {
+          state.botChannels[normalizedUsername] = {
+            ...(state.botChannels[normalizedUsername] || {}),
+            name: normalizedUsername,
+            status: 'joined',
+            lastUpdated: new Date().toISOString(),
+          };
+        }
+
         return { success: true };
       });
 
@@ -124,12 +244,19 @@ export async function POST(req: NextRequest) {
       const result = await updateAppState((state) => {
         const tagger = state.tagPlayers[userId];
         const target = state.tagPlayers[targetUserId];
-        if (!tagger || !target) return { status: 404, error: 'Player not found' };
+        if (!tagger || !target) {
+          // Log available player IDs for debugging
+          const playerIds = Object.keys(state.tagPlayers).join(', ');
+          return { status: 404, error: `Player not found (tagger=${!!tagger} target=${!!target}). Your ID: ${userId}` };
+        }
 
         const players = Object.values(state.tagPlayers) as any[];
         const anyoneIt = players.some((p) => p.isIt);
+        const whoIsIt = players.find((p) => p.isIt);
 
-        if (anyoneIt && !tagger.isIt) return { status: 400, error: 'You are not it!' };
+        if (anyoneIt && !tagger.isIt) {
+          return { status: 400, error: `You are not it! ${whoIsIt?.twitchUsername || whoIsIt?.id} is it.` };
+        }
 
         const immuneCheck = isPlayerImmune(target, userId);
         if (immuneCheck.immune) {
@@ -238,7 +365,12 @@ export async function POST(req: NextRequest) {
         const currentIt = Object.values(state.tagPlayers).find((p: any) => p.isIt) as any;
         if (currentIt) {
           currentIt.isIt = false;
-          currentIt.offlineImmunity = true;
+          // Only set offline immunity if they weren't recently active
+          const lastChat = currentIt.lastChatAt || 0;
+          const recentlyActive = Date.now() - lastChat < 40 * 60 * 1000;
+          if (!recentlyActive) {
+            currentIt.offlineImmunity = true;
+          }
         }
         state.tagGame.state.currentIt = null;
         state.tagGame.state.lastTagTime = Date.now();

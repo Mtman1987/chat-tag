@@ -29,12 +29,45 @@ export default function AboutPage() {
             </p>
             <ul className="list-disc list-inside space-y-3 text-muted-foreground">
               <li>When you're "It", use the Community list to find a live streamer.</li>
-              <li>If you see another player from the game chat in that stream, you can tag them! Click 'Tag' next to their name in the Chat Tag list and select the stream you saw them in.</li>
+              <li>If you see another player from the game chat in that stream, you can tag them! Type <code className="bg-secondary px-1 rounded">@spmt tag @username</code> in chat.</li>
               <li>You'll earn <strong>100 points</strong>, and they'll lose <strong>50 points</strong> and become the new "It".</li>
-              <li><strong className="text-primary">Tag-Back Prevention:</strong> You cannot tag a player in the same stream where you were just tagged. You must visit a different community stream to make your next tag.</li>
-              <li><strong className="text-primary"><Shield className="inline-block h-4 w-4 mr-1"/> Tag Immunity:</strong> After you successfully tag someone, you become immune from being tagged for 15 minutes. Go on the offensive!</li>
-              <li>A bot will announce the tag in the streamer's chat for everyone to see!</li>
+              <li><strong className="text-primary">No Tag-Back:</strong> The person you just tagged can't immediately tag you back.</li>
+              <li><strong className="text-primary"><Shield className="inline-block h-4 w-4 mr-1"/> 20-Min Immunity:</strong> After tagging someone, you're immune for 20 minutes.</li>
+              <li><strong className="text-primary">FREE FOR ALL:</strong> If the "It" person goes offline and 40 minutes pass, anyone can tag for <strong>DOUBLE POINTS (200 pts)</strong>!</li>
+              <li><strong className="text-primary">Anti-Stalling:</strong> If the "It" person is live but doesn't tag anyone for 40 minutes, it gets randomly assigned to another player.</li>
+              <li><strong className="text-primary">Force Rotate:</strong> After 5 hours with no tag, a random player is selected regardless.</li>
+              <li><strong className="text-primary">🎟️ Pass System:</strong> Earn a Pass by gifting a sub, cheering 100+ bits, or joining a hype train. Use <code className="bg-secondary px-1 rounded">@spmt pass @username</code> to tag anyone for double points — even if you're not "It"! (1 per 24 hours)</li>
+              <li><strong className="text-primary">Auto-Wake:</strong> If you're set to away/sleeping, typing in any monitored chat or going live automatically clears your immunity.</li>
             </ul>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-headline flex items-center gap-2"><Gamepad2 className="text-primary"/> All Chat Commands</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              {[
+                ['@spmt join', 'Join the game'],
+                ['@spmt tag @user', 'Tag someone (must be it or FFA)'],
+                ['@spmt pass @user', 'Use earned pass (always 2x pts)'],
+                ['@spmt status', 'Who\'s it?'],
+                ['@spmt score', 'Your rank & stats'],
+                ['@spmt rank', 'Top 3 leaderboard'],
+                ['@spmt players', 'Player list (active first)'],
+                ['@spmt more', 'Next page of players'],
+                ['@spmt live', 'Who\'s streaming now'],
+                ['@spmt sleep', 'Go immune/away'],
+                ['@spmt wake', 'Remove immunity'],
+                ['@spmt card', 'Show bingo grid'],
+                ['@spmt phrases', 'Bingo phrase list'],
+                ['@spmt claim [0-24]', 'Claim bingo square'],
+                ['@spmt rules', 'Quick rules + link'],
+                ['@spmt help', 'All commands'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex gap-2 p-2 rounded bg-secondary/30">
+                  <code className="text-primary font-mono text-xs whitespace-nowrap">{cmd}</code>
+                  <span className="text-muted-foreground">{desc}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="space-y-4">
             <h2 className="text-2xl font-headline flex items-center gap-2"><Users className="text-primary"/> Shared Chat Bingo</h2>

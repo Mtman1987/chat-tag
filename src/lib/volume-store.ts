@@ -5,6 +5,7 @@ export type JsonObject = Record<string, any>;
 
 export type AppState = {
   users: Record<string, JsonObject>;
+  supportTickets?: Record<string, JsonObject>;
   tagPlayers: Record<string, JsonObject>;
   tagHistory: JsonObject[];
   tagGame: {
@@ -38,6 +39,7 @@ export type AppState = {
 
 const DEFAULT_STATE: AppState = {
   users: {},
+  supportTickets: {},
   tagPlayers: {},
   tagHistory: [],
   tagGame: { state: { currentIt: null, lastTagTime: null } },

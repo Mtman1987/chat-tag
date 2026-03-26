@@ -22,8 +22,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useState, useEffect } from 'react';
 import { useLiveStreamers } from '@/contexts/live-streamers-context';
+import type { Player as FirestorePlayer } from '@/lib/types';
 
-interface Player {
+interface GamePlayer {
   id: string;
   username: string;
   avatar: string;
@@ -32,8 +33,13 @@ interface Player {
   isImmune?: boolean;
 }
 
+interface StreamHost {
+  id: string;
+  username: string;
+}
+
 interface ChatTagGameProps {
-  players?: Player[];
+  players?: FirestorePlayer[];
 }
 
 export function ChatTagGame({ players = [] }: ChatTagGameProps) {
@@ -47,8 +53,10 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     tagHistory: [] as any[],
     immunity: {} as Record<string, any>,
   });
-  const [communityPlayers, setCommunityPlayers] = useState<Player[]>([]);
+  const [communityPlayers, setCommunityPlayers] = useState<GamePlayer[]>([]);
   const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [addPlayerName, setAddPlayerName] = useState('');
+  const [isAddingPlayer, setIsAddingPlayer] = useState(false);
 
   const ts = (value: any): number => {
     if (!value) return 0;
@@ -140,13 +148,23 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
   }, []);
 
   // Mock players if none provided (fallback)
-  const mockPlayers: Player[] = [
+  const mockPlayers: GamePlayer[] = [
     { id: 'player1', username: 'mtman1987', avatar: 'https://picsum.photos/40/40?1', isIt: false, isActive: false },
     { id: 'player2', username: 'athenabot87', avatar: 'https://picsum.photos/40/40?2', isIt: false, isActive: true },
     { id: 'player3', username: 'viewer123', avatar: 'https://picsum.photos/40/40?3', isIt: false, isActive: false },
   ];
 
-  const availablePlayers = communityPlayers.length > 0 ? communityPlayers : mockPlayers;
+  const fallbackPlayers: GamePlayer[] =
+    players.length > 0
+      ? players.map((player) => ({
+          id: player.id,
+          username: player.twitchUsername || player.id,
+          avatar: player.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(player.twitchUsername || player.id)}&background=random`,
+          isIt: player.isIt,
+          isActive: player.isActive,
+        }))
+      : mockPlayers;
+  const availablePlayers = communityPlayers.length > 0 ? communityPlayers : fallbackPlayers;
   // Convert Discord players to display format
   const gamePlayers = gameState.players.map((p: any) => ({
     id: p.id,
@@ -178,7 +196,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
   
   const currentUser = availablePlayers.find(p => p.username?.toLowerCase() === currentUsername) || availablePlayers[0];
 
-  const handleTag = async (taggedPlayer: Player, streamHost: Player) => {
+  const handleTag = async (taggedPlayer: GamePlayer, streamHost: StreamHost) => {
     try {
       const taggerPlayer = gameState.players.find((p: any) => p.id === gameState.currentIt);
       if (!taggerPlayer) {
@@ -312,6 +330,39 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     (p.id === currentUser?.username || p.username === currentUser?.username) && 
     p.id === gameState.currentIt
   );
+
+  const handleAddPlayer = async () => {
+    const name = addPlayerName.trim().toLowerCase();
+    if (!name) return;
+    setIsAddingPlayer(true);
+    try {
+      // Add to tag game
+      const tagRes = await fetch('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'join', userId: `manual_${name}`, twitchUsername: name, avatar: '' })
+      });
+      const tagData = await tagRes.json();
+      if (tagData.error && tagData.error !== 'Already in game') {
+        toast({ variant: 'destructive', title: 'Add Failed', description: tagData.error });
+        setIsAddingPlayer(false);
+        return;
+      }
+      // Add to bot channels
+      await fetch('/api/bot/channels/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: name })
+      });
+      setAddPlayerName('');
+      toast({ title: 'Player Added', description: `${name} added to game + bot channels + community` });
+      setTimeout(fetchState, 500);
+    } catch {
+      toast({ variant: 'destructive', title: 'Add Failed' });
+    } finally {
+      setIsAddingPlayer(false);
+    }
+  };
 
   const handleBroadcast = async () => {
     if (!broadcastMessage.trim()) return;
@@ -485,6 +536,20 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         </div>
       </div>
 
+      <div className="flex gap-2">
+        <Input
+          placeholder="Add player by Twitch username..."
+          value={addPlayerName}
+          onChange={(e) => setAddPlayerName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleAddPlayer(); }}
+          className="max-w-xs"
+        />
+        <Button onClick={handleAddPlayer} disabled={isAddingPlayer || !addPlayerName.trim()} size="sm">
+          {isAddingPlayer ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+          Add Player
+        </Button>
+      </div>
+
       <ScrollArea className="h-[24rem] rounded-md border">
         <Table>
           <TableHeader className="sticky top-0 bg-card z-10">
@@ -517,7 +582,9 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                           </div>
                         )}
                         {isImmune && (
-                          <Shield className="h-4 w-4 text-cyan-400" title="Immune from being tagged" />
+                          <span title="Immune from being tagged">
+                            <Shield className="h-4 w-4 text-cyan-400" />
+                          </span>
                         )}
                         {isLive && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-green-500 text-green-500">

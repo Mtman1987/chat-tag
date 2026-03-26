@@ -1,6 +1,7 @@
 
 'use client';
 
+import type { ReactNode } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,7 +54,7 @@ type CombinedBingoEvent = {
   id: string;
   type: 'win' | 'claim';
   timestamp: Date;
-  content: JSX.Element;
+  content: ReactNode;
 };
 
 export function ActivityFeed() {

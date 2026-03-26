@@ -7,11 +7,11 @@ interface BingoCellProps {
   phrase: string;
   isCovered: boolean;
   isFreeSpace: boolean;
-  claimerId: string | null;
-  players: Player[];
+  claimerId?: string | null;
+  players?: Player[];
 }
 
-export function BingoCell({ phrase, isCovered, isFreeSpace, claimerId, players }: BingoCellProps) {
+export function BingoCell({ phrase, isCovered, isFreeSpace, claimerId = null, players = [] }: BingoCellProps) {
   const claimer = claimerId ? players.find(p => p.id === claimerId) : null;
 
   return (

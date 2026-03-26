@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { dataDirPath } from '@/lib/volume-store';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'logs required' }, { status: 400 });
     }
 
-    const logPath = path.join(process.cwd(), 'data', 'bot-logs.txt');
+    const logPath = path.join(dataDirPath(), 'bot-logs.txt');
     await fs.writeFile(logPath, logs, 'utf-8');
 
     return NextResponse.json({ success: true });

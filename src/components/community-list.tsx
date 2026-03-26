@@ -11,18 +11,21 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useLiveStreamers } from '@/contexts/live-streamers-context';
+import type { Player as FirestorePlayer } from '@/lib/types';
 
-interface Player {
+interface CommunityMember {
   id: string;
-  twitchUsername: string;
-  avatarUrl: string;
+  twitchUsername?: string;
+  username?: string;
+  avatarUrl?: string;
+  avatar?: string;
   isActive: boolean;
   isSharedChat?: boolean;
   sharedWith?: string[];
 }
 
 interface CommunityListProps {
-  players?: Player[];
+  players?: FirestorePlayer[];
 }
 
 const TwitchChatEmbed = ({ username }: { username: string }) => {
@@ -67,15 +70,34 @@ export function CommunityList({ players = [] }: CommunityListProps) {
   };
 
   // Use shared data or fallback to props/mock
-  const mockPlayers: Player[] = [
+  const mockPlayers: CommunityMember[] = [
     { id: '1', twitchUsername: 'mtman1987', avatarUrl: 'https://picsum.photos/40/40?1', isActive: true },
     { id: '2', twitchUsername: 'athenabot87', avatarUrl: 'https://picsum.photos/40/40?2', isActive: false },
     { id: '3', twitchUsername: 'viewer123', avatarUrl: 'https://picsum.photos/40/40?3', isActive: false },
   ];
 
-  const communityPlayers = allCommunityMembers.length > 0 ? allCommunityMembers : (players.length > 0 ? players : mockPlayers);
-  const liveStreamersData = communityPlayers.filter((p) => p.isActive && (p.twitchUsername || p.username)).sort((a, b) => String(a.twitchUsername || a.username || '').localeCompare(String(b.twitchUsername || b.username || '')));
-  const offlinePlayers = communityPlayers.filter((p) => !p.isActive && (p.twitchUsername || p.username)).sort((a, b) => String(a.twitchUsername || a.username || '').localeCompare(String(b.twitchUsername || b.username || '')));
+  const fallbackPlayers: CommunityMember[] =
+    players.length > 0
+      ? players.map((player) => ({
+          id: player.id,
+          twitchUsername: player.twitchUsername,
+          avatarUrl: player.avatarUrl,
+          isActive: player.isActive,
+        }))
+      : mockPlayers;
+  const communityPlayers: CommunityMember[] =
+    allCommunityMembers.length > 0 ? allCommunityMembers : fallbackPlayers;
+
+  const getDisplayName = (player: CommunityMember) => player.twitchUsername || player.username || player.id;
+  const getAvatar = (player: CommunityMember) =>
+    player.avatarUrl || player.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(getDisplayName(player))}&background=random`;
+
+  const liveStreamersData = communityPlayers
+    .filter((p) => p.isActive && getDisplayName(p))
+    .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)));
+  const offlinePlayers = communityPlayers
+    .filter((p) => !p.isActive && getDisplayName(p))
+    .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)));
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -133,19 +155,19 @@ export function CommunityList({ players = [] }: CommunityListProps) {
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="relative">
                           <Avatar className="h-9 w-9">
-                            <AvatarImage src={player.avatarUrl || player.avatar} alt={player.twitchUsername || player.username} />
-                            <AvatarFallback>{String(player.twitchUsername || player.username).charAt(0)}</AvatarFallback>
+                            <AvatarImage src={getAvatar(player)} alt={getDisplayName(player)} />
+                            <AvatarFallback>{getDisplayName(player).charAt(0)}</AvatarFallback>
                           </Avatar>
                           <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-card animate-pulse" />
                         </div>
                         <div className="flex items-center gap-2 min-w-0">
-                          <Link href={`https://www.twitch.tv/${player.twitchUsername || player.username}`} target="_blank" rel="noopener noreferrer" className="font-medium truncate hover:underline">
-                            {player.twitchUsername || player.username}
+                          <Link href={`https://www.twitch.tv/${getDisplayName(player)}`} target="_blank" rel="noopener noreferrer" className="font-medium truncate hover:underline">
+                            {getDisplayName(player)}
                           </Link>
-                          {tagStatusByUser[String(player.twitchUsername || player.username).toLowerCase()]?.isIt && (
+                          {tagStatusByUser[getDisplayName(player).toLowerCase()]?.isIt && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-red-500 text-red-500">IT</span>
                           )}
-                          {tagStatusByUser[String(player.twitchUsername || player.username).toLowerCase()]?.away && (
+                          {tagStatusByUser[getDisplayName(player).toLowerCase()]?.away && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-cyan-500 text-cyan-500">AWAY</span>
                           )}
                           {player.isSharedChat && (
@@ -166,7 +188,7 @@ export function CommunityList({ players = [] }: CommunityListProps) {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent side="right" align="start" className="w-auto p-0 border-none">
-                          <TwitchChatEmbed username={player.twitchUsername || player.username} />
+                          <TwitchChatEmbed username={getDisplayName(player)} />
                         </PopoverContent>
                       </Popover>
                     </div>
@@ -185,17 +207,17 @@ export function CommunityList({ players = [] }: CommunityListProps) {
                     <div key={player.id} className="flex items-center gap-3 opacity-60 p-2">
                       <div className="relative">
                         <Avatar>
-                          <AvatarImage src={player.avatarUrl || player.avatar} alt={player.twitchUsername || player.username} />
-                          <AvatarFallback>{String(player.twitchUsername || player.username).charAt(0)}</AvatarFallback>
+                          <AvatarImage src={getAvatar(player)} alt={getDisplayName(player)} />
+                          <AvatarFallback>{getDisplayName(player).charAt(0)}</AvatarFallback>
                         </Avatar>
                         <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-gray-500 ring-2 ring-card" />
                       </div>
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-medium truncate">{player.twitchUsername || player.username}</span>
-                        {tagStatusByUser[String(player.twitchUsername || player.username).toLowerCase()]?.isIt && (
+                        <span className="font-medium truncate">{getDisplayName(player)}</span>
+                        {tagStatusByUser[getDisplayName(player).toLowerCase()]?.isIt && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-red-500 text-red-500">IT</span>
                         )}
-                        {tagStatusByUser[String(player.twitchUsername || player.username).toLowerCase()]?.away && (
+                        {tagStatusByUser[getDisplayName(player).toLowerCase()]?.away && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-cyan-500 text-cyan-500">AWAY</span>
                         )}
                         {player.isSharedChat && (
