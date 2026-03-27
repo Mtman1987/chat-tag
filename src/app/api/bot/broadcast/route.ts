@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
+
 export async function POST(req: NextRequest) {
   try {
     const { message, channel } = await req.json();
-    
-    const botUrl = process.env.BOT_URL || 'http://chat-tag-bot.internal:8091';
-    
-    const res = await fetch(`${botUrl}/broadcast`, {
+
+    const res = await fetch(`${BOT_URL}/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, channel })

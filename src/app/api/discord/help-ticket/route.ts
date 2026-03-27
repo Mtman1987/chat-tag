@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { dataDirPath } from '@/lib/volume-store';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +17,8 @@ export async function POST(req: NextRequest) {
 
     // Get current game state
     console.log('[help-ticket] Fetching game state...');
-    const stateResponse = await fetch(`${process.env.API_BASE || 'https://chat-tag.fly.dev'}/api/tag`);
+    const appOrigin = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    const stateResponse = await fetch(`${appOrigin}/api/tag`);
     const gameState = await stateResponse.json();
     console.log('[help-ticket] Game state fetched, players:', gameState?.players?.length);
     const itPlayer = gameState?.players?.find((p: any) => p.isIt);
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
       Math.floor((Date.now() - gameState.lastTagTime) / 60000) : 0;
 
     // Get ticket history for this user
-    const statePath = path.join(process.cwd(), 'data', 'app-state.json');
+    const statePath = path.join(dataDirPath(), 'app-state.json');
     const stateData = JSON.parse(await fs.readFile(statePath, 'utf-8'));
     const allTickets = Object.values(stateData.supportTickets || {}) as any[];
     const userTickets = allTickets.filter((t: any) => t.requester.toLowerCase() === requester.toLowerCase());
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
       new Date(b.resolvedAt || 0).getTime() - new Date(a.resolvedAt || 0).getTime()
     )[0];
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://chat-tag.fly.dev';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
     const ticketNum = totalTickets + 1;
     
     // Truncate long values to fit Discord limits

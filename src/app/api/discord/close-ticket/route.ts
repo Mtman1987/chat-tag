@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
 import fs from 'fs/promises';
 import path from 'path';
+
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
 
 export async function GET(req: NextRequest) {
   try {
@@ -78,12 +80,12 @@ export async function GET(req: NextRequest) {
     let logs = 'Unable to fetch logs';
     try {
       // Trigger bot to write logs
-      await fetch(`${process.env.BOT_URL || 'https://chat-tag-bot.fly.dev'}/write-logs`, {
+      await fetch(`${BOT_URL}/write-logs`, {
         method: 'POST'
       });
-      
+
       // Read logs from volume
-      const logPath = path.join(process.cwd(), 'data', 'bot-logs.txt');
+      const logPath = path.join(dataDirPath(), 'bot-logs.txt');
       logs = await fs.readFile(logPath, 'utf-8');
     } catch (e: any) {
       logs = `Error fetching logs: ${e.message}`;

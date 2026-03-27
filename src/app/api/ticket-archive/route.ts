@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { dataDirPath } from '@/lib/volume-store';
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Ticket ID required' }, { status: 400 });
     }
 
-    const statePath = path.join(process.cwd(), 'data', 'app-state.json');
+    const statePath = path.join(dataDirPath(), 'app-state.json');
     const stateData = JSON.parse(await fs.readFile(statePath, 'utf-8'));
     const ticket = stateData.supportTickets?.[ticketId];
 

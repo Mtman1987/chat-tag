@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
+
 export async function POST(request: NextRequest) {
   try {
     const { channel } = await request.json();
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await fetch('http://chat-tag-bot.internal:8091/refresh', {
+      await fetch(`${BOT_URL}/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: sanitized }),

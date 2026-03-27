@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
+
 export async function POST(req: NextRequest) {
   try {
     const { channel } = await req.json();
@@ -18,8 +20,7 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      const botUrl = process.env.BOT_URL || 'http://chat-tag-bot.internal:8091';
-      await fetch(`${botUrl}/broadcast`, {
+      await fetch(`${BOT_URL}/broadcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'community-update' }),
