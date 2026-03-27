@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { dataDirPath } from '@/lib/volume-store';
 
-const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot-new.fly.dev';
 
 export async function GET() {
   try {

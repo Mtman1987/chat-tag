@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 
-const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot-new.fly.dev';
 
 export async function POST(request: NextRequest) {
   try {

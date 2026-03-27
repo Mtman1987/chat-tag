@@ -21,8 +21,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid usernames array' }, { status: 400 });
     }
 
-    const clientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
-    const clientSecret = process.env.TWITCH_CLIENT_SECRET;
+    const clientId =
+      process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID ||
+      process.env.TWITCH_CLIENT_ID ||
+      process.env.TWITCH_DEV_CLIENT_ID;
+    const clientSecret =
+      process.env.TWITCH_CLIENT_SECRET ||
+      process.env.TWITCH_DEV_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
       return NextResponse.json({ error: 'Twitch credentials not configured' }, { status: 500 });

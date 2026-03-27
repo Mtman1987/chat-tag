@@ -5,13 +5,21 @@ const path = require('path');
 // Load environment variables
 const env = process.env;
 
-const API_BASE = process.env.API_BASE || 'https://chat-tag.fly.dev';
+const API_BASE = process.env.API_BASE || 'https://chat-tag-new.fly.dev';
 const BLACKLIST = ['streamelements', 'nightbot', 'moobot', 'fossabot'];
 const AUTO_ROTATE_MINUTES = 40;
 const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
 const FFA_REANNOUNCE_MINUTES = 60;
 let lastFfaAnnouncedAt = 0;
+
+function getTwitchClientId() {
+  return env.NEXT_PUBLIC_TWITCH_CLIENT_ID || env.TWITCH_CLIENT_ID || env.TWITCH_DEV_CLIENT_ID;
+}
+
+function getTwitchClientSecret() {
+  return env.TWITCH_CLIENT_SECRET || env.TWITCH_DEV_CLIENT_SECRET;
+}
 
 async function refreshToken(refreshToken, clientId, clientSecret) {
   const res = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -34,10 +42,14 @@ async function updateEnvToken(key, value) {
 }
 
 async function getValidToken() {
-  const clientId = env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
-  const clientSecret = env.TWITCH_CLIENT_SECRET;
+  const clientId = getTwitchClientId();
+  const clientSecret = getTwitchClientSecret();
   const token = env.TWITCH_BOT_TOKEN;
   const refreshTokenValue = env.TWITCH_BOT_REFRESH_TOKEN;
+
+  if (!clientId || !clientSecret || !token || !refreshTokenValue) {
+    throw new Error('Missing Twitch bot credentials');
+  }
   
   const validateRes = await fetch('https://id.twitch.tv/oauth2/validate', {
     headers: { 'Authorization': `OAuth ${token}` }
@@ -125,8 +137,12 @@ async function maybeAnnounceDailyActivation(client, channelName) {
 }
 
 async function getAppAccessToken() {
-  const clientId = env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
-  const clientSecret = env.TWITCH_CLIENT_SECRET;
+  const clientId = getTwitchClientId();
+  const clientSecret = getTwitchClientSecret();
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Missing Twitch app credentials');
+  }
   
   const res = await fetch('https://id.twitch.tv/oauth2/token', {
     method: 'POST',
@@ -156,7 +172,7 @@ async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, 
   console.log(`[Bot] sendMessageViaAPI called: channel=${targetChannel}, forSourceOnly=${forSourceOnly}`);
   if (!appToken) appToken = await getAppAccessToken();
   
-  const clientId = env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
+  const clientId = getTwitchClientId();
   
   // Get broadcaster ID from username
   const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${targetChannel}`, {
@@ -295,7 +311,7 @@ async function resolveChannelFromRoomId(roomId, fallbackChannel) {
 
   try {
     if (!appToken) appToken = await getAppAccessToken();
-    const clientId = env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
+    const clientId = getTwitchClientId();
     const res = await fetch(`https://api.twitch.tv/helix/users?id=${encodeURIComponent(key)}`, {
       headers: {
         'Client-ID': clientId,
@@ -421,7 +437,7 @@ console.log = (...args) => {
   async function helixGetUser(loginOrId, byId = false) {
     // Use app access token (client credentials) - more reliable than user token
     if (!appToken) appToken = await getAppAccessToken();
-    const clientId = env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
+    const clientId = getTwitchClientId();
     const param = byId ? `id=${loginOrId}` : `login=${loginOrId.toLowerCase()}`;
     
     let res = await fetch(`https://api.twitch.tv/helix/users?${param}`, {
@@ -600,11 +616,12 @@ console.log = (...args) => {
         const itPlayer = data.players?.find(p => p.id === data.currentIt);
         const itUsername = itPlayer?.twitchUsername || 'unknown';
         
-        // Check if "it" person is currently live OR active in chat
+        // Live holders should rotate randomly, not force a double-points FFA.
         const liveNow = await getLiveMembersCached(true);
         const itIsLive = liveNow.some(m => (m.twitchUsername || '').toLowerCase() === itUsername.toLowerCase());
         const itLastChat = itPlayer?.lastChatAt || 0;
-        const itIsActive = itIsLive || (Date.now() - itLastChat < AUTO_ROTATE_MINUTES * 60 * 1000);
+        const recentlySeenInPlayerChat = Date.now() - itLastChat < AUTO_ROTATE_MINUTES * 60 * 1000;
+        const shouldRandomRotate = itIsLive || recentlySeenInPlayerChat;
         
         // FORCE RANDOM after 4-6 hours — no matter what
         if (elapsed > FORCE_RANDOM_IT_HOURS * 60 * 60 * 1000) {
@@ -653,9 +670,9 @@ console.log = (...args) => {
           
         } else if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000) {
           // 40+ min timeout
-          if (itIsActive) {
-            // IT person is ACTIVE (live or chatting) and holding — assign to random player, no double points exploit
-            console.log(`[Bot] ${itUsername} is active and holding it — random assign (live=${itIsLive}, chatting=${!itIsLive && itIsActive})`);
+          if (shouldRandomRotate) {
+            // If they are still live or recently seen in any participating chat, rotate normally.
+            console.log(`[Bot] ${itUsername} is still active enough to avoid FFA — random assign (live=${itIsLive}, recentChat=${recentlySeenInPlayerChat})`);
             const eligible = (data.players || []).filter(p => 
               p.id !== data.currentIt && !p.sleepingImmunity && !p.offlineImmunity
             );
@@ -685,8 +702,8 @@ console.log = (...args) => {
               lastFfaAnnouncedAt = Date.now();
             }
           } else {
-            // IT person is INACTIVE (not live, not chatting) — go to FFA with double points
-            console.log(`[Bot] ${itUsername} is inactive, triggering FFA`);
+            // Only grant FFA if they are neither live nor recently seen in player chats.
+            console.log(`[Bot] ${itUsername} is inactive and unseen, triggering FFA`);
             await apiCall('/api/tag', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -813,16 +830,28 @@ console.log = (...args) => {
   }, 60000);
 
   // --- Gifted sub / bits / hype train pass tracking ---
+  async function announceGrantedPass(channel, login, reason) {
+    const targetChannel = String(channel || '').replace(/^#/, '').toLowerCase();
+    if (!targetChannel || !login) return;
+
+    const reasonLabel = reason ? ` for ${reason}` : '';
+    const message = `🎟️ @${login} got an SPMT pass${reasonLabel}! Use "@spmt pass @username" to instantly pass IT for DOUBLE POINTS, even if you're not it. One active pass at a time.`;
+    await sendChatWithSharedFallback(client, targetChannel, message, { warnOnFallback: true });
+  }
+
   client.on('submysterygift', async (channel, username, numbOfSubs, methods, userstate) => {
     const login = (userstate['login'] || username || '').toLowerCase();
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
     console.log(`[Bot] Gift sub detected: ${login} gifted ${numbOfSubs} subs`);
-    apiCall('/api/tag', {
+    const result = await apiCall('/api/tag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: `gifted ${numbOfSubs} subs` })
-    }).catch(() => {});
+    }).catch(() => null);
+    if (result?.granted) {
+      await announceGrantedPass(channel, login, `gifting ${numbOfSubs} subs`);
+    }
   });
 
   client.on('cheer', async (channel, userstate, message) => {
@@ -832,11 +861,14 @@ console.log = (...args) => {
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
     console.log(`[Bot] Cheer detected: ${login} cheered ${bits} bits`);
-    apiCall('/api/tag', {
+    const result = await apiCall('/api/tag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: `cheered ${bits} bits` })
-    }).catch(() => {});
+    }).catch(() => null);
+    if (result?.granted) {
+      await announceGrantedPass(channel, login, `cheering ${bits} bits`);
+    }
   });
 
   // Raw message handler for hype train events (TMI doesn't have a dedicated event)
@@ -851,11 +883,15 @@ console.log = (...args) => {
         const uid = `user_${userIdMatch[1]}`;
         const login = loginMatch[1].toLowerCase();
         console.log(`[Bot] Hype train participation: ${login}`);
-        apiCall('/api/tag', {
+        const result = await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: 'hype train' })
-        }).catch(() => {});
+        }).catch(() => null);
+        const rawChannel = message?.params?.[0] || message?.channel || '';
+        if (result?.granted && rawChannel) {
+          await announceGrantedPass(rawChannel, login, 'joining the hype train');
+        }
       }
     } catch {}
   });
@@ -1246,23 +1282,36 @@ console.log = (...args) => {
         else offline.push({ ...p, _status: isSleeping ? '😴' : '' });
       }
       
-      const allSorted = [...live, ...chatting, ...offline];
-      const total = allSorted.length;
+      const priority = [...live, ...chatting];
+      const pages = [];
+      for (let i = 0; i < priority.length; i += 15) {
+        pages.push(priority.slice(i, i + 15));
+      }
+      for (let i = 0; i < offline.length; i += 15) {
+        pages.push(offline.slice(i, i + 15));
+      }
+      if (pages.length === 0) {
+        pages.push([]);
+      }
+
+      const total = players.length;
       const perPage = 15;
       
       if (!global.playerPages) global.playerPages = {};
       if (!global.playerPages[userId]) global.playerPages[userId] = 0;
       
       const page = global.playerPages[userId];
-      const totalPages = Math.max(1, Math.ceil(total / perPage));
-      const start = page * perPage;
-      const end = Math.min(start + perPage, total);
-      const pageNames = allSorted.slice(start, end).map(p => {
+      const totalPages = pages.length;
+      const currentPagePlayers = pages[page] || [];
+      const pageNames = currentPagePlayers.map(p => {
         const name = p.twitchUsername || p.username;
         return p._status ? `${p._status}${name}` : name;
       }).join(', ');
-      
-      reply(`@${user} ${total} players [🟢${live.length} live, 💬${chatting.length} chatting] (${page + 1}/${totalPages}): ${pageNames}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+
+      const pageLabel = page < Math.ceil(priority.length / perPage) && priority.length > 0
+        ? 'live/active'
+        : 'all players';
+      reply(`@${user} ${total} players [🟢${live.length} live, 💬${chatting.length} chatting] (${page + 1}/${totalPages}, ${pageLabel}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
       
       global.playerPages[userId] = (page + 1) % totalPages;
     }
@@ -1375,7 +1424,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'rules') {
-      reply( `@${user} Tag Rules: Tag someone with "@spmt tag @user" in their chat. If you're it, tag someone else! "@spmt sleep" = go immune. "@spmt pass @user" = earned double-points tag. Full guide: https://chat-tag.fly.dev/about`);
+      reply( `@${user} Tag Rules: Tag someone with "@spmt tag @user" in their chat. If you're it, tag someone else! "@spmt sleep" = go immune. "@spmt pass @user" = earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`);
     }
     
     else if (cmd === 'info') {

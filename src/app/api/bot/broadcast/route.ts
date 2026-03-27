@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot.fly.dev';
+const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot-new.fly.dev';
 
 export async function POST(req: NextRequest) {
   try {
