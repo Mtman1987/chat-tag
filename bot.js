@@ -916,9 +916,18 @@ console.log = (...args) => {
       }).catch(() => {}); // fire and forget
     }
     
-    const msg = message.toLowerCase().trim();
+    const rawMessage = message.trim();
+    const usesBang = rawMessage.startsWith('!');
+    let normalizedMessage = rawMessage;
+
+    if (usesBang) {
+      // allow !card, !phrases, !claim etc as alias to @spmt
+      normalizedMessage = `@spmt ${rawMessage.slice(1)}`.trim();
+    }
+
+    const msg = normalizedMessage.toLowerCase();
     if (!msg.startsWith('@spmt ')) return;
-    
+
     // In shared chat, process mirrored partner messages too, but map to source channel context.
     const rawChannelName = channel.replace('#', '');
     const roomId = tags['room-id'];
@@ -1457,25 +1466,46 @@ console.log = (...args) => {
         reply(`@${user} No bingo card yet! An admin can create one with "@spmt newcard"`);
         return;
       }
-      
-      // Send 5 rows as separate messages for a visual grid
+
       const covered = card.covered || {};
+      const formatRow = (row) => {
+        const cells = [];
+        for (let col = 0; col < 5; col++) {
+          const idx = row * 5 + col;
+          const cell = covered[idx] ? '🟩' : '⬜';
+          cells.push(`${cell}${String(idx).padStart(2, '0')}`);
+        }
+        return cells.join(' ');
+      };
+
+      // compact card output in one message for `!card` style usage to avoid flooding
+      if (usesBang) {
+        const rows = [];
+        for (let row = 0; row < 5; row++) rows.push(formatRow(row));
+        await reply(`@${user} Bingo board: ${rows.join(' | ')}`);
+        await reply(`@${user} Download full card & phrases: ${API_BASE}/api/bingo/share?format=txt`);
+        return;
+      }
+
+      // legacy behavior for @spmt card: 5 rows for visual clarity
       for (let row = 0; row < 5; row++) {
         const cells = [];
         for (let col = 0; col < 5; col++) {
           const idx = row * 5 + col;
           if (covered[idx]) {
-            cells.push(`[X${String(idx).padStart(2,'0')}]`);
+            cells.push(`[X${String(idx).padStart(2, '0')}]`);
           } else {
-            // Abbreviate phrase to 4 chars
-            const abbr = (card.phrases[idx] || '??').substring(0, 4);
-            cells.push(`[${String(idx).padStart(2,'0')}${abbr.length < 4 ? ' ' : ''}]`);
+            cells.push(`[${String(idx).padStart(2, '0')} ]`);
           }
         }
         await reply(cells.join(' '));
         await sleep(600);
       }
-      await reply(`@${user} X=claimed. "@spmt phrases" to see full text. "@spmt claim [0-24]" to mark.`);
+      await reply(`@${user} X=claimed. "@spmt phrases" to see full text. "@spmt claim [0-24]" to mark. Additionally: ${API_BASE}/api/bingo/share?format=txt`);
+    }
+
+    else if (cmd === 'share' || cmd === 'export') {
+      reply(`@${user} View and download bingo state (JSON or TXT): ${API_BASE}/api/bingo/share`);
     }
     
     else if (cmd === 'phrases') {
@@ -1503,7 +1533,7 @@ console.log = (...args) => {
       }
       
       const totalPages = Math.ceil(card.phrases.length / 5);
-      reply(`@${user} Bingo (${page + 1}/${totalPages}): ${lines.join(' | ')}${page + 1 < totalPages ? ' — "@spmt phrases" for more' : ''}`);
+      reply(`@${user} Bingo (${page + 1}/${totalPages}): ${lines.join(' | ')}${page + 1 < totalPages ? ' — "@spmt phrases" for more' : ''} | Full board + download: ${API_BASE}/api/bingo/share?format=txt`);
       
       global.phrasePages[userId] = (page + 1) % totalPages;
     }
