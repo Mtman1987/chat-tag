@@ -54,21 +54,22 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
         const safeLiveUsers = liveUsers || [];
 
         const communityMembers: LiveStreamer[] = channelNames.map((channelName: string) => {
+          const liveUser = safeLiveUsers.find((u: any) => u?.username?.toLowerCase() === channelName?.toLowerCase());
           let twitchUser = safeAllUsers.find((u: any) => u?.username?.toLowerCase() === channelName?.toLowerCase());
           if (!twitchUser) {
-            twitchUser = safeLiveUsers.find((u: any) => u?.username?.toLowerCase() === channelName?.toLowerCase());
+            twitchUser = liveUser;
           }
-          const isLive = safeLiveUsers.some((s: any) => s?.username?.toLowerCase() === channelName?.toLowerCase());
+          const isLive = Boolean(liveUser);
           const avatar = twitchUser?.profile_image_url || `https://ui-avatars.com/api/?name=${channelName}&background=random`;
           
           return {
             id: channelName,
-            username: twitchUser?.displayName || channelName,
+            username: twitchUser?.displayName || liveUser?.displayName || channelName,
             avatar,
             isActive: isLive,
-            isSharedChat: Boolean(twitchUser?.isSharedChat),
-            sharedWith: twitchUser?.sharedWith || [],
-            sharedSessionId: twitchUser?.sharedSessionId || null,
+            isSharedChat: Boolean(liveUser?.isSharedChat),
+            sharedWith: liveUser?.sharedWith || [],
+            sharedSessionId: liveUser?.sharedSessionId || null,
           };
         });
 

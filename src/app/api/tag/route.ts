@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
 
+export const dynamic = 'force-dynamic';
+
+// Migrate manual_ players to their real user_ ID when they show up in chat
+function migrateManualPlayer(state: any, realUserId: string, username: string) {
+  if (!realUserId?.startsWith('user_') || !username) return;
+  if (state.tagPlayers[realUserId]) return; // already correct
+
+  const manualKey = `manual_${username.toLowerCase()}`;
+  const manualPlayer = state.tagPlayers[manualKey];
+  if (!manualPlayer) return;
+
+  // Move player data to real ID
+  console.log(`[Migration] Migrating ${manualKey} -> ${realUserId} (${username})`);
+  manualPlayer.id = realUserId;
+  state.tagPlayers[realUserId] = manualPlayer;
+  delete state.tagPlayers[manualKey];
+
+  // Fix currentIt reference
+  if (state.tagGame.state.currentIt === manualKey) {
+    state.tagGame.state.currentIt = realUserId;
+  }
+
+  // Fix noTagbackFrom references
+  for (const p of Object.values(state.tagPlayers) as any[]) {
+    if (p.noTagbackFrom === manualKey) p.noTagbackFrom = realUserId;
+  }
+}
+
 function isPlayerImmune(player: any, taggerId: string) {
   if (player.sleepingImmunity) return { immune: true, reason: 'sleeping' };
   if (player.offlineImmunity) return { immune: true, reason: 'offline' };
@@ -73,11 +101,14 @@ export async function POST(req: NextRequest) {
 
     if (action === 'chat-activity') {
       await updateAppState((state) => {
+        // Migrate manual_ player to real user_ ID on first chat
+        if (twitchUsername) migrateManualPlayer(state, userId, twitchUsername);
+
         const player = state.tagPlayers[userId];
         if (!player) return;
         
         player.lastChatAt = Date.now();
-        player.lastSeenChannel = body.channel || null;
+        if (body.channel) player.lastSeenChannel = body.channel;
         
         if (player.sleepingImmunity || player.offlineImmunity) {
           player.sleepingImmunity = false;
@@ -242,6 +273,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'tag') {
       const result = await updateAppState((state) => {
+        // Migrate manual_ IDs to real user_ IDs if needed
+        if (twitchUsername) migrateManualPlayer(state, userId, twitchUsername);
+
         const tagger = state.tagPlayers[userId];
         const target = state.tagPlayers[targetUserId];
         if (!tagger || !target) {

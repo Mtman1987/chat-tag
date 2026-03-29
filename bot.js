@@ -276,7 +276,7 @@ async function getLiveMembersCached(force = false) {
 
 async function sendChatWithSharedFallback(client, targetChannel, message, options = {}) {
   const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
-  if (!normalized) return;
+  if (!normalized || !message) return;
 
   await getLiveMembersCached();
   const member = liveMembersCache.map.get(normalized);
@@ -835,7 +835,7 @@ console.log = (...args) => {
     if (!targetChannel || !login) return;
 
     const reasonLabel = reason ? ` for ${reason}` : '';
-    const message = `🎟️ @${login} got an SPMT pass${reasonLabel}! Use "@spmt pass @username" to instantly pass IT for DOUBLE POINTS, even if you're not it. One active pass at a time.`;
+    const message = `🎟️ Thanks for the support, @${login}! Here's an SPMT Pass${reasonLabel}! 🎁 Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS — even if you're not it!`;
     await sendChatWithSharedFallback(client, targetChannel, message, { warnOnFallback: true });
   }
 
@@ -903,7 +903,16 @@ console.log = (...args) => {
     const senderUserId = tags['user-id'] ? `user_${tags['user-id']}` : null;
     
     // Track chat activity for ALL messages from players (not just commands)
+    // Resolve shared chat source so lastSeenChannel reflects the actual streamer
     if (senderLogin && senderUserId && !BLACKLIST.includes(senderLogin)) {
+      const rawCh = channel.replace('#', '').toLowerCase();
+      const srcRoomId = tags['source-room-id'] || tags['source-id'];
+      const roomId = tags['room-id'];
+      const isShared = Boolean(roomId && srcRoomId && roomId !== srcRoomId);
+      const resolvedChannel = isShared
+        ? await resolveChannelFromRoomId(srcRoomId, rawCh)
+        : rawCh;
+      const activityChannel = (resolvedChannel !== senderLogin) ? resolvedChannel : undefined;
       apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -911,7 +920,7 @@ console.log = (...args) => {
           action: 'chat-activity', 
           userId: senderUserId, 
           twitchUsername: senderLogin,
-          channel: channel.replace('#', '').toLowerCase()
+          channel: activityChannel
         })
       }).catch(() => {}); // fire and forget
     }
@@ -1159,7 +1168,7 @@ console.log = (...args) => {
       const res = await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'tag', userId, targetUserId: targetPlayer.id, streamerId: channelName })
+        body: JSON.stringify({ action: 'tag', userId, twitchUsername: senderLogin, targetUserId: targetPlayer.id, streamerId: channelName })
       });
       console.log(`[Bot] Tag API response: ${JSON.stringify(res)}`);
       
@@ -1266,23 +1275,24 @@ console.log = (...args) => {
       console.log('[Bot] Status sent');
     }
     
-    else if (cmd === 'players' || cmd === 'more') {
+    else if (cmd === 'players') {
+      if (!global.lastListCmd) global.lastListCmd = {};
+      global.lastListCmd[userId] = 'players';
       const data = await apiCall('/api/tag');
       const players = data?.players || [];
       const liveNow = await getLiveMembersCached();
       const liveSet = new Set(liveNow.map(m => (m.twitchUsername || '').toLowerCase()));
       const now = Date.now();
-      const ACTIVE_THRESHOLD = 40 * 60 * 1000; // 40 min (same as auto-rotate timer)
+      const ACTIVE_THRESHOLD = 40 * 60 * 1000;
       
-      // Categorize: live > chatting (active in last 30 min) > offline
       const live = [];
       const chatting = [];
       const offline = [];
       
       for (const p of players) {
-        const username = (p.twitchUsername || p.username || '').toLowerCase();
+        const uname = (p.twitchUsername || p.username || '').toLowerCase();
         const lastChat = p.lastChatAt || 0;
-        const isLive = liveSet.has(username);
+        const isLive = liveSet.has(uname);
         const isChatting = !isLive && lastChat && (now - lastChat < ACTIVE_THRESHOLD);
         const isSleeping = p.sleepingImmunity || p.offlineImmunity;
         
@@ -1291,25 +1301,19 @@ console.log = (...args) => {
         else offline.push({ ...p, _status: isSleeping ? '😴' : '' });
       }
       
-      const priority = [...live, ...chatting];
-      const pages = [];
-      for (let i = 0; i < priority.length; i += 15) {
-        pages.push(priority.slice(i, i + 15));
-      }
-      for (let i = 0; i < offline.length; i += 15) {
-        pages.push(offline.slice(i, i + 15));
-      }
-      if (pages.length === 0) {
-        pages.push([]);
-      }
-
-      const total = players.length;
+      const all = [...live, ...chatting, ...offline];
       const perPage = 15;
-      
+      const pages = [];
+      for (let i = 0; i < all.length; i += perPage) {
+        pages.push(all.slice(i, i + perPage));
+      }
+      if (pages.length === 0) pages.push([]);
+
       if (!global.playerPages) global.playerPages = {};
-      if (!global.playerPages[userId]) global.playerPages[userId] = 0;
+      // "players" always resets to page 1, "more" advances
+      if (cmd === 'players') global.playerPages[userId] = 0;
       
-      const page = global.playerPages[userId];
+      const page = global.playerPages[userId] || 0;
       const totalPages = pages.length;
       const currentPagePlayers = pages[page] || [];
       const pageNames = currentPagePlayers.map(p => {
@@ -1317,12 +1321,115 @@ console.log = (...args) => {
         return p._status ? `${p._status}${name}` : name;
       }).join(', ');
 
-      const pageLabel = page < Math.ceil(priority.length / perPage) && priority.length > 0
-        ? 'live/active'
-        : 'all players';
-      reply(`@${user} ${total} players [🟢${live.length} live, 💬${chatting.length} chatting] (${page + 1}/${totalPages}, ${pageLabel}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+      reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
       
       global.playerPages[userId] = (page + 1) % totalPages;
+    }
+
+    else if (cmd === 'more') {
+      const lastCmd = global.lastListCmd?.[userId] || 'players';
+      // Re-run the last list command to advance the page
+      if (lastCmd === 'live') {
+        // Trigger live logic
+        const liveData = await apiCall('/api/discord/live-members');
+        const playersData = await apiCall('/api/tag');
+        const players = playersData?.players || [];
+        const playerSet = new Set(players.map(p => (p.twitchUsername || p.username)?.toLowerCase()).filter(Boolean));
+        const liveMembers = (liveData?.liveMembers || []).filter(m => playerSet.has(m.twitchUsername?.toLowerCase()));
+        const liveLogins = new Set(liveMembers.map(m => (m.twitchUsername || '').toLowerCase()));
+        
+        if (liveMembers.length === 0) {
+          reply(`@${user} No players are live right now!`);
+          return;
+        }
+        
+        const now = Date.now();
+        const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+        const channelChatters = {};
+        for (const p of players) {
+          const pName = (p.twitchUsername || p.username || '').toLowerCase();
+          if (liveLogins.has(pName)) continue;
+          const lastChat = p.lastChatAt || 0;
+          const ch = (p.lastSeenChannel || '').toLowerCase();
+          if (!ch || !liveLogins.has(ch) || (now - lastChat) > ACTIVE_THRESHOLD) continue;
+          if (!channelChatters[ch]) channelChatters[ch] = [];
+          channelChatters[ch].push(pName);
+        }
+        
+        const groups = [];
+        let totalChatters = 0;
+        for (const m of liveMembers) {
+          const login = (m.twitchUsername || '').toLowerCase();
+          const chatters = channelChatters[login] || [];
+          totalChatters += chatters.length;
+          const chatterStr = chatters.length > 0 ? ` > 💬${chatters.join(', ')}` : '';
+          groups.push(`🟢${login}${chatterStr}`);
+        }
+        
+        const MAX_LEN = 400;
+        const pages = [[]];
+        let currentLen = 0;
+        for (const group of groups) {
+          const addLen = (pages[pages.length - 1].length > 0 ? 3 : 0) + group.length;
+          if (currentLen + addLen > MAX_LEN && pages[pages.length - 1].length > 0) {
+            pages.push([]);
+            currentLen = 0;
+          }
+          pages[pages.length - 1].push(group);
+          currentLen += (currentLen > 0 ? 3 : 0) + group.length;
+        }
+        if (pages.length === 1 && pages[0].length === 0) pages[0] = [];
+        
+        if (!global.livePages) global.livePages = {};
+        const page = global.livePages[userId] || 0;
+        const totalPages = pages.length;
+        const pageContent = (pages[page] || []).join(' | ');
+        
+        reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+        global.livePages[userId] = (page + 1) % totalPages;
+      } else {
+        // Default: advance players list
+        const data = await apiCall('/api/tag');
+        const players = data?.players || [];
+        const liveNow = await getLiveMembersCached();
+        const liveSet = new Set(liveNow.map(m => (m.twitchUsername || '').toLowerCase()));
+        const now = Date.now();
+        const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+        
+        const live = [];
+        const chatting = [];
+        const offline = [];
+        for (const p of players) {
+          const uname = (p.twitchUsername || p.username || '').toLowerCase();
+          const lastChat = p.lastChatAt || 0;
+          const isLive = liveSet.has(uname);
+          const isChatting = !isLive && lastChat && (now - lastChat < ACTIVE_THRESHOLD);
+          const isSleeping = p.sleepingImmunity || p.offlineImmunity;
+          if (isLive) live.push({ ...p, _status: '🟢' });
+          else if (isChatting) chatting.push({ ...p, _status: '💬' });
+          else offline.push({ ...p, _status: isSleeping ? '😴' : '' });
+        }
+        
+        const all = [...live, ...chatting, ...offline];
+        const perPage = 15;
+        const pages = [];
+        for (let i = 0; i < all.length; i += perPage) {
+          pages.push(all.slice(i, i + perPage));
+        }
+        if (pages.length === 0) pages.push([]);
+        
+        if (!global.playerPages) global.playerPages = {};
+        const page = global.playerPages[userId] || 0;
+        const totalPages = pages.length;
+        const currentPagePlayers = pages[page] || [];
+        const pageNames = currentPagePlayers.map(p => {
+          const name = p.twitchUsername || p.username;
+          return p._status ? `${p._status}${name}` : name;
+        }).join(', ');
+        
+        reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+        global.playerPages[userId] = (page + 1) % totalPages;
+      }
     }
 
     else if (cmd === 'admin' || cmd === 'mod') {
@@ -1334,7 +1441,7 @@ console.log = (...args) => {
       }
       console.log('[Bot] Sending admin command list');
       await reply(
-        `@${user} Mod/Admin: "@spmt newcard" = New bingo card | "@spmt newcard phrase1|phrase2|..." = Custom 25 phrases | "@spmt support" = Help ticket | "@spmt sleep @user" = Set away | "@spmt wake @user" = Clear away | "@spmt mute" = Mute bot | "@spmt unmute" = Unmute`
+        `@${user} Mod/Admin: "@spmt givepass @user" = Give pass | "@spmt newcard" = New bingo card | "@spmt newcard phrase1|phrase2|..." = Custom 25 phrases | "@spmt support" = Help ticket | "@spmt sleep @user" = Set away | "@spmt wake @user" = Clear away | "@spmt mute" = Mute bot | "@spmt unmute" = Unmute`
       );
       console.log('[Bot] Admin command complete');
     }
@@ -1367,29 +1474,69 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'live') {
+      if (!global.lastListCmd) global.lastListCmd = {};
+      global.lastListCmd[userId] = 'live';
       const liveData = await apiCall('/api/discord/live-members');
       const playersData = await apiCall('/api/tag');
-      const playerIds = new Set(playersData?.players?.map(p => (p.twitchUsername || p.username)?.toLowerCase()) || []);
-      const liveMembers = (liveData?.liveMembers || []).filter(m => playerIds.has(m.twitchUsername?.toLowerCase()));
+      const players = playersData?.players || [];
+      const playerSet = new Set(players.map(p => (p.twitchUsername || p.username)?.toLowerCase()).filter(Boolean));
+      const liveMembers = (liveData?.liveMembers || []).filter(m => playerSet.has(m.twitchUsername?.toLowerCase()));
+      const liveLogins = new Set(liveMembers.map(m => (m.twitchUsername || '').toLowerCase()));
       
       if (liveMembers.length === 0) {
-        reply( `@${user} No players are live right now!`);
+        reply(`@${user} No players are live right now!`);
         return;
       }
       
-      const total = liveMembers.length;
-      const perPage = 15;
-      const totalPages = Math.ceil(total / perPage);
+      const now = Date.now();
+      const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+      
+      // Group active chatters by lastSeenChannel
+      const channelChatters = {};
+      for (const p of players) {
+        const pName = (p.twitchUsername || p.username || '').toLowerCase();
+        if (liveLogins.has(pName)) continue; // skip live streamers themselves
+        const lastChat = p.lastChatAt || 0;
+        const ch = (p.lastSeenChannel || '').toLowerCase();
+        if (!ch || !liveLogins.has(ch) || (now - lastChat) > ACTIVE_THRESHOLD) continue;
+        if (!channelChatters[ch]) channelChatters[ch] = [];
+        channelChatters[ch].push(pName);
+      }
+      
+      // Build grouped output: 🟢streamer > 💬chatter1, chatter2
+      const groups = [];
+      let totalChatters = 0;
+      for (const m of liveMembers) {
+        const login = (m.twitchUsername || '').toLowerCase();
+        const chatters = channelChatters[login] || [];
+        totalChatters += chatters.length;
+        const chatterStr = chatters.length > 0 ? ` > 💬${chatters.join(', ')}` : '';
+        groups.push(`🟢${login}${chatterStr}`);
+      }
+      
+      // Fit as many groups as possible per message (Twitch 500 char limit)
+      const MAX_LEN = 400;
+      const pages = [[]];
+      let currentLen = 0;
+      for (const group of groups) {
+        const addLen = (pages[pages.length - 1].length > 0 ? 3 : 0) + group.length; // 3 for ' | '
+        if (currentLen + addLen > MAX_LEN && pages[pages.length - 1].length > 0) {
+          pages.push([]);
+          currentLen = 0;
+        }
+        pages[pages.length - 1].push(group);
+        currentLen += (currentLen > 0 ? 3 : 0) + group.length;
+      }
+      if (pages.length === 1 && pages[0].length === 0) pages[0] = [];
       
       if (!global.livePages) global.livePages = {};
-      if (!global.livePages[userId]) global.livePages[userId] = 0;
+      if (cmd === 'live') global.livePages[userId] = 0;
       
-      const page = global.livePages[userId];
-      const start = page * perPage;
-      const end = Math.min(start + perPage, total);
-      const pageNames = liveMembers.slice(start, end).map(m => m.twitchUsername).join(', ');
+      const page = global.livePages[userId] || 0;
+      const totalPages = pages.length;
+      const pageContent = (pages[page] || []).join(' | ');
       
-      reply( `@${user} Live now (${page + 1}/${totalPages}): ${pageNames}${page + 1 < totalPages ? ' | Type "@spmt more" for next page' : ''}`);
+      reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
       
       global.livePages[userId] = (page + 1) % totalPages;
     }
@@ -1403,7 +1550,7 @@ console.log = (...args) => {
       }
       const sorted = (data?.players || []).sort((a, b) => (b.score || 0) - (a.score || 0));
       const rank = sorted.findIndex(p => p.id === userId) + 1;
-      reply( `@${user} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0}`);
+      reply( `@${user} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.hasPass ? 'Ready' : 'None'}`);
     }
     
     else if (cmd === 'rank') {
@@ -1616,7 +1763,7 @@ console.log = (...args) => {
       if (res?.error) {
         reply(`@${user} ${res.error}`);
       } else {
-        const msg = `🎟️ ${user} used a PASS on @${target} for DOUBLE POINTS! @${target} is now it!`;
+        const msg = `🎟️ ${user} used their PASS to tag @${target} for DOUBLE POINTS! @${target} is now it! Raid, follow, cheer, or sub to earn yours!`;
         await reply(msg);
         if (!isMuted) {
           await broadcastToPlayers(client, msg, channelName);
@@ -1629,6 +1776,36 @@ console.log = (...args) => {
       }
     }
     
+    else if (cmd === 'givepass') {
+      if (!isAdminUser) {
+        reply(`@${user} Only mods/admins can give passes.`);
+        return;
+      }
+      const target = args[1]?.replace('@', '').toLowerCase();
+      if (!target) {
+        reply(`@${user} Usage: "@spmt givepass @username"`);
+        return;
+      }
+      const playersData = await apiCall('/api/tag');
+      const targetPlayer = playersData?.players?.find(p => (p.twitchUsername || p.username)?.toLowerCase() === target);
+      if (!targetPlayer) {
+        reply(`@${user} ${target} is not in the game!`);
+        return;
+      }
+      const res = await apiCall('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: target, reason: `gifted by ${user}` })
+      });
+      if (res?.granted) {
+        reply(`🎟️ @${target} got an SPMT Pass from ${user}! 🎁 Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
+      } else if (res?.reason === 'cooldown') {
+        reply(`@${user} ${target} already earned a pass in the last 24h (${res.hoursLeft}h left).`);
+      } else {
+        reply(`@${user} ${target} already has a pass or isn't in the game.`);
+      }
+    }
+
     else if (cmd === 'help') {
       console.log(`[Bot] Attempting to send help to ${channel}`);
       try {
@@ -1662,6 +1839,11 @@ console.log = (...args) => {
       req.on('end', async () => {
         try {
           const { message, channel } = JSON.parse(body);
+          if (!message) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'message is required' }));
+            return;
+          }
           if (channel) {
             await sendChatWithSharedFallback(client, channel, message, { warnOnFallback: true });
           } else {
