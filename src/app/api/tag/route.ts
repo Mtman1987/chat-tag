@@ -3,13 +3,25 @@ import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@
 
 export const dynamic = 'force-dynamic';
 
+// Type definitions for player objects
+interface TagPlayer {
+  id?: string;
+  twitchUsername?: string;
+  isIt?: boolean;
+  sleepingImmunity?: boolean;
+  offlineImmunity?: boolean;
+  noTagbackFrom?: string | null;
+  timedImmunityUntil?: number | null;
+  [key: string]: any;
+}
+
 // Migrate manual_ players to their real user_ ID when they show up in chat
-function migrateManualPlayer(state: any, realUserId: string, username: string) {
+function migrateManualPlayer(state: any, realUserId: string, username: string): void {
   if (!realUserId?.startsWith('user_') || !username) return;
-  if (state.tagPlayers[realUserId]) return; // already correct
+  if (state.tagPlayers?.[realUserId]) return; // already correct
 
   const manualKey = `manual_${username.toLowerCase()}`;
-  const manualPlayer = state.tagPlayers[manualKey];
+  const manualPlayer = state.tagPlayers?.[manualKey];
   if (!manualPlayer) return;
 
   // Move player data to real ID
@@ -19,17 +31,18 @@ function migrateManualPlayer(state: any, realUserId: string, username: string) {
   delete state.tagPlayers[manualKey];
 
   // Fix currentIt reference
-  if (state.tagGame.state.currentIt === manualKey) {
+  if (state.tagGame?.state?.currentIt === manualKey) {
     state.tagGame.state.currentIt = realUserId;
   }
 
   // Fix noTagbackFrom references
-  for (const p of Object.values(state.tagPlayers) as any[]) {
-    if (p.noTagbackFrom === manualKey) p.noTagbackFrom = realUserId;
+  for (const p of Object.values(state.tagPlayers) as TagPlayer[]) {
+    if (p?.noTagbackFrom === manualKey) p.noTagbackFrom = realUserId;
   }
 }
 
-function isPlayerImmune(player: any, taggerId: string) {
+function isPlayerImmune(player: TagPlayer | undefined, taggerId: string): { immune: boolean; reason?: string } {
+  if (!player) return { immune: true, reason: 'player-not-found' };
   if (player.sleepingImmunity) return { immune: true, reason: 'sleeping' };
   if (player.offlineImmunity) return { immune: true, reason: 'offline' };
   if (player.noTagbackFrom === taggerId) return { immune: true, reason: 'no-tagback' };
@@ -83,11 +96,16 @@ export async function GET() {
         };
       });
 
+    const adminHistory = [...(state.adminHistory || [])]
+      .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
+      .slice(0, 100);
+
     return NextResponse.json({
       players,
       currentIt: state.tagGame.state.currentIt,
       lastTagTime: toMillis(state.tagGame.state.lastTagTime),
       history,
+      adminHistory,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -97,7 +115,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, userId, username, twitchUsername, avatar, targetUserId, streamerId } = body;
+    const { action, userId, username, twitchUsername, avatar, targetUserId, streamerId, performedBy } = body;
 
     if (action === 'chat-activity') {
       await updateAppState((state) => {
@@ -235,7 +253,6 @@ export async function POST(req: NextRequest) {
           isPlayer: true,
         };
 
-        // Also add to botChannels so live status is tracked
         if (normalizedUsername) {
           state.botChannels[normalizedUsername] = {
             ...(state.botChannels[normalizedUsername] || {}),
@@ -244,6 +261,11 @@ export async function POST(req: NextRequest) {
             lastUpdated: new Date().toISOString(),
           };
         }
+
+        state.adminHistory.push({
+          id: makeId('admin'), action: 'join', performedBy: performedBy || normalizedUsername,
+          details: `${normalizedUsername} joined the game`, timestamp: Date.now(),
+        });
 
         return { success: true };
       });
@@ -256,7 +278,13 @@ export async function POST(req: NextRequest) {
 
     if (action === 'leave') {
       await updateAppState((state) => {
+        const player = state.tagPlayers[userId];
+        const playerName = player?.twitchUsername || userId;
         delete state.tagPlayers[userId];
+        state.adminHistory.push({
+          id: makeId('admin'), action: 'leave', performedBy: performedBy || playerName,
+          details: `${playerName} left the game`, timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }
@@ -276,24 +304,30 @@ export async function POST(req: NextRequest) {
         // Migrate manual_ IDs to real user_ IDs if needed
         if (twitchUsername) migrateManualPlayer(state, userId, twitchUsername);
 
-        const tagger = state.tagPlayers[userId];
-        const target = state.tagPlayers[targetUserId];
-        if (!tagger || !target) {
-          // Log available player IDs for debugging
-          const playerIds = Object.keys(state.tagPlayers).join(', ');
-          return { status: 404, error: `Player not found (tagger=${!!tagger} target=${!!target}). Your ID: ${userId}` };
+        const tagger: TagPlayer | undefined = state.tagPlayers?.[userId];
+        const target: TagPlayer | undefined = state.tagPlayers?.[targetUserId];
+        
+        // Enhanced validation with better error messages
+        if (!tagger) {
+          const playerIds = Object.keys(state.tagPlayers || {}).slice(0, 5).join(', ');
+          return { status: 404, error: `Tagger not found. Your ID: ${userId}. (Available: ${playerIds}...)` };
+        }
+        if (!target) {
+          return { status: 404, error: `Target player not found. ID: ${targetUserId}` };
         }
 
-        const players = Object.values(state.tagPlayers) as any[];
-        const anyoneIt = players.some((p) => p.isIt);
-        const whoIsIt = players.find((p) => p.isIt);
+        const playersForItCheck = Object.values(state.tagPlayers || {}) as TagPlayer[];
+        const whoIsIt = playersForItCheck.find((p) => p?.isIt);
+        const anyoneIt = !!whoIsIt;
 
+        // Only check if tagger is "it" if someone is it
         if (anyoneIt && !tagger.isIt) {
-          return { status: 400, error: `You are not it! ${whoIsIt?.twitchUsername || whoIsIt?.id} is it.` };
+          return { status: 400, error: `You are not it! ${whoIsIt?.twitchUsername || whoIsIt?.id || 'Unknown'} is it.` };
         }
 
         const immuneCheck = isPlayerImmune(target, userId);
         if (immuneCheck.immune) {
+          state.tagHistory = state.tagHistory || [];
           state.tagHistory.push({
             id: makeId('hist'),
             taggerId: userId,
@@ -304,6 +338,7 @@ export async function POST(req: NextRequest) {
           });
 
           let errorMsg = 'Target is immune';
+          if (immuneCheck.reason === 'player-not-found') errorMsg = 'Target player not found';
           if (immuneCheck.reason === 'offline') errorMsg = `${target.twitchUsername || 'Target'} is away/offline`;
           if (immuneCheck.reason === 'sleeping') errorMsg = `${target.twitchUsername || 'Target'} is immune (sleeping)`;
           if (immuneCheck.reason === 'no-tagback') errorMsg = `${target.twitchUsername || 'Target'} is immune (no-tagback)`;
@@ -312,7 +347,15 @@ export async function POST(req: NextRequest) {
           return { status: 400, error: errorMsg };
         }
 
-        const doublePoints = !anyoneIt;
+        // Ensure state collections exist
+        state.tagHistory = state.tagHistory || [];
+        state.chatTags = state.chatTags || [];
+
+        // Check if double points (no one currently "it" before this tag)
+        const playersForDoubleCheck = Object.values(state.tagPlayers || {}) as TagPlayer[];
+        const anyoneItNow = playersForDoubleCheck.some((p) => p?.isIt);
+        const doublePoints = !anyoneItNow;
+
         state.tagHistory.push({
           id: makeId('hist'),
           taggerId: userId,
@@ -331,15 +374,20 @@ export async function POST(req: NextRequest) {
           doublePoints,
         });
 
-        state.tagGame.state.currentIt = targetUserId;
-        state.tagGame.state.lastTagTime = Date.now();
+        // Update game state
+        if (state.tagGame?.state) {
+          state.tagGame.state.currentIt = targetUserId;
+          state.tagGame.state.lastTagTime = Date.now();
+        }
 
+        // Update tagger (now no longer "it")
         tagger.score = (tagger.score || 0) + (doublePoints ? 200 : 100);
         tagger.tags = (tagger.tags || 0) + 1;
         tagger.isIt = false;
         tagger.timedImmunityUntil = Date.now() + 20 * 60 * 1000;
         tagger.lastTaggedInStreamId = null;
 
+        // Update target (now "it")
         target.score = (target.score || 0) - 50;
         target.tagged = (target.tagged || 0) + 1;
         target.isIt = true;
@@ -358,56 +406,109 @@ export async function POST(req: NextRequest) {
 
     if (action === 'sleep') {
       await updateAppState((state) => {
-        if (state.tagPlayers[userId]) state.tagPlayers[userId].sleepingImmunity = true;
+        const player = state.tagPlayers?.[userId];
+        if (!player) return { error: 'Player not found' };
+        
+        player.sleepingImmunity = true;
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'sleep',
+          performedBy: performedBy || 'unknown',
+          targetUser: player.twitchUsername || userId,
+          timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }
 
     if (action === 'wake') {
       await updateAppState((state) => {
-        if (state.tagPlayers[userId]) state.tagPlayers[userId].sleepingImmunity = false;
+        const player = state.tagPlayers?.[userId];
+        if (!player) return { error: 'Player not found' };
+        
+        player.sleepingImmunity = false;
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'wake',
+          performedBy: performedBy || 'unknown',
+          targetUser: player.twitchUsername || userId,
+          timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }
 
     if (action === 'clear-away') {
       await updateAppState((state) => {
-        const player = state.tagPlayers[userId];
-        if (!player) return;
+        const player = state.tagPlayers?.[userId];
+        if (!player) return { error: 'Player not found' };
+        
         player.offlineImmunity = false;
         player.sleepingImmunity = false;
         player.timedImmunityUntil = null;
         player.noTagbackFrom = null;
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'clear-away',
+          performedBy: performedBy || 'unknown',
+          targetUser: player.twitchUsername || userId,
+          timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }
 
     if (action === 'clear-all-away') {
       await updateAppState((state) => {
-        for (const player of Object.values(state.tagPlayers) as any[]) {
-          player.offlineImmunity = false;
-          player.sleepingImmunity = false;
-          player.timedImmunityUntil = null;
-          player.noTagbackFrom = null;
+        let count = 0;
+        state.adminHistory = state.adminHistory || [];
+        const players = Object.values(state.tagPlayers || {}) as TagPlayer[];
+        
+        for (const player of players) {
+          if (player?.offlineImmunity || player?.sleepingImmunity || player?.timedImmunityUntil || player?.noTagbackFrom) {
+            count++;
+          }
+          if (player) {
+            player.offlineImmunity = false;
+            player.sleepingImmunity = false;
+            player.timedImmunityUntil = null;
+            player.noTagbackFrom = null;
+          }
         }
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'clear-all-away',
+          performedBy: performedBy || 'unknown',
+          details: `Cleared immunity for ${count} players`,
+          timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }
 
     if (action === 'auto-rotate') {
       await updateAppState((state) => {
-        const currentIt = Object.values(state.tagPlayers).find((p: any) => p.isIt) as any;
+        const players = Object.values(state.tagPlayers || {}) as TagPlayer[];
+        const currentIt = players.find((p) => p?.isIt);
+        
         if (currentIt) {
           currentIt.isIt = false;
-          // Only set offline immunity if they weren't recently active
           const lastChat = currentIt.lastChatAt || 0;
           const recentlyActive = Date.now() - lastChat < 40 * 60 * 1000;
           if (!recentlyActive) {
             currentIt.offlineImmunity = true;
           }
         }
-        state.tagGame.state.currentIt = null;
-        state.tagGame.state.lastTagTime = Date.now();
+        
+        if (state.tagGame?.state) {
+          state.tagGame.state.currentIt = null;
+          state.tagGame.state.lastTagTime = Date.now();
+        }
+        
+        state.chatTags = state.chatTags || [];
         state.chatTags.push({
           id: makeId('tag'),
           taggerId: 'system',
@@ -416,27 +517,51 @@ export async function POST(req: NextRequest) {
           timestamp: Date.now(),
           doublePoints: true,
         });
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'auto-rotate',
+          performedBy: performedBy || 'system',
+          details: currentIt ? `Rotated from ${currentIt.twitchUsername || 'unknown'}` : 'Free for all',
+          timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }
 
     if (action === 'set-it') {
       await updateAppState((state) => {
-        for (const p of Object.values(state.tagPlayers) as any[]) {
-          p.isIt = false;
+        const players = Object.values(state.tagPlayers || {}) as TagPlayer[];
+        
+        // Clear "it" from all players
+        for (const p of players) {
+          if (p) p.isIt = false;
         }
 
-        const target = state.tagPlayers[userId];
-        if (target) {
-          target.isIt = true;
-          target.sleepingImmunity = false;
-          target.offlineImmunity = false;
-          target.noTagbackFrom = null;
-          target.timedImmunityUntil = null;
+        const target = state.tagPlayers?.[userId];
+        if (!target) {
+          return { error: 'Target player not found' };
+        }
+        
+        target.isIt = true;
+        target.sleepingImmunity = false;
+        target.offlineImmunity = false;
+        target.noTagbackFrom = null;
+        target.timedImmunityUntil = null;
+
+        if (state.tagGame?.state) {
+          state.tagGame.state.currentIt = userId;
+          state.tagGame.state.lastTagTime = Date.now();
         }
 
-        state.tagGame.state.currentIt = userId;
-        state.tagGame.state.lastTagTime = Date.now();
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'set-it',
+          performedBy: performedBy || 'unknown',
+          targetUser: target?.twitchUsername || userId,
+          timestamp: Date.now(),
+        });
       });
       return NextResponse.json({ success: true });
     }

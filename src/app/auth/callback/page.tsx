@@ -35,6 +35,10 @@ function AuthCallbackContent() {
     if (token && auth && firebaseApp && twitchUsername) {
       signInWithCustomToken(auth, token)
         .then(() => {
+          // Persist Twitch profile to localStorage for header display
+          const avatarUrl = searchParams.get('avatarUrl');
+          localStorage.setItem('twitchUsername', twitchUsername);
+          if (avatarUrl) localStorage.setItem('twitchAvatar', avatarUrl);
           toast({
             title: 'Login Successful!',
             description: `Welcome, ${twitchUsername}!`,

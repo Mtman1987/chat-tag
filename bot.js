@@ -36,9 +36,37 @@ async function refreshToken(refreshToken, clientId, clientSecret) {
 }
 
 async function updateEnvToken(key, value) {
-  // Update in-memory so subsequent getValidToken() calls see the new value
+  // Critical Fix: Both update in-memory AND persist to .env file
   process.env[key] = value;
-  console.log(`[Bot] Token refresh: ${key} updated in memory`);
+  
+  // Try to persist to .env file if it exists
+  try {
+    const envPath = path.join(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      // Read current .env content
+      let envContent = fs.readFileSync(envPath, 'utf8');
+      
+      // Replace the key=value line or add new line if not exists
+      const keyPattern = new RegExp(`^${key}=.*$`, 'm');
+      if (keyPattern.test(envContent)) {
+        envContent = envContent.replace(keyPattern, `${key}=${value}`);
+      } else {
+        envContent += `\n${key}=${value}`;
+      }
+      
+      // Write back to file (with atomic write for safety)
+      const tempPath = envPath + '.tmp';
+      fs.writeFileSync(tempPath, envContent, 'utf8');
+      fs.renameSync(tempPath, envPath);
+      
+      console.log(`[Bot] Token refresh: ${key} persisted to .env file and updated in memory`);
+    } else {
+      console.warn(`[Bot] .env file not found at ${envPath} - token updated in memory only (will be lost on restart)`);
+    }
+  } catch (error) {
+    console.error(`[Bot] Failed to persist token to .env:`, error.message);
+    console.warn(`[Bot] Token updated in memory only - bot will lose token on restart!`);
+  }
 }
 
 async function getValidToken() {

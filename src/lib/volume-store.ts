@@ -8,6 +8,7 @@ export type AppState = {
   supportTickets?: Record<string, JsonObject>;
   tagPlayers: Record<string, JsonObject>;
   tagHistory: JsonObject[];
+  adminHistory: JsonObject[];
   tagGame: {
     state: JsonObject;
   };
@@ -42,6 +43,7 @@ const DEFAULT_STATE: AppState = {
   supportTickets: {},
   tagPlayers: {},
   tagHistory: [],
+  adminHistory: [],
   tagGame: { state: { currentIt: null, lastTagTime: null } },
   bingoCards: {},
   bingoEvents: [],

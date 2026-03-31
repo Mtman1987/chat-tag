@@ -44,6 +44,19 @@ export async function POST(req: NextRequest) {
     const { action, squareIndex, userId, username, avatar, streamerChannel, phrases } = await req.json();
 
     if (action === 'claim') {
+      // CRITICAL FIX: Validate squareIndex before processing
+      if (!Number.isInteger(squareIndex) || squareIndex < 0 || squareIndex > 24) {
+        return NextResponse.json(
+          { error: `Invalid square index: ${squareIndex}. Must be between 0 and 24.` },
+          { status: 400 }
+        );
+      }
+
+      // Validate other required fields
+      if (!userId && !username) {
+        return NextResponse.json({ error: 'userId or username is required' }, { status: 400 });
+      }
+
       const result = await updateAppState((state) => {
         const card = state.bingoCards.current_user || { phrases: [], covered: {} };
 
@@ -52,16 +65,17 @@ export async function POST(req: NextRequest) {
         }
 
         const covered = { ...(card.covered || {}) };
-        covered[squareIndex] = { userId, username, avatar, streamerChannel };
+        covered[squareIndex] = { userId: userId || username, username: username || userId, avatar, streamerChannel };
         state.bingoCards.current_user = { ...card, covered, updatedAt: new Date().toISOString() };
 
-        const hasBingo = checkBingo(covered, username);
+        const hasBingo = checkBingo(covered, username || userId);
         if (hasBingo) {
-          const player = state.tagPlayers[username] || state.tagPlayers[userId];
+          const player = state.tagPlayers?.[username || userId];
           if (player) {
             player.score = (player.score || 0) + 100;
             player.bingoWins = (player.bingoWins || 0) + 1;
           }
+          state.bingoEvents = state.bingoEvents || [];
           state.bingoEvents.push({
             id: makeId('bingo'),
             userId: userId || username,
