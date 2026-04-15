@@ -1,18 +1,14 @@
-'use server';
 import { NextRequest, NextResponse } from 'next/server';
-import { readAppState } from '@/lib/volume-store';
 
 export async function GET(req: NextRequest) {
   try {
-    const state = await readAppState();
-    const settings = state.gameSettings.default || {};
-
-    if (!settings.twitchClientId) {
-      throw new Error('Twitch Client ID is not configured in settings.');
+    const twitchClientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID || process.env.TWITCH_CLIENT_ID;
+    if (!twitchClientId) {
+      throw new Error('Twitch Client ID is not configured.');
     }
 
-    const twitchClientId = settings.twitchClientId;
-    const redirectUri = `${new URL(req.url).origin}/api/auth/twitch/callback`;
+    // Always use the specific Chat Tag redirect URI
+    const redirectUri = 'https://chat-tag-new.fly.dev/api/auth/twitch/callback';
 
     const authUrl = new URL('https://id.twitch.tv/oauth2/authorize');
     authUrl.searchParams.set('client_id', twitchClientId);

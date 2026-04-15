@@ -6,35 +6,10 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { ActivityFeed } from "./activity-feed";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
-import { useUser } from "@/firebase";
-import { getAuth, signOut } from "firebase/auth";
-import { useState, useEffect } from "react";
+import { useSession } from "@/contexts/session-context";
 
 export function Header() {
-  const { user, isUserLoading } = useUser();
-  const [twitchUsername, setTwitchUsername] = useState<string | null>(null);
-  const [twitchAvatar, setTwitchAvatar] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user && !user.isAnonymous) {
-      setTwitchUsername(localStorage.getItem('twitchUsername'));
-      setTwitchAvatar(localStorage.getItem('twitchAvatar'));
-    } else {
-      setTwitchUsername(null);
-      setTwitchAvatar(null);
-    }
-  }, [user]);
-
-  const handleLogout = async () => {
-    const auth = getAuth();
-    await signOut(auth);
-    localStorage.removeItem('twitchUsername');
-    localStorage.removeItem('twitchAvatar');
-    setTwitchUsername(null);
-    setTwitchAvatar(null);
-  };
-
-  const isLoggedIn = user && !user.isAnonymous && twitchUsername;
+  const { user, isUserLoading, logout } = useSession();
 
   return (
     <header className="px-4 lg:px-6 h-16 flex items-center justify-between border-b border-border/50 bg-card/50 backdrop-blur-sm">
@@ -49,14 +24,14 @@ export function Header() {
         <ActivityFeed />
 
         {!isUserLoading && (
-          isLoggedIn ? (
+          user ? (
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={twitchAvatar || undefined} alt={twitchUsername} />
-                <AvatarFallback>{twitchUsername?.charAt(0)?.toUpperCase()}</AvatarFallback>
+                <AvatarImage src={user.avatarUrl || undefined} alt={user.twitchUsername} />
+                <AvatarFallback>{user.twitchUsername?.charAt(0)?.toUpperCase()}</AvatarFallback>
               </Avatar>
-              <span className="text-sm font-medium hidden sm:inline">{twitchUsername}</span>
-              <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+              <span className="text-sm font-medium hidden sm:inline">{user.twitchUsername}</span>
+              <Button variant="ghost" size="icon" onClick={logout} title="Logout">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>

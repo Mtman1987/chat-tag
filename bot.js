@@ -1,6 +1,7 @@
 const tmi = require('tmi.js');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
 
 // Load environment variables
 const env = process.env;
@@ -12,6 +13,13 @@ const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
 const FFA_REANNOUNCE_MINUTES = 60;
 let lastFfaAnnouncedAt = 0;
+
+// ── EventSub state ──
+let eventSubSocket = null;
+let eventSubSessionId = null;
+let eventSubReconnectTimer = null;
+const eventSubSubscriptions = new Set(); // track active sub types per broadcaster
+const broadcasterIdCache = new Map(); // login -> { id, login }
 
 function getTwitchClientId() {
   return env.NEXT_PUBLIC_TWITCH_CLIENT_ID || env.TWITCH_CLIENT_ID || env.TWITCH_DEV_CLIENT_ID;
@@ -117,6 +125,35 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function dedupeSharedChatChannels(members) {
+  const groups = new Map();
+  for (const member of members) {
+    const login = (member.twitchUsername || '').toLowerCase();
+    if (!login) continue;
+    const key = member.sharedSessionId ? `session:${member.sharedSessionId}` : `solo:${login}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(member);
+  }
+  const channels = [];
+  for (const members of groups.values()) {
+    if (members.length === 1 && !members[0].sharedSessionId) {
+      channels.push((members[0].twitchUsername || '').toLowerCase());
+      continue;
+    }
+    const host = members.find((m) => m.isSharedHost);
+    if (host?.twitchUsername) {
+      channels.push(host.twitchUsername.toLowerCase());
+    } else {
+      const fallback = members
+        .map((m) => (m.twitchUsername || '').toLowerCase())
+        .filter(Boolean)
+        .sort()[0];
+      if (fallback) channels.push(fallback);
+    }
+  }
+  return channels;
+}
+
 function errorMessage(err) {
   if (!err) return 'unknown';
   if (typeof err === 'string') return err;
@@ -188,6 +225,7 @@ async function getAppAccessToken() {
 
 let appToken = null;
 const roomIdToLoginCache = new Map();
+const broadcasterTokenCache = { token: null, expiresAt: 0 };
 const SOURCE_ONLY_WARNING_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const sourceOnlyWarnedAt = new Map();
 let liveMembersCache = {
@@ -198,11 +236,16 @@ let liveMembersCache = {
 
 async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, attempt = 0) {
   console.log(`[Bot] sendMessageViaAPI called: channel=${targetChannel}, forSourceOnly=${forSourceOnly}`);
-  if (!appToken) appToken = await getAppAccessToken();
-  
   const clientId = getTwitchClientId();
+  // Use the bot's user token — Helix POST /chat/messages requires user access token
+  const botToken = env.TWITCH_BOT_TOKEN;
+  if (!botToken) {
+    console.log('[Bot] No bot token available for API send');
+    return { success: false, reason: 'no-token' };
+  }
   
   // Get broadcaster ID from username
+  if (!appToken) appToken = await getAppAccessToken();
   const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${targetChannel}`, {
     headers: {
       'Client-ID': clientId,
@@ -233,12 +276,12 @@ async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, 
   }
   
   console.log(`[Bot] Sending message to broadcaster ${broadcasterId} from ${senderId}`);
-  // Send message
+  // Send message using bot's user token
   const res = await fetch('https://api.twitch.tv/helix/chat/messages', {
     method: 'POST',
     headers: {
       'Client-ID': clientId,
-      'Authorization': `Bearer ${appToken}`,
+      'Authorization': `Bearer ${botToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -268,8 +311,12 @@ async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, 
     }
 
     if (attempt < 1) {
-      console.log('[Bot] Token may be expired, refreshing and retrying once...');
-      appToken = await getAppAccessToken();
+      console.log('[Bot] Bot token may be expired, refreshing and retrying once...');
+      try {
+        await getValidToken();
+      } catch (e) {
+        console.error('[Bot] Token refresh failed:', e.message);
+      }
       return sendMessageViaAPI(targetChannel, message, forSourceOnly, attempt + 1);
     }
   }
@@ -386,32 +433,7 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
       return login && login !== excludeLower && playerSet.has(login) && !blacklistedChannels.has(login);
     });
 
-    const groups = new Map();
-    for (const member of eligibleLive) {
-      const login = (member.twitchUsername || '').toLowerCase();
-      if (!login) continue;
-      const key = member.sharedSessionId ? `session:${member.sharedSessionId}` : `solo:${login}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(member);
-    }
-
-    const channels = [];
-    for (const members of groups.values()) {
-      if (members.length === 1 && !members[0].sharedSessionId) {
-        channels.push((members[0].twitchUsername || '').toLowerCase());
-        continue;
-      }
-      const host = members.find((m) => m.isSharedHost);
-      if (host?.twitchUsername) {
-        channels.push(host.twitchUsername.toLowerCase());
-      } else {
-        const fallback = members
-          .map((m) => (m.twitchUsername || '').toLowerCase())
-          .filter(Boolean)
-          .sort()[0];
-        if (fallback) channels.push(fallback);
-      }
-    }
+    const channels = dedupeSharedChatChannels(eligibleLive);
     
     console.log(`[Bot] Broadcasting to ${channels.length} live players`);
     
@@ -432,7 +454,7 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
 const username = env.TWITCH_BOT_USERNAME;
 const recentMessages = new Set();
 const BOT_TEST_CHANNEL = (env.BOT_TEST_CHANNEL || '').toLowerCase().replace(/^#/, '');
-const ALWAYS_JOINED_CHANNELS = ['mtman1987']; // Always stay in these channels
+const ALWAYS_JOINED_CHANNELS = []; // Empty — bot only joins live channels
 let isIrcConnected = false;
 let lastPeriodicSuccessAt = Date.now();
 const logBuffer = [];
@@ -540,16 +562,6 @@ console.log = (...args) => {
         console.error(`[Bot] Failed joining test channel #${BOT_TEST_CHANNEL}:`, e.message);
       }
     }
-
-    // Always join mtman1987's channel for testing
-    for (const ch of ALWAYS_JOINED_CHANNELS) {
-      try {
-        await client.join(`#${ch}`);
-        console.log(`[Bot] Joined #${ch} (always-on channel)`);
-      } catch (e) {
-        console.error(`[Bot] Failed joining always-on channel #${ch}:`, e.message);
-      }
-    }
     
     // Auto-join only live channels with retry
     let channels = null;
@@ -568,34 +580,9 @@ console.log = (...args) => {
       const liveMembers = (liveData?.liveMembers || []).filter((m) =>
         allChannelNames.includes((m.twitchUsername || '').toLowerCase())
       );
-      // Add always-joined channels to live list for testing
       const alwaysJoinedMembers = ALWAYS_JOINED_CHANNELS.map(ch => ({ twitchUsername: ch }));
       const allLiveMembers = [...liveMembers, ...alwaysJoinedMembers];
-      const groups = new Map();
-      for (const member of allLiveMembers) {
-        const login = (member.twitchUsername || '').toLowerCase();
-        if (!login) continue;
-        const key = member.sharedSessionId ? `session:${member.sharedSessionId}` : `solo:${login}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(member);
-      }
-      const allLiveChannels = [];
-      for (const members of groups.values()) {
-        if (members.length === 1 && !members[0].sharedSessionId) {
-          allLiveChannels.push((members[0].twitchUsername || '').toLowerCase());
-          continue;
-        }
-        const host = members.find((m) => m.isSharedHost);
-        if (host?.twitchUsername) {
-          allLiveChannels.push(host.twitchUsername.toLowerCase());
-        } else {
-          const fallback = members
-            .map((m) => (m.twitchUsername || '').toLowerCase())
-            .filter(Boolean)
-            .sort()[0];
-          if (fallback) allLiveChannels.push(fallback);
-        }
-      }
+      const allLiveChannels = dedupeSharedChatChannels(allLiveMembers);
       
       console.log(`[Bot] Found ${allLiveChannels.length} live channels out of ${allChannelNames.length} total`);
       
@@ -766,31 +753,7 @@ console.log = (...args) => {
         // Add always-joined channels to live list
         const alwaysJoinedMembers = ALWAYS_JOINED_CHANNELS.map(ch => ({ twitchUsername: ch }));
         const allLiveMembers = [...liveMembers, ...alwaysJoinedMembers];
-        const groups = new Map();
-        for (const member of allLiveMembers) {
-          const login = (member.twitchUsername || '').toLowerCase();
-          if (!login) continue;
-          const key = member.sharedSessionId ? `session:${member.sharedSessionId}` : `solo:${login}`;
-          if (!groups.has(key)) groups.set(key, []);
-          groups.get(key).push(member);
-        }
-        const currentlyLive = [];
-        for (const members of groups.values()) {
-          if (members.length === 1 && !members[0].sharedSessionId) {
-            currentlyLive.push((members[0].twitchUsername || '').toLowerCase());
-            continue;
-          }
-          const host = members.find((m) => m.isSharedHost);
-          if (host?.twitchUsername) {
-            currentlyLive.push(host.twitchUsername.toLowerCase());
-          } else {
-            const fallback = members
-              .map((m) => (m.twitchUsername || '').toLowerCase())
-              .filter(Boolean)
-              .sort()[0];
-            if (fallback) currentlyLive.push(fallback);
-          }
-        }
+        const currentlyLive = dedupeSharedChatChannels(allLiveMembers);
 
         console.log(`[Bot] Periodic check: ${currentlyLive.length} live channels`);
 
@@ -804,6 +767,11 @@ console.log = (...args) => {
             await client.join(`#${ch}`);
             console.log(`[Bot] Joined new live channel: ${ch}`);
             await maybeAnnounceDailyActivation(client, ch);
+            // Subscribe EventSub for new channel
+            if (eventSubSessionId) {
+              const broadcaster = await lookupBroadcasterId(ch);
+              if (broadcaster) await subscribeToChannelEvents(broadcaster.id);
+            }
             await sleep(1200 + Math.random() * 500);
           } catch (e) {
             console.error(`[Bot] Failed joining ${ch}: ${errorMessage(e)}`);
@@ -857,7 +825,7 @@ console.log = (...args) => {
     }
   }, 60000);
 
-  // --- Gifted sub / bits / hype train pass tracking ---
+  // ── Pass granting + announcement helper ──
   async function announceGrantedPass(channel, login, reason) {
     const targetChannel = String(channel || '').replace(/^#/, '').toLowerCase();
     if (!targetChannel || !login) return;
@@ -867,62 +835,282 @@ console.log = (...args) => {
     await sendChatWithSharedFallback(client, targetChannel, message, { warnOnFallback: true });
   }
 
+  async function grantPassForEvent(channel, userId, login, reason) {
+    console.log(`[Event] 🎫 Grant pass: ${login} (${userId}) — ${reason}`);
+    const result = await apiCall('/api/tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'grant-pass', userId, twitchUsername: login, reason })
+    }).catch(() => null);
+    if (result?.granted) {
+      console.log(`[Event] ✅ Pass granted to ${login}`);
+      await announceGrantedPass(channel, login, reason);
+    } else {
+      console.log(`[Event] ⏭️ Pass not granted to ${login}: ${result?.reason || 'already has one / not a player'}`);
+    }
+    // Log to mod-log
+    await apiCall('/api/tag/mod-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor: 'system', action: 'grant-pass', target: login, detail: reason, channel })
+    }).catch(() => {});
+    return result;
+  }
+
+  // ── TMI.js fallback event handlers (kept as backup, EventSub is primary) ──
   client.on('submysterygift', async (channel, username, numbOfSubs, methods, userstate) => {
     const login = (userstate['login'] || username || '').toLowerCase();
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
-    console.log(`[Bot] Gift sub detected: ${login} gifted ${numbOfSubs} subs`);
-    const result = await apiCall('/api/tag', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: `gifted ${numbOfSubs} subs` })
-    }).catch(() => null);
-    if (result?.granted) {
-      await announceGrantedPass(channel, login, `gifting ${numbOfSubs} subs`);
-    }
+    console.log(`[TMI-Event] Gift sub: ${login} gifted ${numbOfSubs} subs`);
+    await grantPassForEvent(channel, uid, login, `gifted ${numbOfSubs} subs (tmi)`);
+  });
+
+  client.on('subscription', async (channel, username, method, message, userstate) => {
+    const login = (userstate['login'] || username || '').toLowerCase();
+    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
+    if (!login || !uid) return;
+    console.log(`[TMI-Event] Subscription: ${login}`);
+    await grantPassForEvent(channel, uid, login, `subscribed (tmi)`);
+  });
+
+  client.on('resub', async (channel, username, months, message, userstate, methods) => {
+    const login = (userstate['login'] || username || '').toLowerCase();
+    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
+    if (!login || !uid) return;
+    console.log(`[TMI-Event] Resub: ${login} (${months} months)`);
+    await grantPassForEvent(channel, uid, login, `resubscribed ${months}mo (tmi)`);
   });
 
   client.on('cheer', async (channel, userstate, message) => {
     const bits = parseInt(userstate.bits || '0');
-    if (bits < 100) return; // minimum 100 bits for a pass
     const login = (userstate['username'] || '').toLowerCase();
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
-    console.log(`[Bot] Cheer detected: ${login} cheered ${bits} bits`);
-    const result = await apiCall('/api/tag', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: `cheered ${bits} bits` })
-    }).catch(() => null);
-    if (result?.granted) {
-      await announceGrantedPass(channel, login, `cheering ${bits} bits`);
-    }
+    console.log(`[TMI-Event] Cheer: ${login} cheered ${bits} bits`);
+    if (bits < 100) return;
+    await grantPassForEvent(channel, uid, login, `cheered ${bits} bits (tmi)`);
   });
 
-  // Raw message handler for hype train events (TMI doesn't have a dedicated event)
-  client.on('raw_message', async (messageCloned, message) => {
-    try {
-      const raw = message?.raw || '';
-      if (!raw.includes('msg-id=hype-train')) return;
-      // Hype train participation — extract user from tags if possible
-      const userIdMatch = raw.match(/user-id=(\d+)/);
-      const loginMatch = raw.match(/login=([\w]+)/);
-      if (userIdMatch && loginMatch) {
-        const uid = `user_${userIdMatch[1]}`;
-        const login = loginMatch[1].toLowerCase();
-        console.log(`[Bot] Hype train participation: ${login}`);
-        const result = await apiCall('/api/tag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'grant-pass', userId: uid, twitchUsername: login, reason: 'hype train' })
-        }).catch(() => null);
-        const rawChannel = message?.params?.[0] || message?.channel || '';
-        if (result?.granted && rawChannel) {
-          await announceGrantedPass(rawChannel, login, 'joining the hype train');
-        }
-      }
-    } catch {}
+  client.on('raided', async (channel, username, viewers) => {
+    const login = (username || '').toLowerCase();
+    console.log(`[TMI-Event] Raid: ${login} raided with ${viewers} viewers`);
+    // We don't have user-id from raided event, look it up
+    const twitchUser = await helixGetUser(login);
+    if (!twitchUser) return;
+    const uid = `user_${twitchUser.id}`;
+    await grantPassForEvent(channel, uid, login, `raided with ${viewers} viewers (tmi)`);
   });
+
+  // ── EventSub WebSocket (primary event source) ──
+  async function getEventSubToken() {
+    // Use the bot's USER token — EventSub channel events require user auth, not app auth
+    // The bot token is already validated/refreshed by getValidToken()
+    return env.TWITCH_BOT_TOKEN;
+  }
+
+  async function lookupBroadcasterId(login) {
+    if (broadcasterIdCache.has(login)) return broadcasterIdCache.get(login);
+    const user = await helixGetUser(login);
+    if (!user) return null;
+    const entry = { id: user.id, login: user.login };
+    broadcasterIdCache.set(login, entry);
+    return entry;
+  }
+
+  async function subscribeEventSub(type, version, condition) {
+    const token = await getEventSubToken();
+    const clientId = getTwitchClientId();
+    const key = `${type}:${JSON.stringify(condition)}`;
+    if (eventSubSubscriptions.has(key)) return;
+
+    const res = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type,
+        version,
+        condition,
+        transport: { method: 'websocket', session_id: eventSubSessionId },
+      }),
+    });
+
+    if (res.ok) {
+      eventSubSubscriptions.add(key);
+      console.log(`[EventSub] ✅ Subscribed: ${type} for ${JSON.stringify(condition)}`);
+    } else {
+      const text = await res.text();
+      // 409 = already exists, that's fine
+      if (res.status === 409) {
+        eventSubSubscriptions.add(key);
+      } else {
+        console.error(`[EventSub] ❌ Subscribe failed ${type}: ${res.status} ${text}`);
+      }
+    }
+  }
+
+  async function subscribeToChannelEvents(broadcasterId) {
+    const cond = { broadcaster_user_id: broadcasterId };
+    await subscribeEventSub('channel.follow', '2', { ...cond, moderator_user_id: broadcasterId });
+    await subscribeEventSub('channel.subscribe', '1', cond);
+    await subscribeEventSub('channel.subscription.gift', '1', cond);
+    await subscribeEventSub('channel.subscription.message', '1', cond);
+    await subscribeEventSub('channel.cheer', '1', cond);
+    await subscribeEventSub('channel.raid', '1', { to_broadcaster_user_id: broadcasterId });
+  }
+
+  function handleEventSubNotification(payload) {
+    const type = payload?.subscription?.type;
+    const event = payload?.event;
+    if (!type || !event) return;
+
+    const login = (event.user_login || event.user_name || '').toLowerCase();
+    const userId = event.user_id ? `user_${event.user_id}` : null;
+    const broadcasterLogin = (event.broadcaster_user_login || '').toLowerCase();
+
+    switch (type) {
+      case 'channel.follow': {
+        console.log(`[EventSub] 🆕 Follow: ${login} followed ${broadcasterLogin}`);
+        if (userId && login) {
+          grantPassForEvent(broadcasterLogin, userId, login, `followed ${broadcasterLogin}`);
+        }
+        break;
+      }
+      case 'channel.subscribe': {
+        if (event.is_gift) break; // gift subs handled by subscription.gift
+        console.log(`[EventSub] ⭐ Subscribe: ${login} subscribed to ${broadcasterLogin} (tier ${event.tier})`);
+        if (userId && login) {
+          grantPassForEvent(broadcasterLogin, userId, login, `subscribed tier ${event.tier}`);
+        }
+        break;
+      }
+      case 'channel.subscription.gift': {
+        const total = event.total || 1;
+        console.log(`[EventSub] 🎁 Gift subs: ${login} gifted ${total} subs in ${broadcasterLogin}`);
+        if (userId && login) {
+          grantPassForEvent(broadcasterLogin, userId, login, `gifted ${total} subs`);
+        }
+        break;
+      }
+      case 'channel.subscription.message': {
+        const months = event.cumulative_months || event.duration_months || 1;
+        console.log(`[EventSub] 🔄 Resub: ${login} resubbed ${months}mo in ${broadcasterLogin}`);
+        if (userId && login) {
+          grantPassForEvent(broadcasterLogin, userId, login, `resubscribed ${months}mo`);
+        }
+        break;
+      }
+      case 'channel.cheer': {
+        const bits = event.bits || 0;
+        console.log(`[EventSub] 💎 Cheer: ${login} cheered ${bits} bits in ${broadcasterLogin}`);
+        if (bits >= 100 && userId && login) {
+          grantPassForEvent(broadcasterLogin, userId, login, `cheered ${bits} bits`);
+        }
+        break;
+      }
+      case 'channel.raid': {
+        const raiderLogin = (event.from_broadcaster_user_login || '').toLowerCase();
+        const raiderId = event.from_broadcaster_user_id ? `user_${event.from_broadcaster_user_id}` : null;
+        const viewers = event.viewers || 0;
+        const targetLogin = (event.to_broadcaster_user_login || '').toLowerCase();
+        console.log(`[EventSub] 🚀 Raid: ${raiderLogin} raided ${targetLogin} with ${viewers} viewers`);
+        if (raiderId && raiderLogin) {
+          grantPassForEvent(targetLogin, raiderId, raiderLogin, `raided with ${viewers} viewers`);
+        }
+        break;
+      }
+      default:
+        console.log(`[EventSub] Unhandled type: ${type}`);
+    }
+  }
+
+  function connectEventSub(url = 'wss://eventsub.wss.twitch.tv/ws') {
+    if (eventSubSocket) {
+      try { eventSubSocket.close(); } catch {}
+      eventSubSocket = null;
+    }
+    eventSubSubscriptions.clear();
+
+    console.log(`[EventSub] Connecting to ${url}...`);
+    eventSubSocket = new WebSocket(url);
+
+    eventSubSocket.on('open', () => {
+      console.log('[EventSub] Socket open, waiting for session_welcome...');
+    });
+
+    eventSubSocket.on('close', (code, reason) => {
+      console.warn(`[EventSub] Socket closed: ${code} ${reason?.toString?.() || ''}`);
+      scheduleEventSubReconnect();
+    });
+
+    eventSubSocket.on('error', (err) => {
+      console.error('[EventSub] Socket error:', err.message);
+    });
+
+    eventSubSocket.on('message', async (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        const messageType = msg?.metadata?.message_type;
+
+        if (messageType === 'session_welcome') {
+          eventSubSessionId = msg?.payload?.session?.id;
+          console.log(`[EventSub] ✅ Session established: ${eventSubSessionId}`);
+          // Subscribe to events for all currently joined channels
+          await subscribeEventSubForJoinedChannels();
+          return;
+        }
+
+        if (messageType === 'session_reconnect') {
+          const reconnectUrl = msg?.payload?.session?.reconnect_url;
+          if (reconnectUrl) {
+            console.log('[EventSub] Reconnect requested, connecting to new URL...');
+            connectEventSub(reconnectUrl);
+          }
+          return;
+        }
+
+        if (messageType === 'session_keepalive') return; // silent
+
+        if (messageType === 'notification') {
+          handleEventSubNotification(msg.payload);
+          return;
+        }
+      } catch (err) {
+        console.error('[EventSub] Message parse error:', err.message);
+      }
+    });
+  }
+
+  function scheduleEventSubReconnect(delayMs = 5000) {
+    if (eventSubReconnectTimer) return;
+    console.log(`[EventSub] Reconnecting in ${delayMs}ms...`);
+    eventSubReconnectTimer = setTimeout(() => {
+      eventSubReconnectTimer = null;
+      connectEventSub();
+    }, delayMs);
+  }
+
+  async function subscribeEventSubForJoinedChannels() {
+    if (!eventSubSessionId) return;
+    const channels = client.getChannels().map(ch => ch.replace('#', '').toLowerCase());
+    console.log(`[EventSub] Subscribing to events for ${channels.length} channels...`);
+    for (const ch of channels) {
+      const broadcaster = await lookupBroadcasterId(ch);
+      if (!broadcaster) continue;
+      await subscribeToChannelEvents(broadcaster.id);
+      await sleep(200); // rate limit
+    }
+    console.log(`[EventSub] Subscriptions complete (${eventSubSubscriptions.size} active)`);
+  }
+
+  // EventSub disabled — requires per-broadcaster user tokens we don't have.
+  // TMI.js handlers (subscription, resub, submysterygift, cheer, raided) are the primary event source.
+  // To enable EventSub later, call connectEventSub() here after implementing per-user OAuth.
+  console.log('[Bot] EventSub disabled (needs per-broadcaster auth). Using TMI.js events.');
 
   client.on('message', async (channel, tags, message, self) => {
     if (self) return;
@@ -930,6 +1118,31 @@ console.log = (...args) => {
     const senderLogin = (tags['username'] || '').toLowerCase();
     const senderUserId = tags['user-id'] ? `user_${tags['user-id']}` : null;
     
+    // Detect cheers from message tags (TMI cheer event is unreliable)
+    const msgBits = parseInt(tags.bits || '0');
+    if (msgBits > 0 && senderLogin && senderUserId) {
+      console.log(`[Cheer-Detect] ${senderLogin} cheered ${msgBits} bits in ${channel}`);
+      if (msgBits >= 100) {
+        grantPassForEvent(channel.replace('#', ''), senderUserId, senderLogin, `cheered ${msgBits} bits`);
+      }
+    }
+
+    // Detect sub/resub from message tags (TMI sub events can be unreliable)
+    const msgType = tags['msg-id'];
+    if (senderLogin && senderUserId && (msgType === 'sub' || msgType === 'resub' || msgType === 'subgift' || msgType === 'submysterygift')) {
+      const months = tags['msg-param-cumulative-months'] || tags['msg-param-months'] || '1';
+      const giftCount = tags['msg-param-mass-gift-count'] || '1';
+      if (msgType === 'submysterygift') {
+        console.log(`[Sub-Detect] ${senderLogin} gifted ${giftCount} subs in ${channel}`);
+        grantPassForEvent(channel.replace('#', ''), senderUserId, senderLogin, `gifted ${giftCount} subs`);
+      } else if (msgType === 'subgift') {
+        // individual gift sub notification — skip, submysterygift covers the gifter
+      } else {
+        console.log(`[Sub-Detect] ${senderLogin} ${msgType} (${months}mo) in ${channel}`);
+        grantPassForEvent(channel.replace('#', ''), senderUserId, senderLogin, `${msgType} ${months}mo`);
+      }
+    }
+
     // Track chat activity for ALL messages from players (not just commands)
     // Resolve shared chat source so lastSeenChannel reflects the actual streamer
     if (senderLogin && senderUserId && !BLACKLIST.includes(senderLogin)) {
@@ -954,16 +1167,10 @@ console.log = (...args) => {
     }
     
     const rawMessage = message.trim();
-    const usesBang = rawMessage.startsWith('!');
-    let normalizedMessage = rawMessage;
-
-    if (usesBang) {
-      // allow !card, !phrases, !claim etc as alias to @spmt
-      normalizedMessage = `@spmt ${rawMessage.slice(1)}`.trim();
-    }
-
-    const msg = normalizedMessage.toLowerCase();
-    if (!msg.startsWith('@spmt ')) return;
+    const msg = rawMessage.toLowerCase();
+    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ')) return;
+    // Normalize: ensure @spmt prefix
+    const normalizedMsg = msg.startsWith('spmt ') ? '@' + rawMessage.trim() : rawMessage.trim();
 
     // In shared chat, process mirrored partner messages too, but map to source channel context.
     const rawChannelName = channel.replace('#', '');
@@ -985,7 +1192,7 @@ console.log = (...args) => {
     // Small random delay to avoid looking too bot-like (0.5-1.5s)
     await new Promise(r => setTimeout(r, 500 + Math.random() * 1000));
     
-    const args = msg.split(/\s+/).slice(1);
+    const args = normalizedMsg.toLowerCase().split(/\s+/).slice(1);
     const cmd = args[0];
     const userId = `user_${tags['user-id']}`;
     const user = tags['display-name'] || tags['username'];
@@ -1222,6 +1429,12 @@ console.log = (...args) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tagger: user, tagged: target, doublePoints: res.doublePoints })
         });
+        // Mod log
+        await apiCall('/api/tag/mod-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor: user, action: 'tag', target, detail: res.doublePoints ? 'double points' : '', channel: channelName })
+        }).catch(() => {});
         console.log('[Bot] Tag complete');
       }
     }
@@ -1254,6 +1467,11 @@ console.log = (...args) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'sleep', userId: targetId })
       });
+      await apiCall('/api/tag/mod-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: user, action: 'sleep', target: targetName, channel: channelName })
+      }).catch(() => {});
       await reply( `@${targetName} is now away/sleeping 😴 (immune from tags)`);
       console.log('[Bot] Sleep message sent');
     }
@@ -1286,6 +1504,11 @@ console.log = (...args) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'wake', userId: targetId })
       });
+      await apiCall('/api/tag/mod-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: user, action: 'wake', target: targetName, channel: channelName })
+      }).catch(() => {});
       await reply( `@${targetName} is now awake! ☀️`);
       console.log('[Bot] Wake message sent');
     }
@@ -1643,40 +1866,17 @@ console.log = (...args) => {
       }
 
       const covered = card.covered || {};
-      const formatRow = (row) => {
-        const cells = [];
-        for (let col = 0; col < 5; col++) {
-          const idx = row * 5 + col;
-          const cell = covered[idx] ? '🟩' : '⬜';
-          cells.push(`${cell}${String(idx).padStart(2, '0')}`);
-        }
-        return cells.join(' ');
-      };
-
-      // compact card output in one message for `!card` style usage to avoid flooding
-      if (usesBang) {
-        const rows = [];
-        for (let row = 0; row < 5; row++) rows.push(formatRow(row));
-        await reply(`@${user} Bingo board: ${rows.join(' | ')}`);
-        await reply(`@${user} Download full card & phrases: ${API_BASE}/api/bingo/share?format=txt`);
-        return;
-      }
-
-      // legacy behavior for @spmt card: 5 rows for visual clarity
+      const rows = [];
       for (let row = 0; row < 5; row++) {
         const cells = [];
         for (let col = 0; col < 5; col++) {
           const idx = row * 5 + col;
-          if (covered[idx]) {
-            cells.push(`[X${String(idx).padStart(2, '0')}]`);
-          } else {
-            cells.push(`[${String(idx).padStart(2, '0')} ]`);
-          }
+          cells.push(`${covered[idx] ? '🟩' : '⬜'}${String(idx).padStart(2, '0')}`);
         }
-        await reply(cells.join(' '));
-        await sleep(600);
+        rows.push(cells.join(' '));
       }
-      await reply(`@${user} X=claimed. "@spmt phrases" to see full text. "@spmt claim [0-24]" to mark. Additionally: ${API_BASE}/api/bingo/share?format=txt`);
+      const claimed = Object.keys(covered).length;
+      await reply(`@${user} Bingo [${claimed}/25]: ${rows.join(' | ')} — "@spmt phrases" for text, "@spmt claim [0-24]" to mark — ${API_BASE}/api/bingo/share?format=txt`);
     }
 
     else if (cmd === 'share' || cmd === 'export') {
@@ -1728,7 +1928,6 @@ console.log = (...args) => {
       }
       
       if (customPhrases.length === 25) {
-        // Use custom phrases
         await apiCall('/api/bingo/state', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1736,9 +1935,9 @@ console.log = (...args) => {
         });
         reply(`@${user} New bingo card created with custom phrases! Type "@spmt card" to see it.`);
       } else {
-        // Generate default card
-        await apiCall('/api/bingo/generate', { method: 'POST' });
-        reply(`@${user} New bingo card generated! Type "@spmt card" to see it, "@spmt phrases" for the full list.`);
+        const genResult = await apiCall('/api/bingo/generate', { method: 'POST' });
+        const aiNote = genResult?.aiGenerated ? '(AI-generated!)' : '(shuffled phrases)';
+        reply(`@${user} New bingo card generated ${aiNote}! "@spmt card" to see it — ${API_BASE}/api/bingo/share?format=txt`);
       }
     }
     
@@ -1801,6 +2000,11 @@ console.log = (...args) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tagger: user, tagged: target, doublePoints: true, message: 'Used a Pass' })
         });
+        await apiCall('/api/tag/mod-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor: user, action: 'use-pass', target, detail: 'double points pass', channel: channelName })
+        }).catch(() => {});
       }
     }
     
@@ -1855,6 +2059,17 @@ console.log = (...args) => {
         connected: isIrcConnected,
         joinedChannels: client.getChannels().length,
         uptimeSec: Math.floor(process.uptime())
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(payload));
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/eventsub-status') {
+      const payload = {
+        connected: eventSubSocket?.readyState === WebSocket.OPEN,
+        sessionId: eventSubSessionId,
+        subscriptionCount: eventSubSubscriptions.size,
       };
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(payload));

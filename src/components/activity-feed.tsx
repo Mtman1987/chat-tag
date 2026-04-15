@@ -1,7 +1,6 @@
 
 'use client';
 
-import type { ReactNode } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,118 +11,52 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from './ui/button';
 import { Trophy, Target } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
-import type { Player } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
-import { useMemo } from 'react';
-
-type ChatTagEvent = {
-  id: string;
-  taggerId: string;
-  taggedId: string;
-  streamerId: string;
-  timestamp: {
-    seconds: number;
-    nanoseconds: number;
-  } | null;
-};
-
-type BingoWinEvent = {
-  id: string;
-  userId: string;
-  points: number;
-  timestamp: {
-    seconds: number;
-    nanoseconds: number;
-  } | null;
-};
-
-type BingoSquareClaimEvent = {
-  id: string;
-  claimerId: string;
-  streamerId: string;
-  phrase: string;
-  timestamp: {
-    seconds: number;
-    nanoseconds: number;
-  } | null;
-};
-
-type CombinedBingoEvent = {
-  id: string;
-  type: 'win' | 'claim';
-  timestamp: Date;
-  content: ReactNode;
-};
+import { useState, useEffect, useCallback } from 'react';
 
 export function ActivityFeed() {
-  const firestore = useFirestore();
-  
-  const playersCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
-  );
-  
-  const chatTagsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'chatTags'), orderBy('timestamp', 'desc'), limit(10)) : null),
-    [firestore]
-  );
+  const [tagEvents, setTagEvents] = useState<any[]>([]);
+  const [bingoEvents, setBingoEvents] = useState<any[]>([]);
 
-  const bingoWinsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'bingoEvents'), orderBy('timestamp', 'desc'), limit(10)) : null),
-    [firestore]
-  );
-  
-  const bingoClaimsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'bingoSquareClaims'), orderBy('timestamp', 'desc'), limit(10)) : null),
-    [firestore]
-  );
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tag', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const history = (data.history || []).filter((e: any) => !e.blocked).slice(0, 10);
+        setTagEvents(history);
+      }
+    } catch {}
+    try {
+      const res = await fetch('/api/bingo/state', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setBingoEvents((data.bingo?.recentClaims || []).slice(0, 10));
+      }
+    } catch {}
+  }, []);
 
-  const { data: players } = useCollection<Player>(playersCollection);
-  const { data: tagEvents } = useCollection<ChatTagEvent>(chatTagsQuery);
-  const { data: bingoWinEvents } = useCollection<BingoWinEvent>(bingoWinsQuery);
-  const { data: claimEvents } = useCollection<BingoSquareClaimEvent>(bingoClaimsQuery);
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
-  const getPlayerName = (id: string) => players?.find(p => p.id === id)?.twitchUsername || 'A player';
-
-  const formatTimestamp = (timestamp: Date | null) => {
-    if (!timestamp) return 'Just now';
-    return formatDistanceToNow(timestamp, { addSuffix: true });
+  const ts = (value: any): number => {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    const parsed = Date.parse(String(value));
+    return Number.isNaN(parsed) ? 0 : parsed;
   };
-  
-  const combinedBingoEvents = useMemo(() => {
-    const wins: CombinedBingoEvent[] = (bingoWinEvents || []).map(event => ({
-      id: event.id,
-      type: 'win',
-      timestamp: event.timestamp ? new Date(event.timestamp.seconds * 1000) : new Date(),
-      content: (
-        <p>
-          <span className="font-bold">{getPlayerName(event.userId)}</span> got Bingo for{' '}
-          <span className="font-semibold text-primary">{event.points}</span> points!
-        </p>
-      ),
-    }));
 
-    const claims: CombinedBingoEvent[] = (claimEvents || []).map(event => ({
-      id: event.id,
-      type: 'claim',
-      timestamp: event.timestamp ? new Date(event.timestamp.seconds * 1000) : new Date(),
-      content: (
-         <p>
-          <span className="font-bold">{getPlayerName(event.claimerId)}</span> claimed "{event.phrase}" in{' '}
-          <span className="font-semibold">{getPlayerName(event.streamerId)}'s</span> stream.
-        </p>
-      ),
-    }));
+  const formatTimestamp = (value: any) => {
+    const ms = ts(value);
+    if (!ms) return 'Just now';
+    return formatDistanceToNow(new Date(ms), { addSuffix: true });
+  };
 
-    return [...wins, ...claims].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-  }, [bingoWinEvents, claimEvents, players]);
-
-
-  const latestTagEvent = tagEvents?.[0];
-  const latestBingoEvent = combinedBingoEvents?.[0];
+  const latestTag = tagEvents[0];
 
   return (
     <div className="flex items-center gap-2">
@@ -131,23 +64,17 @@ export function ActivityFeed() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm">
             <Trophy className="mr-2 h-4 w-4 text-yellow-400" />
-            <span>
-              {latestBingoEvent?.type === 'win' && `New Bingo Winner!`}
-              {latestBingoEvent?.type === 'claim' && `New Bingo Claim!`}
-              {!latestBingoEvent && 'Bingo Events'}
-            </span>
+            <span>{bingoEvents.length > 0 ? 'Bingo Activity' : 'Bingo Events'}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-80">
           <DropdownMenuLabel>Latest Bingo Events</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {combinedBingoEvents && combinedBingoEvents.length > 0 ? (
-            combinedBingoEvents.slice(0, 10).map(event => (
-              <DropdownMenuItem key={event.id} className="flex flex-col items-start gap-1">
-                {event.content}
-                <p className="text-xs text-muted-foreground">
-                  {formatTimestamp(event.timestamp)}
-                </p>
+          {bingoEvents.length > 0 ? (
+            bingoEvents.map((event: any, i: number) => (
+              <DropdownMenuItem key={i} className="flex flex-col items-start gap-1">
+                <p><span className="font-bold">{event.username || 'Someone'}</span> claimed square {event.squareIndex}</p>
+                <p className="text-xs text-muted-foreground">{formatTimestamp(event.timestamp)}</p>
               </DropdownMenuItem>
             ))
           ) : (
@@ -161,8 +88,8 @@ export function ActivityFeed() {
           <Button variant="ghost" size="sm">
             <Target className="mr-2 h-4 w-4 text-primary" />
             <span>
-              {latestTagEvent
-                ? `${getPlayerName(latestTagEvent.taggerId)} tagged ${getPlayerName(latestTagEvent.taggedId)}`
+              {latestTag
+                ? `${latestTag.taggerUsername || 'Someone'} tagged ${latestTag.taggedUsername || 'someone'}`
                 : 'Latest Tags'}
             </span>
           </Button>
@@ -170,17 +97,16 @@ export function ActivityFeed() {
         <DropdownMenuContent align="end" className="w-80">
           <DropdownMenuLabel>Latest Tag Events</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {tagEvents && tagEvents.length > 0 ? (
-            tagEvents.map(event => (
-              <DropdownMenuItem key={event.id} className="flex flex-col items-start gap-1">
+          {tagEvents.length > 0 ? (
+            tagEvents.map((event: any, i: number) => (
+              <DropdownMenuItem key={i} className="flex flex-col items-start gap-1">
                 <p>
-                  <span className="font-bold">{getPlayerName(event.taggerId)}</span> tagged{' '}
-                  <span className="font-bold">{getPlayerName(event.taggedId)}</span> in{' '}
-                  <span className="font-semibold">{getPlayerName(event.streamerId)}'s</span> stream.
+                  <span className="font-bold">{event.taggerUsername || event.taggerId}</span> tagged{' '}
+                  <span className="font-bold">{event.taggedUsername || event.taggedId}</span>
+                  {event.streamerId && <span className="text-muted-foreground"> in {event.streamerId}</span>}
+                  {event.doublePoints && <span className="text-yellow-500 font-bold"> (2x!)</span>}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatTimestamp(event.timestamp ? new Date(event.timestamp.seconds * 1000) : null)}
-                </p>
+                <p className="text-xs text-muted-foreground">{formatTimestamp(event.timestamp)}</p>
               </DropdownMenuItem>
             ))
           ) : (

@@ -1,19 +1,11 @@
 
 'use client';
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import type { Player } from '@/lib/types';
-import {
-  useAuth,
-  useUser,
-  useFirestore,
-  useCollection,
-  useMemoFirebase,
-  useDoc,
-} from '@/firebase';
-import { setDoc, doc, serverTimestamp, collection, addDoc, updateDoc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
+import { useSession } from '@/contexts/session-context';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ModActivityLog } from '@/components/mod-activity-log';
 import { CommunityList } from '@/components/community-list';
 import { Leaderboard } from '@/components/leaderboard';
 import { BingoCard } from '@/components/bingo-card';
@@ -23,113 +15,64 @@ import { BotChannelManager } from '@/components/bot-channel-manager';
 import { DiscordEmbedPoster } from '@/components/discord-embed-poster';
 import { Card } from '@/components/ui/card';
 
-function getNewPlayer(userId: string, username: string | null, avatar: string | null): Player {
-  return {
-    id: userId,
-    twitchUsername: username || `Player_${userId.substring(0, 5)}`,
-    avatarUrl: avatar || `https://picsum.photos/seed/${userId}/100/100`,
-    score: 0,
-    communityPoints: 0,
-    isIt: false,
-    isActive: false, 
-  };
-}
-
-type GameSettings = {
-    bingoSquarePoints?: number;
-    bingoWinPoints?: number;
-};
-
 export function MainDashboard() {
-  const auth = useAuth();
-  const { user, isUserLoading } = useUser();
-  const firestore = useFirestore();
+  const { user, isUserLoading } = useSession();
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [playersLoading, setPlayersLoading] = useState(true);
 
-  const usersCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
-  );
-  
-  const settingsDocRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, 'gameSettings', 'default') : null),
-    [firestore]
-  );
-  
-  const { data: players, isLoading: playersIsLoading } = useCollection<Player>(usersCollection);
-  const { data: settings } = useDoc<GameSettings>(settingsDocRef);
-  
-  const memoizedPlayers = useMemo(() => players || [], [players]);
-
-  useEffect(() => {
-    if (!user && !isUserLoading && auth) {
-      signInAnonymously(auth).catch(console.error);
-    }
-  }, [user, isUserLoading, auth]);
-
-  useEffect(() => {
-    if (user && !user.isAnonymous && firestore && players && !players.find(p => p.id === user.uid)) {
-      const userDocRef = doc(firestore, 'users', user.uid);
-      const newPlayerData = getNewPlayer(user.uid, user.displayName, user.photoURL);
-
-      const isAnyoneIt = players.some(p => p.isIt);
-      if (!isAnyoneIt) {
-        newPlayerData.isIt = true;
+  const fetchPlayers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tag', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const mapped: Player[] = (data.players || []).map((p: any) => ({
+          id: p.id,
+          twitchUsername: p.twitchUsername || p.username || p.id,
+          avatarUrl: p.avatarUrl || p.avatar || '',
+          score: p.score || 0,
+          communityPoints: p.communityPoints || 0,
+          isIt: Boolean(p.isIt),
+          isActive: Boolean(p.isActive),
+        }));
+        setPlayers(mapped);
       }
-      
-      setDoc(userDocRef, newPlayerData, { merge: true });
+    } catch (e) {
+      console.error('Failed to fetch players:', e);
+    } finally {
+      setPlayersLoading(false);
     }
-  }, [user, firestore, players]);
+  }, []);
 
-  const bingoSquarePoints = settings?.bingoSquarePoints ?? 10;
-  const bingoWinPoints = settings?.bingoWinPoints ?? 250;
+  useEffect(() => {
+    fetchPlayers();
+    const interval = setInterval(fetchPlayers, 15000);
+    return () => clearInterval(interval);
+  }, [fetchPlayers]);
 
-  const handleScoreUpdate = async (playerId: string, points: number) => {
-    if (!firestore || !players) return;
-    const player = players.find(p => p.id === playerId);
-    if (!player) return;
+  const memoizedPlayers = useMemo(() => players, [players]);
 
-    const userDocRef = doc(firestore, 'users', playerId);
-    const currentScore = player.score || 0;
-    await updateDoc(userDocRef, { score: currentScore + points });
-  };
-  
-  const handleSquareClaim = (claimerId: string) => {
-    if (!user) return;
-    handleScoreUpdate(claimerId, bingoSquarePoints);
-  };
-
-  const handleBingo = async (bingoWinnerId: string) => {
-    if (!firestore) return;
-    handleScoreUpdate(bingoWinnerId, bingoWinPoints);
-    const bingoEventsCollection = collection(firestore, 'bingoEvents');
-    await addDoc(bingoEventsCollection, {
-      userId: bingoWinnerId,
-      points: bingoWinPoints,
-      timestamp: serverTimestamp(),
-    });
-  };
-  
-  if (isUserLoading || (user && playersIsLoading)) {
+  if (isUserLoading || playersLoading) {
     return (
-        <div className="flex justify-center items-center min-h-screen">
-          <div className="text-2xl font-headline animate-pulse">Loading Astro Clash...</div>
-        </div>
-      );
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-2xl font-headline animate-pulse">Loading Astro Clash...</div>
+      </div>
+    );
   }
-  
+
   return (
     <div className="grid md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] gap-6 p-4 md:p-6">
       <aside className="flex flex-col gap-6">
         <CommunityList />
         <Leaderboard players={memoizedPlayers} />
       </aside>
-      
+
       <div className="min-w-0">
         <Card className="p-4 sm:p-6 bg-card/80 backdrop-blur-sm">
           <Tabs defaultValue="chat-tag" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 bg-secondary/50">
+            <TabsList className="grid w-full grid-cols-6 bg-secondary/50">
               <TabsTrigger value="bingo" className="font-headline">Chat Bingo</TabsTrigger>
               <TabsTrigger value="chat-tag" className="font-headline">Chat Tag</TabsTrigger>
+              <TabsTrigger value="mod-log" className="font-headline">Mod Log</TabsTrigger>
               <TabsTrigger value="live-members" className="font-headline">Live Members</TabsTrigger>
               <TabsTrigger value="bot" className="font-headline">Bot Channels</TabsTrigger>
               <TabsTrigger value="share" className="font-headline">Share</TabsTrigger>
@@ -139,6 +82,9 @@ export function MainDashboard() {
             </TabsContent>
             <TabsContent value="chat-tag" className="mt-6">
               <ChatTagGame players={memoizedPlayers} />
+            </TabsContent>
+            <TabsContent value="mod-log" className="mt-6">
+              <ModActivityLog />
             </TabsContent>
             <TabsContent value="live-members" className="mt-6">
               <LiveDiscordMembers />

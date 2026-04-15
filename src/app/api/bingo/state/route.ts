@@ -1,5 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { makeId, readAppState, updateAppState } from '@/lib/volume-store';
+import { makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
+
+const DSH_URL = process.env.DSH_URL || 'https://discord-stream-hub-new.fly.dev';
+
+async function refreshDSHEmbed() {
+  try {
+    const state = await readAppState();
+    const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+    for (const entry of state.tagHistory) {
+      if (entry.blocked) continue;
+      const from = entry.taggerId || entry.from;
+      const to = entry.taggedId || entry.to;
+      if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 }; tagCounts[from].tags += 1; }
+      if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 }; tagCounts[to].tagged += 1; }
+    }
+    const players = Object.values(state.tagPlayers).map((p: any) => {
+      const c = tagCounts[p.id] || { tags: 0, tagged: 0 };
+      return { id: p.id, twitchUsername: p.twitchUsername || p.username, score: c.tags * 100 - c.tagged * 50, tags: c.tags, tagged: c.tagged, isIt: Boolean(p.isIt), sleepingImmunity: Boolean(p.sleepingImmunity), offlineImmunity: Boolean(p.offlineImmunity), hasPass: Boolean(p.hasPass) };
+    });
+    const leaderboard = [...players].sort((a, b) => b.score - a.score).map((p, i) => ({ rank: i + 1, ...p }));
+    const currentIt = players.find(p => p.isIt);
+    const recentHistory = [...state.tagHistory].sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0)).slice(0, 25).map((e: any) => {
+      const tr = state.tagPlayers[e.taggerId || e.from]; const td = state.tagPlayers[e.taggedId || e.to];
+      return { taggerUsername: tr?.twitchUsername || e.taggerId || e.from, taggedUsername: td?.twitchUsername || e.taggedId || e.to, timestamp: toMillis(e.timestamp), doublePoints: Boolean(e.doublePoints), blocked: e.blocked || null };
+    });
+    const bc = state.bingoCards.current_user || { phrases: [], covered: {} };
+    const bingo = { phrases: bc.phrases || [], covered: bc.covered || {}, claimedCount: Object.keys(bc.covered || {}).length, totalSquares: (bc.phrases || []).length };
+    const gameState = { tag: { currentIt: currentIt ? { id: currentIt.id, twitchUsername: currentIt.twitchUsername } : null, isFreeForAll: !currentIt, lastTagTime: toMillis(state.tagGame.state.lastTagTime), playerCount: players.length }, players, leaderboard, recentHistory, bingo, timestamp: Date.now() };
+    await fetch(`${DSH_URL}/api/chat-tag/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameState }) });
+  } catch (e: any) { console.error('[Bingo] DSH refresh error:', e.message); }
+}
 
 export async function GET() {
   try {
@@ -91,6 +121,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
       }
 
+      refreshDSHEmbed().catch(() => {});
       return NextResponse.json(result);
     }
 
@@ -103,6 +134,7 @@ export async function POST(req: NextRequest) {
         };
       });
 
+      refreshDSHEmbed().catch(() => {});
       return NextResponse.json({ success: true });
     }
 

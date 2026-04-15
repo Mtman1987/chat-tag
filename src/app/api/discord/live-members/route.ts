@@ -10,7 +10,7 @@ export async function GET(_request: NextRequest) {
         return { liveMembers: [], allMembers: [] };
       }
 
-      const liveResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002'}/api/twitch/live`, {
+      const liveResponse = await fetch(`${process.env.INTERNAL_API_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/twitch/live`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usernames: channels }),

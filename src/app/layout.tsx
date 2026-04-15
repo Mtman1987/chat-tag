@@ -3,9 +3,9 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { Starfield } from '@/components/starfield';
-import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { Header } from '@/components/header';
 import { LiveStreamersProvider } from '@/contexts/live-streamers-context';
+import { SessionProvider } from '@/contexts/session-context';
 
 export const metadata: Metadata = {
   title: 'Astro Twitch Clash',
@@ -25,7 +25,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased min-h-screen bg-background relative">
-        <FirebaseClientProvider>
+        <SessionProvider>
           <LiveStreamersProvider>
             <Starfield />
             <div className="relative z-10">
@@ -34,7 +34,7 @@ export default function RootLayout({
             </div>
             <Toaster />
           </LiveStreamersProvider>
-        </FirebaseClientProvider>
+        </SessionProvider>
       </body>
     </html>
   );

@@ -32,6 +32,7 @@ export type AppState = {
   discordMessages: {
     lastTagAnnouncement?: JsonObject;
   };
+  modLog: JsonObject[];
   botRuntime: {
     joinedChannels: string[];
     firstLiveAnnouncementByChannel: Record<string, string>;
@@ -57,6 +58,7 @@ const DEFAULT_STATE: AppState = {
   gameSettings: { default: {} },
   pinTags: { pinscorpion6521: { counts: {} } },
   discordMessages: {},
+  modLog: [],
   botRuntime: {
     joinedChannels: [],
     firstLiveAnnouncementByChannel: {},

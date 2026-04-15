@@ -1,9 +1,6 @@
-'use server';
-
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeAdminApp } from '@/lib/firebase-admin';
-import { getAuth } from 'firebase-admin/auth';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { updateAppState } from '@/lib/volume-store';
+import { createSessionToken } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -11,7 +8,8 @@ export async function GET(req: NextRequest) {
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
 
-  const callbackUrl = new URL('/auth/callback', req.url);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+  const callbackUrl = new URL('/auth/callback', appUrl);
 
   if (error) {
     callbackUrl.searchParams.set('error', 'twitch_auth_failed');
@@ -26,28 +24,21 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const adminApp = initializeAdminApp();
-    const adminAuth = getAuth(adminApp);
-
-    const state = await readAppState();
-    const settings = state.gameSettings.default || {};
-
-    const { twitchClientId, twitchClientSecret } = settings;
+    const twitchClientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID || process.env.TWITCH_CLIENT_ID;
+    const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET;
     if (!twitchClientId || !twitchClientSecret) {
-      throw new Error('Twitch client ID or secret is not configured in settings.');
+      throw new Error('Twitch client ID or secret is not configured.');
     }
 
     const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: twitchClientId,
         client_secret: twitchClientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: `${new URL(req.url).origin}/api/auth/twitch/callback`,
+        redirect_uri: `${appUrl}/api/auth/twitch/callback`,
       }),
     });
 
@@ -72,8 +63,7 @@ export async function GET(req: NextRequest) {
     const { data: userData } = await userResponse.json();
     const twitchUser = userData[0];
 
-    const firebaseToken = await adminAuth.createCustomToken(twitchUser.id);
-
+    // Store user in volume
     await updateAppState((draft) => {
       draft.users[twitchUser.id] = {
         ...(draft.users[twitchUser.id] || {}),
@@ -83,8 +73,14 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    callbackUrl.searchParams.set('token', firebaseToken);
-    callbackUrl.searchParams.set('twitchUserId', twitchUser.id);
+    // Create session token
+    const sessionToken = createSessionToken({
+      id: twitchUser.id,
+      twitchUsername: twitchUser.display_name,
+      avatarUrl: twitchUser.profile_image_url,
+    });
+
+    callbackUrl.searchParams.set('session', sessionToken);
     callbackUrl.searchParams.set('twitchUsername', twitchUser.display_name);
     callbackUrl.searchParams.set('avatarUrl', twitchUser.profile_image_url);
 

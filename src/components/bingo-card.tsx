@@ -227,80 +227,22 @@ export function BingoCard() {
     toast({ title: "Generating new board...", description: "AI is creating fresh phrases" });
     
     try {
-      // Call AI to generate 24 new phrases
-      const aiResponse = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'Generate exactly 24 short bingo phrases (2-5 words each) commonly said by Twitch streamers or heard in Twitch streams. Make them funny, relatable, and varied. Examples: "First donation hype", "Chat goes wild", "Streamer laughs hard", "Technical difficulties", "Pet appears on cam". Return ONLY the phrases as a JSON array with no other text.',
-          temperature: 0.9,
-          maxOutputTokens: 500
-        })
+      const res = await fetch('/api/bingo/generate', { method: 'POST' });
+      if (!res.ok) throw new Error('Generation failed');
+      const data = await res.json();
+      
+      await fetchState();
+      toast({ 
+        title: "New Shared Board Generated!", 
+        description: data.aiGenerated ? "Fresh AI-generated phrases" : "Shuffled phrases (AI unavailable)"
       });
-      
-      if (!aiResponse.ok) throw new Error('AI generation failed');
-      
-      const aiData = await aiResponse.json();
-      let newPhrases: string[] = [];
-      
-      // Try to parse AI response as JSON array
-      try {
-        const text = aiData.text || '';
-        const jsonMatch = text.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          newPhrases = JSON.parse(jsonMatch[0]);
-        }
-      } catch {
-        // Fallback: split by newlines and clean
-        newPhrases = (aiData.text || '')
-          .split('\n')
-          .map((line: string) => line.replace(/^[\d\-\.\*\s]+/, '').replace(/["']/g, '').trim())
-          .filter((line: string) => line.length > 0 && line.length < 50)
-          .slice(0, 24);
-      }
-      
-      // Ensure we have exactly 24 phrases
-      if (newPhrases.length < 24) {
-        const fallback = shuffleArray(commonBingoPhrases).slice(0, 24 - newPhrases.length);
-        newPhrases = [...newPhrases, ...fallback];
-      }
-      newPhrases = newPhrases.slice(0, 24);
-      
-      // Insert FREE SPACE at center
-      const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
-      newPhrases.splice(centerIndex, 0, 'FREE SPACE');
-      
-      // Save to Discord
-      await fetch('/api/bingo/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reset',
-          phrases: newPhrases
-        })
-      });
-      
-      fetchState();
-      toast({ title: "New Shared Board Generated!", description: "Fresh AI-generated phrases" });
     } catch (error) {
       console.error('Failed to generate new board:', error);
       toast({ 
         variant: 'destructive',
         title: "Generation Failed", 
-        description: "Using shuffled phrases instead" 
+        description: "Could not create new board" 
       });
-      
-      // Fallback to shuffle
-      const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
-      const centerIndex = Math.floor((BINGO_SIZE * BINGO_SIZE) / 2);
-      shuffled.splice(centerIndex, 0, 'FREE SPACE');
-      
-      await fetch('/api/bingo/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset', phrases: shuffled })
-      });
-      fetchState();
     }
   };
 

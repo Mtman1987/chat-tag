@@ -2,23 +2,17 @@
 
 import { useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { signInWithCustomToken } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { useAuth, useFirestore, useFirebaseApp } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const auth = useAuth();
-  const firestore = useFirestore();
-  const firebaseApp = useFirebaseApp();
   const { toast } = useToast();
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    const session = searchParams.get('session');
     const twitchUsername = searchParams.get('twitchUsername');
+    const avatarUrl = searchParams.get('avatarUrl');
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
 
@@ -32,37 +26,26 @@ function AuthCallbackContent() {
       return;
     }
 
-    if (token && auth && firebaseApp && twitchUsername) {
-      signInWithCustomToken(auth, token)
-        .then(() => {
-          // Persist Twitch profile to localStorage for header display
-          const avatarUrl = searchParams.get('avatarUrl');
-          localStorage.setItem('twitchUsername', twitchUsername);
-          if (avatarUrl) localStorage.setItem('twitchAvatar', avatarUrl);
-          toast({
-            title: 'Login Successful!',
-            description: `Welcome, ${twitchUsername}!`,
-          });
-          router.replace('/');
-        })
-        .catch((error) => {
-          console.error("Firebase custom sign-in error:", error);
-          toast({
-            variant: "destructive",
-            title: "Login Failed",
-            description: error.message || "Could not sign in with Firebase.",
-          });
-          router.replace('/?error=firebase_login_failed');
-        });
-    } else if (!token && !error) {
-        toast({
-            variant: "destructive",
-            title: "Authentication Error",
-            description: "The authentication token was missing. Please try logging in again.",
-          });
-        router.replace('/');
+    if (session && twitchUsername) {
+      localStorage.setItem('session', session);
+      localStorage.setItem('twitchUsername', twitchUsername);
+      if (avatarUrl) localStorage.setItem('twitchAvatar', avatarUrl);
+      toast({
+        title: 'Login Successful!',
+        description: `Welcome, ${twitchUsername}!`,
+      });
+      // Trigger storage event for other tabs/components
+      window.dispatchEvent(new Event('storage'));
+      router.replace('/');
+    } else if (!session && !error) {
+      toast({
+        variant: "destructive",
+        title: "Authentication Error",
+        description: "The session token was missing. Please try logging in again.",
+      });
+      router.replace('/');
     }
-  }, [searchParams, auth, firebaseApp, router, toast]);
+  }, [searchParams, router, toast]);
 
   return (
     <div className="flex justify-center items-center min-h-screen">

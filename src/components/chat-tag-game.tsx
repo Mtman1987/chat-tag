@@ -445,30 +445,29 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             </Button>
             <Button variant="default" size="sm" onClick={async () => {
               try {
-                const mtmanPlayer = gameState.players.find((p: any) => 
-                  p.twitchUsername?.toLowerCase() === 'mtman1987'
+                const mePlayer = gameState.players.find((p: any) => 
+                  p.twitchUsername?.toLowerCase() === currentUsername?.toLowerCase() ||
+                  p.id?.toLowerCase() === currentUsername?.toLowerCase()
                 );
-                if (!mtmanPlayer) {
-                  toast({ variant: 'destructive', title: 'Mtman1987 not in game' });
+                if (!mePlayer) {
+                  toast({ variant: 'destructive', title: 'You are not in the game' });
                   return;
                 }
                 
-                // Clear any immunity first
                 await fetch('/api/tag', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'wake', userId: mtmanPlayer.id })
+                  body: JSON.stringify({ action: 'wake', userId: mePlayer.id })
                 });
                 
-                // Set as it directly
                 await fetch('/api/tag', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'set-it', userId: mtmanPlayer.id })
+                  body: JSON.stringify({ action: 'set-it', userId: mePlayer.id })
                 });
                 
                 setTimeout(fetchState, 500);
-                toast({ title: 'Mtman is now It!' });
+                toast({ title: 'You are now It!' });
               } catch (e) {
                 toast({ variant: 'destructive', title: 'Failed to set It' });
               }
@@ -477,37 +476,41 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             </Button>
             <Button variant="secondary" size="sm" onClick={async () => {
               try {
-                const mtmanPlayer = gameState.players.find((p: any) => 
-                  p.twitchUsername?.toLowerCase() === 'mtman1987'
+                const mePlayer = gameState.players.find((p: any) => 
+                  p.twitchUsername?.toLowerCase() === currentUsername?.toLowerCase() ||
+                  p.id?.toLowerCase() === currentUsername?.toLowerCase()
                 );
-                if (!mtmanPlayer) {
-                  toast({ variant: 'destructive', title: 'Mtman1987 not in game' });
+                if (!mePlayer) {
+                  toast({ variant: 'destructive', title: 'You are not in the game' });
                   return;
                 }
                 
-                const isSleeping = gameState.immunity[mtmanPlayer.id] === 'sleeping';
+                const isSleeping = gameState.immunity[mePlayer.id] === 'sleeping';
                 
                 await fetch('/api/tag', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     action: isSleeping ? 'wake' : 'sleep',
-                    userId: mtmanPlayer.id
+                    userId: mePlayer.id
                   })
                 });
                 
                 setTimeout(fetchState, 500);
                 toast({ 
-                  title: isSleeping ? 'Mtman Awake' : 'Mtman Sleeping', 
-                  description: isSleeping ? 'Mtman1987 can be tagged again' : 'MTMAN IS SLEEPING - try tagging someone you see in chat' 
+                  title: isSleeping ? 'You are Awake' : 'You are Sleeping', 
+                  description: isSleeping ? 'You can be tagged again' : 'You are now immune from tags' 
                 });
               } catch (e) {
                 toast({ variant: 'destructive', title: 'Failed to toggle immunity' });
               }
             }}>
             <Shield className="mr-2 h-4 w-4" /> {(() => {
-              const mtman = gameState.players.find((p: any) => p.twitchUsername?.toLowerCase() === 'mtman1987');
-              return mtman && gameState.immunity[mtman.id] === 'sleeping' ? 'Wake Mtman' : 'Mtman Sleep';
+              const me = gameState.players.find((p: any) => 
+                p.twitchUsername?.toLowerCase() === currentUsername?.toLowerCase() ||
+                p.id?.toLowerCase() === currentUsername?.toLowerCase()
+              );
+              return me && gameState.immunity[me.id] === 'sleeping' ? 'Wake Up' : 'Go Sleep';
             })()}
             </Button>
             <Button variant="destructive" size="sm" onClick={async () => {
