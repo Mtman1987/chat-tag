@@ -69,13 +69,7 @@ export function CommunityList({ players = [] }: CommunityListProps) {
     } catch {}
   };
 
-  // Use shared data or fallback to props/mock
-  const mockPlayers: CommunityMember[] = [
-    { id: '1', twitchUsername: 'mtman1987', avatarUrl: 'https://picsum.photos/40/40?1', isActive: true },
-    { id: '2', twitchUsername: 'athenabot87', avatarUrl: 'https://picsum.photos/40/40?2', isActive: false },
-    { id: '3', twitchUsername: 'viewer123', avatarUrl: 'https://picsum.photos/40/40?3', isActive: false },
-  ];
-
+  // Use shared data or fallback to props
   const fallbackPlayers: CommunityMember[] =
     players.length > 0
       ? players.map((player) => ({
@@ -84,7 +78,7 @@ export function CommunityList({ players = [] }: CommunityListProps) {
           avatarUrl: player.avatarUrl,
           isActive: player.isActive,
         }))
-      : mockPlayers;
+      : [];
   const communityPlayers: CommunityMember[] =
     allCommunityMembers.length > 0 ? allCommunityMembers : fallbackPlayers;
 

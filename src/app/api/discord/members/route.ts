@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID || '1279582181768957963';
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 
 export async function GET() {
   if (!DISCORD_BOT_TOKEN) {

@@ -7,8 +7,9 @@ export async function GET(req: NextRequest) {
       throw new Error('Twitch Client ID is not configured.');
     }
 
-    // Always use the specific Chat Tag redirect URI
-    const redirectUri = 'https://chat-tag-new.fly.dev/api/auth/twitch/callback';
+    // Use env var or derive from request for redirect URI
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+    const redirectUri = `${appUrl}/api/auth/twitch/callback`;
 
     const authUrl = new URL('https://id.twitch.tv/oauth2/authorize');
     authUrl.searchParams.set('client_id', twitchClientId);

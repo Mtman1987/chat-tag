@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
+import { lookupTwitchUser } from '@/lib/twitch';
 
 export const dynamic = 'force-dynamic';
 
@@ -236,15 +237,25 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'join') {
+      const normalizedUsername = (twitchUsername || username || userId).toLowerCase();
+
+      // Auto-fetch avatar from Twitch if not provided
+      let resolvedAvatar = avatar || '';
+      if (!resolvedAvatar) {
+        try {
+          const twitchUser = await lookupTwitchUser(normalizedUsername);
+          if (twitchUser) resolvedAvatar = twitchUser.profile_image_url;
+        } catch {}
+      }
+
       const result = await updateAppState((state) => {
         if (state.tagPlayers[userId]) return { error: 'Already in game' };
 
         const isAnyoneIt = Object.values(state.tagPlayers).some((p: any) => p.isIt);
-        const normalizedUsername = (twitchUsername || username || userId).toLowerCase();
         state.tagPlayers[userId] = {
           id: userId,
           twitchUsername: normalizedUsername,
-          avatarUrl: avatar || '',
+          avatarUrl: resolvedAvatar,
           score: 0,
           tags: 0,
           tagged: 0,
@@ -279,11 +290,37 @@ export async function POST(req: NextRequest) {
     if (action === 'leave') {
       await updateAppState((state) => {
         const player = state.tagPlayers[userId];
-        const playerName = player?.twitchUsername || userId;
+        if (!player) return;
+        const playerName = player.twitchUsername || userId;
+        const wasIt = player.isIt || state.tagGame?.state?.currentIt === userId;
+
+        // Remove bot channel entry for this player
+        if (playerName) {
+          delete state.botChannels[playerName.toLowerCase()];
+        }
+
         delete state.tagPlayers[userId];
+
+        // If the leaving player was "it", clear currentIt and go free-for-all
+        if (wasIt && state.tagGame?.state) {
+          state.tagGame.state.currentIt = null;
+          state.tagGame.state.lastTagTime = Date.now();
+
+          state.tagHistory = state.tagHistory || [];
+          state.tagHistory.push({
+            id: makeId('hist'),
+            taggerId: 'system',
+            taggedId: 'free-for-all',
+            streamerId: 'player-left',
+            timestamp: Date.now(),
+            doublePoints: true,
+          });
+        }
+
+        state.adminHistory = state.adminHistory || [];
         state.adminHistory.push({
           id: makeId('admin'), action: 'leave', performedBy: performedBy || playerName,
-          details: `${playerName} left the game`, timestamp: Date.now(),
+          details: `${playerName} left the game${wasIt ? ' (was it — now free-for-all)' : ''}`, timestamp: Date.now(),
         });
       });
       return NextResponse.json({ success: true });

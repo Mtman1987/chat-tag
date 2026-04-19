@@ -520,7 +520,7 @@ export function BotChannelManager() {
                 placeholder="Add & join channel (without #)"
                 value={newChannel}
                 onChange={(e) => setNewChannel(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddChannel()}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddChannel()}
                 className="flex-1"
               />
               <Button onClick={handleAddChannel} disabled={isLoading || !newChannel.trim()} size="sm">
@@ -543,7 +543,7 @@ export function BotChannelManager() {
                   placeholder="Blacklist channel (without #)"
                   value={newBlacklistChannel}
                   onChange={(e) => setNewBlacklistChannel(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddBlacklistChannel()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddBlacklistChannel()}
                   className="flex-1"
                 />
                 <Button onClick={handleAddBlacklistChannel} size="sm" variant="destructive">

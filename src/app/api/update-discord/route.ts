@@ -20,7 +20,26 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json({ message: 'Discord webhook URL or message ID not configured.' }, { status: 200 });
     }
 
-    const players = Object.values(state.users).sort((a: any, b: any) => (b.score || 0) - (a.score || 0)) as any[];
+    // Compute scores from tagHistory (same logic as /api/tag GET)
+    const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+    for (const entry of state.tagHistory) {
+      if (entry.blocked) continue;
+      const from = entry.taggerId || entry.from;
+      const to = entry.taggedId || entry.to;
+      if (from && from !== 'system') {
+        if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 };
+        tagCounts[from].tags += 1;
+      }
+      if (to && to !== 'system' && to !== 'free-for-all') {
+        if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 };
+        tagCounts[to].tagged += 1;
+      }
+    }
+
+    const players = Object.values(state.tagPlayers).map((p: any) => {
+      const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
+      return { ...p, score: counts.tags * 100 - counts.tagged * 50, tags: counts.tags, tagged: counts.tagged };
+    }).sort((a: any, b: any) => (b.score || 0) - (a.score || 0)) as any[];
 
     const tagEvents = [...state.chatTags]
       .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
@@ -56,7 +75,7 @@ export async function POST(_req: NextRequest) {
 
     const sortedEvents = combinedEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 5);
 
-    const topTenPlayers = players.slice(0, 10);
+    const topTenPlayers = players.filter((p: any) => (p.twitchUsername || '').toLowerCase() !== 'mtman1987').slice(0, 10);
     const leaderboardString =
       topTenPlayers
         .map((p: any, i: number) => {

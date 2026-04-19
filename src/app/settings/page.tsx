@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, MessageSquare, Trash2 } from "lucide-react";
+import { AlertTriangle, MessageSquare, Trash2, Image, Trash, Download } from "lucide-react";
 
 const SettingsSchema = z.object({
   discordWebhookUrl: z.string().url("Must be a valid webhook URL.").optional().or(z.literal('')),
@@ -29,6 +29,10 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPostingToDiscord, setIsPostingToDiscord] = useState(false);
   const [isClearingAway, setIsClearingAway] = useState(false);
+  const [isFixingPlayers, setIsFixingPlayers] = useState(false);
+  const [fixResult, setFixResult] = useState<any>(null);
+  const [isPruning, setIsPruning] = useState(false);
+  const [pruneResult, setPruneResult] = useState<any>(null);
   const [supportTickets, setSupportTickets] = useState<any[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(true);
 
@@ -222,6 +226,72 @@ export default function SettingsPage() {
               <Button onClick={handleClearAllAway} disabled={isClearingAway} variant="destructive">
                 <AlertTriangle className={`mr-2 h-4 w-4 ${isClearingAway ? 'animate-spin' : ''}`} />
                 {isClearingAway ? 'Clearing...' : 'Clear All Away'}
+              </Button>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Fix missing avatars, merge duplicate players, sync bot channels.</p>
+                {fixResult && (
+                  <p className="text-xs text-green-500 mt-1">
+                    ✅ Avatars: {fixResult.avatarsFetched} fixed | Dupes: {fixResult.mergedDupes} merged | Channels: {fixResult.channelsAdded} added
+                  </p>
+                )}
+              </div>
+              <Button onClick={async () => {
+                setIsFixingPlayers(true);
+                setFixResult(null);
+                try {
+                  const res = await fetch('/api/admin/fix-players', { method: 'POST' });
+                  if (!res.ok) throw new Error('Failed');
+                  const data = await res.json();
+                  setFixResult(data);
+                  toast({ title: 'Players Fixed!', description: `Avatars: ${data.avatarsFetched}, Dupes merged: ${data.mergedDupes}` });
+                } catch (e: any) {
+                  toast({ variant: 'destructive', title: 'Fix Failed', description: e.message });
+                } finally {
+                  setIsFixingPlayers(false);
+                }
+              }} disabled={isFixingPlayers}>
+                <Image className={`mr-2 h-4 w-4 ${isFixingPlayers ? 'animate-spin' : ''}`} />
+                {isFixingPlayers ? 'Fixing...' : 'Fix Players & Avatars'}
+              </Button>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Remove orphaned bot channels that have no matching player.</p>
+                {pruneResult && (
+                  <p className="text-xs text-green-500 mt-1">
+                    ✅ Pruned {pruneResult.pruned} orphans ({pruneResult.before} → {pruneResult.after} channels, {pruneResult.players} players)
+                  </p>
+                )}
+              </div>
+              <Button onClick={async () => {
+                setIsPruning(true);
+                setPruneResult(null);
+                try {
+                  const res = await fetch('/api/admin/prune-channels', { method: 'POST' });
+                  if (!res.ok) throw new Error('Failed');
+                  const data = await res.json();
+                  setPruneResult(data);
+                  toast({ title: 'Channels Pruned!', description: `Removed ${data.pruned} orphaned channels` });
+                } catch (e: any) {
+                  toast({ variant: 'destructive', title: 'Prune Failed', description: e.message });
+                } finally {
+                  setIsPruning(false);
+                }
+              }} disabled={isPruning} variant="outline">
+                <Trash className={`mr-2 h-4 w-4 ${isPruning ? 'animate-spin' : ''}`} />
+                {isPruning ? 'Pruning...' : 'Prune Orphaned Channels'}
+              </Button>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">Download admin history and mod activity logs.</p>
+              <Button onClick={() => window.open('/api/logs', '_blank')} variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Download Logs
               </Button>
             </div>
           </CardContent>

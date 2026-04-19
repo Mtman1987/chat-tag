@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
 
 const DSH_URL = process.env.DSH_URL || 'https://discord-stream-hub-new.fly.dev';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
 function buildGameStatePayload(state: any) {
   const tagCounts: Record<string, { tags: number; tagged: number }> = {};
@@ -84,13 +85,12 @@ function buildGameStatePayload(state: any) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { message, tagger, tagged, doublePoints } = body;
+    const { tagger, tagged, doublePoints, message } = body;
 
-    // Build full game state from current data
     const state = await readAppState();
     const gameState = buildGameStatePayload(state);
 
-    // Send to DSH to update the embed
+    // 1. Refresh the DSH persistent embed
     try {
       const dshRes = await fetch(`${DSH_URL}/api/chat-tag/refresh`, {
         method: 'POST',
@@ -100,10 +100,41 @@ export async function POST(req: NextRequest) {
       if (dshRes.ok) {
         console.log('[Announce] DSH embed updated');
       } else {
-        console.error('[Announce] DSH refresh failed:', dshRes.status, await dshRes.text());
+        console.error('[Announce] DSH refresh failed:', dshRes.status);
       }
     } catch (e: any) {
       console.error('[Announce] DSH refresh error:', e.message);
+    }
+
+    // 2. Post a confirmation message to the Discord webhook
+    if (DISCORD_WEBHOOK_URL && tagger && tagged) {
+      try {
+        const icon = doublePoints ? '🔥' : '🎯';
+        const pointsNote = doublePoints ? ' for **DOUBLE POINTS**' : '';
+        const extraNote = message ? ` (${message})` : '';
+        const newIt = gameState.tag.currentIt?.twitchUsername || 'Free for all';
+
+        await fetch(DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            embeds: [{
+              title: `${icon} Tag Event!`,
+              description: `**${tagger}** tagged **${tagged}**${pointsNote}!${extraNote}`,
+              color: doublePoints ? 0xFF4500 : 0x00D9FF,
+              fields: [
+                { name: 'Now IT', value: newIt, inline: true },
+                { name: 'Players', value: `${gameState.tag.playerCount}`, inline: true },
+              ],
+              timestamp: new Date().toISOString(),
+              footer: { text: 'SPMT Chat Tag' },
+            }],
+          }),
+        });
+        console.log('[Announce] Discord webhook message sent');
+      } catch (e: any) {
+        console.error('[Announce] Discord webhook error:', e.message);
+      }
     }
 
     return NextResponse.json({ success: true });

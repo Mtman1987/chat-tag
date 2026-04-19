@@ -1,26 +1,23 @@
 import { NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
+import { lookupTwitchUsers } from '@/lib/twitch';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    const clientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID || process.env.TWITCH_CLIENT_ID;
-    const clientSecret = process.env.TWITCH_CLIENT_SECRET;
-    if (!clientId || !clientSecret) {
-      return NextResponse.json({ error: 'Missing Twitch credentials' }, { status: 500 });
-    }
+    // Pre-fetch all players that need avatar or ID resolution
+    const { readAppState } = await import('@/lib/volume-store');
+    const preState = await readAppState();
+    const allPlayers = Object.entries(preState.tagPlayers) as [string, any][];
+    const needWork = allPlayers.filter(([k, p]) => !p.avatarUrl || p.avatarUrl === '' || k.startsWith('manual_'));
+    const logins = [...new Set(needWork.map(([, p]) => (p.twitchUsername || '').toLowerCase()).filter(Boolean))];
 
-    // Get app access token
-    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: 'client_credentials' }),
-    });
-    const { access_token } = await tokenRes.json();
-    const headers = { 'Client-ID': clientId, 'Authorization': `Bearer ${access_token}` };
+    // Batch lookup via shared helper
+    const twitchUsers = await lookupTwitchUsers(logins);
+    const twitchByLogin = new Map(twitchUsers.map(u => [u.login.toLowerCase(), u]));
 
-    const result = await updateAppState(async (state) => {
+    const result = await updateAppState((state) => {
       const stats = { mergedDupes: 0, avatarsFetched: 0, channelsAdded: 0, errors: [] as string[] };
 
       // 1. Merge manual_ duplicates into their real user_ entries
@@ -56,52 +53,34 @@ export async function POST() {
         }
       }
 
-      // 2. Fetch missing avatars + resolve manual_ IDs in batches
-      const allPlayers = Object.entries(state.tagPlayers) as [string, any][];
-      const needWork = allPlayers.filter(([k, p]) => !p.avatarUrl || p.avatarUrl === '' || k.startsWith('manual_'));
-      const logins = needWork.map(([, p]) => (p.twitchUsername || '').toLowerCase()).filter(Boolean);
-      const unique = [...new Set(logins)];
+      // 2. Apply fetched avatars + resolve remaining manual_ IDs
+      for (const [key, player] of Object.entries(state.tagPlayers) as [string, any][]) {
+        const login = (player.twitchUsername || '').toLowerCase();
+        const twitchUser = twitchByLogin.get(login);
+        if (!twitchUser) continue;
 
-      for (let i = 0; i < unique.length; i += 100) {
-        const batch = unique.slice(i, i + 100);
-        const query = batch.map(l => `login=${encodeURIComponent(l)}`).join('&');
-        try {
-          const res = await fetch(`https://api.twitch.tv/helix/users?${query}`, { headers });
-          if (res.ok) {
-            const data = await res.json();
-            for (const user of data.data || []) {
-              const login = user.login.toLowerCase();
-              // Update avatar on any matching player
-              for (const [key, player] of Object.entries(state.tagPlayers) as [string, any][]) {
-                if ((player.twitchUsername || '').toLowerCase() !== login) continue;
-                if (!player.avatarUrl || player.avatarUrl === '') {
-                  player.avatarUrl = user.profile_image_url;
-                  stats.avatarsFetched++;
-                }
-                // Migrate manual_ to real user_ ID
-                if (key.startsWith('manual_')) {
-                  const realId = `user_${user.id}`;
-                  if (!state.tagPlayers[realId]) {
-                    player.id = realId;
-                    state.tagPlayers[realId] = player;
-                    delete state.tagPlayers[key];
-                    if (state.tagGame?.state?.currentIt === key) {
-                      state.tagGame.state.currentIt = realId;
-                    }
-                    for (const h of state.tagHistory) {
-                      if (h.taggerId === key) h.taggerId = realId;
-                      if (h.taggedId === key) h.taggedId = realId;
-                    }
-                    stats.mergedDupes++;
-                  }
-                }
-              }
-            }
-          }
-        } catch (e: any) {
-          stats.errors.push(`Batch ${i}: ${e.message}`);
+        if (!player.avatarUrl || player.avatarUrl === '') {
+          player.avatarUrl = twitchUser.profile_image_url;
+          stats.avatarsFetched++;
         }
-        await new Promise(r => setTimeout(r, 200));
+
+        // Migrate manual_ to real user_ ID
+        if (key.startsWith('manual_')) {
+          const realId = `user_${twitchUser.id}`;
+          if (!state.tagPlayers[realId]) {
+            player.id = realId;
+            state.tagPlayers[realId] = player;
+            delete state.tagPlayers[key];
+            if (state.tagGame?.state?.currentIt === key) {
+              state.tagGame.state.currentIt = realId;
+            }
+            for (const h of state.tagHistory) {
+              if (h.taggerId === key) h.taggerId = realId;
+              if (h.taggedId === key) h.taggedId = realId;
+            }
+            stats.mergedDupes++;
+          }
+        }
       }
 
       // 3. Ensure all players are in bot channels

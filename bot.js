@@ -1602,11 +1602,16 @@ console.log = (...args) => {
           if (liveLogins.has(pName)) continue;
           const lastChat = p.lastChatAt || 0;
           const ch = (p.lastSeenChannel || '').toLowerCase();
-          if (!ch || !liveLogins.has(ch) || (now - lastChat) > ACTIVE_THRESHOLD) continue;
-          if (!channelChatters[ch]) channelChatters[ch] = [];
-          channelChatters[ch].push(pName);
+          if ((now - lastChat) > ACTIVE_THRESHOLD) continue;
+          if (ch === 'discord') {
+            if (!channelChatters['_discord']) channelChatters['_discord'] = [];
+            channelChatters['_discord'].push(pName);
+          } else if (ch && liveLogins.has(ch)) {
+            if (!channelChatters[ch]) channelChatters[ch] = [];
+            channelChatters[ch].push(pName);
+          }
         }
-        
+
         const groups = [];
         let totalChatters = 0;
         for (const m of liveMembers) {
@@ -1616,13 +1621,16 @@ console.log = (...args) => {
           const chatterStr = chatters.length > 0 ? ` > 💬${chatters.join(', ')}` : '';
           groups.push(`🟢${login}${chatterStr}`);
         }
-        
+        const discordChatters = channelChatters['_discord'] || [];
+        if (discordChatters.length > 0) {
+          totalChatters += discordChatters.length;
+          groups.push(`🟣Discord > 💬${discordChatters.join(', ')}`);
+        }
         const MAX_LEN = 400;
         const pages = [[]];
         let currentLen = 0;
         for (const group of groups) {
           const addLen = (pages[pages.length - 1].length > 0 ? 3 : 0) + group.length;
-          if (currentLen + addLen > MAX_LEN && pages[pages.length - 1].length > 0) {
             pages.push([]);
             currentLen = 0;
           }
@@ -1749,12 +1757,17 @@ console.log = (...args) => {
         if (liveLogins.has(pName)) continue; // skip live streamers themselves
         const lastChat = p.lastChatAt || 0;
         const ch = (p.lastSeenChannel || '').toLowerCase();
-        if (!ch || !liveLogins.has(ch) || (now - lastChat) > ACTIVE_THRESHOLD) continue;
-        if (!channelChatters[ch]) channelChatters[ch] = [];
-        channelChatters[ch].push(pName);
+        if ((now - lastChat) > ACTIVE_THRESHOLD) continue;
+        if (ch === 'discord') {
+          if (!channelChatters['_discord']) channelChatters['_discord'] = [];
+          channelChatters['_discord'].push(pName);
+        } else if (ch && liveLogins.has(ch)) {
+          if (!channelChatters[ch]) channelChatters[ch] = [];
+          channelChatters[ch].push(pName);
+        }
       }
       
-      // Build grouped output: 🟢streamer > 💬chatter1, chatter2
+      // Build grouped output: 🟢streamer > 💬chatter1, chatter2 | 🟣Discord > 💬user1, user2
       const groups = [];
       let totalChatters = 0;
       for (const m of liveMembers) {
@@ -1763,6 +1776,11 @@ console.log = (...args) => {
         totalChatters += chatters.length;
         const chatterStr = chatters.length > 0 ? ` > 💬${chatters.join(', ')}` : '';
         groups.push(`🟢${login}${chatterStr}`);
+      }
+      const discordChatters = channelChatters['_discord'] || [];
+      if (discordChatters.length > 0) {
+        totalChatters += discordChatters.length;
+        groups.push(`🟣Discord > 💬${discordChatters.join(', ')}`);
       }
       
       // Fit as many groups as possible per message (Twitch 500 char limit)

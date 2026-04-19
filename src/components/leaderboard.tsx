@@ -28,7 +28,6 @@ export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
         const res = await fetch('/api/tag');
         if (res.ok) {
           const data = await res.json();
-          console.log('[Leaderboard] Fetched players:', data.players);
           console.log('[Leaderboard] Player count:', data.players?.length);
           // Ensure scores are calculated from tags/tagged counts
           const playersWithScores = (data.players || []).map((p: any) => ({
@@ -51,8 +50,8 @@ export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
   }, []);
 
   const players = tagPlayers.length > 0 ? tagPlayers : (propPlayers || []);
-  console.log('[Leaderboard] Rendering with players:', players.length);
-  const sortedPlayers = [...players].filter(p => (p.twitchUsername || p.username)?.toLowerCase() !== 'mtman1987').sort((a, b) => (b.score || 0) - (a.score || 0));
+  const sortedPlayers = [...players].filter(p => (p.twitchUsername || p.username)).sort((a, b) => (b.score || 0) - (a.score || 0));
+  const rankedPlayers = sortedPlayers.filter(p => (p.twitchUsername || p.username || '').toLowerCase() !== 'mtman1987');
 
   return (
     <Card className="bg-card/80 backdrop-blur-sm flex flex-col">
@@ -66,7 +65,7 @@ export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
             <ScrollArea className="h-56">
               <TooltipProvider>
                 <ol className="space-y-3 pr-2">
-              {sortedPlayers.map((player, index) => (
+              {rankedPlayers.map((player, index) => (
                 <li key={player.id} className="flex items-center justify-between gap-3 p-2 rounded-md transition-colors hover:bg-accent/50">
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-lg w-6 text-center">{index < 3 ? rankIcons[index] : index + 1}</span>

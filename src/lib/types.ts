@@ -1,52 +1,41 @@
 
-import { FieldValue, Timestamp } from "firebase/firestore";
-import type { Timestamp as AdminTimestamp } from 'firebase-admin/firestore';
-
-
 export type Player = {
   id: string;
   twitchUsername: string;
   avatarUrl: string;
-  score: number; // In-app game points
-  communityPoints: number; // Points from external system
+  score: number;
+  communityPoints: number;
   isIt: boolean;
   isActive: boolean;
-  tagImmunityUntil?: Timestamp | null;
+  tagImmunityUntil?: number | null;
   lastTaggedInStreamId?: string | null;
-  sleepingImmunity?: boolean; // New: sleeping immunity
-  offlineImmunity?: boolean; // New: offline immunity
-  noTagbackFrom?: string | null; // New: can't be tagged by this user ID
-  timedImmunityUntil?: Timestamp | null; // New: 20-min timed immunity
+  sleepingImmunity?: boolean;
+  offlineImmunity?: boolean;
+  noTagbackFrom?: string | null;
+  timedImmunityUntil?: number | null;
 };
-
-// Firestore Admin version of Player
-export type AdminPlayer = Omit<Player, 'tagImmunityUntil' | 'timedImmunityUntil'> & {
-  tagImmunityUntil?: AdminTimestamp | null;
-  timedImmunityUntil?: AdminTimestamp | null;
-};
-
 
 export type BingoCardState = {
   phrases: (string | null)[];
-  covered: (string | null)[]; // Stores the ID of the player who claimed the square
-  lastGenerated: FieldValue;
+  covered: (string | null)[];
+  lastGenerated: number;
 };
 
 export type GameSettings = {
-    twitchClientId?: string;
-    twitchClientSecret?: string;
-    discordBotToken?: string;
-    discordServerId?: string;
-    twitchBotToken?: string;
-    discordChannelId?: string;
-    discordWebhookUrl?: string;
-    discordLeaderboardMessageId?: string;
-    externalApiUrl?: string;
-    tagSuccessPoints?: number;
-    tagPenaltyPoints?: number;
-    bingoSquarePoints?: number;
-    bingoWinPoints?: number;
-    bingoCardsCompleted?: number;
+  twitchClientId?: string;
+  twitchClientSecret?: string;
+  discordBotToken?: string;
+  discordServerId?: string;
+  twitchBotToken?: string;
+  discordChannelId?: string;
+  discordWebhookUrl?: string;
+  discordLeaderboardMessageId?: string;
+  externalApiUrl?: string;
+  tagSuccessPoints?: number;
+  tagPenaltyPoints?: number;
+  bingoSquarePoints?: number;
+  bingoWinPoints?: number;
+  bingoCardsCompleted?: number;
 };
 
 export type ChatTagEvent = {
@@ -54,20 +43,12 @@ export type ChatTagEvent = {
   taggerId: string;
   taggedId: string;
   streamerId: string;
-  timestamp: Timestamp;
-};
-
-export type AdminChatTagEvent = Omit<ChatTagEvent, 'timestamp'> & {
-  timestamp: AdminTimestamp;
+  timestamp: number;
 };
 
 export type BingoWinEvent = {
   id: string;
   userId: string;
   points: number;
-  timestamp: Timestamp;
-};
-
-export type AdminBingoWinEvent = Omit<BingoWinEvent, 'timestamp'> & {
-  timestamp: AdminTimestamp;
+  timestamp: number;
 };

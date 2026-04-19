@@ -148,12 +148,6 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
   }, []);
 
   // Mock players if none provided (fallback)
-  const mockPlayers: GamePlayer[] = [
-    { id: 'player1', username: 'mtman1987', avatar: 'https://picsum.photos/40/40?1', isIt: false, isActive: false },
-    { id: 'player2', username: 'athenabot87', avatar: 'https://picsum.photos/40/40?2', isIt: false, isActive: true },
-    { id: 'player3', username: 'viewer123', avatar: 'https://picsum.photos/40/40?3', isIt: false, isActive: false },
-  ];
-
   const fallbackPlayers: GamePlayer[] =
     players.length > 0
       ? players.map((player) => ({
@@ -163,7 +157,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
           isIt: player.isIt,
           isActive: player.isActive,
         }))
-      : mockPlayers;
+      : [];
   const availablePlayers = communityPlayers.length > 0 ? communityPlayers : fallbackPlayers;
   // Convert Discord players to display format
   const gamePlayers = gameState.players.map((p: any) => ({
@@ -175,7 +169,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
   }));
   
   // Get current user from user profile API
-  const [currentUsername, setCurrentUsername] = useState<string>('mtman1987');
+  const [currentUsername, setCurrentUsername] = useState<string>('');
   
   useEffect(() => {
     const fetchUserProfile = async () => {

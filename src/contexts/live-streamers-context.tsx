@@ -28,15 +28,17 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
 
   const fetchStreamers = useCallback(async () => {
     try {
-      const channelsRes = await fetch('/api/bot/channels');
-      if (!channelsRes.ok) return;
+      // Read from tagPlayers as the single source of truth
+      const tagRes = await fetch('/api/tag', { cache: 'no-store' });
+      if (!tagRes.ok) return;
+      const tagData = await tagRes.json();
+      const players: any[] = tagData.players || [];
 
-      const { channels } = await channelsRes.json();
-      const channelNames = Array.isArray(channels) 
-        ? channels.map(c => typeof c === 'string' ? c : c.name)
-        : [];
-      
-      if (channelNames.length === 0) {
+      const playerUsernames = players
+        .map((p: any) => (p.twitchUsername || p.username || '').toLowerCase())
+        .filter(Boolean);
+
+      if (playerUsernames.length === 0) {
         setLiveStreamers([]);
         setAllCommunityMembers([]);
         return;
@@ -45,7 +47,7 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
       const liveRes = await fetch('/api/twitch/live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames: channelNames })
+        body: JSON.stringify({ usernames: playerUsernames })
       });
 
       if (liveRes.ok) {
@@ -53,15 +55,16 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
         const safeAllUsers = allUsers || [];
         const safeLiveUsers = liveUsers || [];
 
-        const communityMembers: LiveStreamer[] = channelNames.map((channelName: string) => {
-          const liveUser = safeLiveUsers.find((u: any) => u?.username?.toLowerCase() === channelName?.toLowerCase());
-          let twitchUser = safeAllUsers.find((u: any) => u?.username?.toLowerCase() === channelName?.toLowerCase());
-          if (!twitchUser) {
-            twitchUser = liveUser;
-          }
+        const communityMembers: LiveStreamer[] = players.map((player: any) => {
+          const channelName = (player.twitchUsername || player.username || '').toLowerCase();
+          const liveUser = safeLiveUsers.find((u: any) => u?.username?.toLowerCase() === channelName);
+          let twitchUser = safeAllUsers.find((u: any) => u?.username?.toLowerCase() === channelName);
+          if (!twitchUser) twitchUser = liveUser;
           const isLive = Boolean(liveUser);
-          const avatar = twitchUser?.profile_image_url || `https://ui-avatars.com/api/?name=${channelName}&background=random`;
-          
+          const avatar = twitchUser?.profile_image_url
+            || player.avatarUrl
+            || `https://ui-avatars.com/api/?name=${channelName}&background=random`;
+
           return {
             id: channelName,
             username: twitchUser?.displayName || liveUser?.displayName || channelName,
