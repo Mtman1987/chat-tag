@@ -8,6 +8,7 @@ const env = process.env;
 
 const API_BASE = process.env.API_BASE || 'https://chat-tag-new.fly.dev';
 const BLACKLIST = ['streamelements', 'nightbot', 'moobot', 'fossabot'];
+const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
 const AUTO_ROTATE_MINUTES = 40;
 const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
@@ -125,6 +126,17 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Forward Twitch events to DSH for leaderboard points (fire and forget)
+function forwardToDSH(eventData) {
+  fetch(`${DSH_API_BASE}/api/twitch/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(eventData),
+  }).then(r => {
+    if (!r.ok) console.log(`[DSH] Forward failed: ${r.status}`);
+  }).catch(e => console.error('[DSH] Forward error:', e.message));
+}
+
 function dedupeSharedChatChannels(members) {
   const groups = new Map();
   for (const member of members) {
@@ -237,14 +249,8 @@ let liveMembersCache = {
 async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, attempt = 0) {
   console.log(`[Bot] sendMessageViaAPI called: channel=${targetChannel}, forSourceOnly=${forSourceOnly}`);
   const clientId = getTwitchClientId();
-  // Use the bot's user token — Helix POST /chat/messages requires user access token
-  const botToken = env.TWITCH_BOT_TOKEN;
-  if (!botToken) {
-    console.log('[Bot] No bot token available for API send');
-    return { success: false, reason: 'no-token' };
-  }
   
-  // Get broadcaster ID from username
+  // Get app access token — required for for_source_only support
   if (!appToken) appToken = await getAppAccessToken();
   const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${targetChannel}`, {
     headers: {
@@ -276,20 +282,22 @@ async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, 
   }
   
   console.log(`[Bot] Sending message to broadcaster ${broadcasterId} from ${senderId}`);
-  // Send message using bot's user token
+  // Use app access token for for_source_only support; fall back to bot user token
+  const tokenToUse = forSourceOnly ? appToken : (env.TWITCH_BOT_TOKEN || appToken);
+  const body = {
+    broadcaster_id: broadcasterId,
+    sender_id: senderId,
+    message: message
+  };
+  if (forSourceOnly) body.for_source_only = true;
   const res = await fetch('https://api.twitch.tv/helix/chat/messages', {
     method: 'POST',
     headers: {
       'Client-ID': clientId,
-      'Authorization': `Bearer ${botToken}`,
+      'Authorization': `Bearer ${tokenToUse}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      broadcaster_id: broadcasterId,
-      sender_id: senderId,
-      message: message,
-      for_source_only: forSourceOnly
-    })
+    body: JSON.stringify(body)
   });
   
   console.log(`[Bot] API response status: ${res.status}`);
@@ -311,9 +319,13 @@ async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, 
     }
 
     if (attempt < 1) {
-      console.log('[Bot] Bot token may be expired, refreshing and retrying once...');
+      console.log('[Bot] Token may be expired, refreshing and retrying once...');
       try {
-        await getValidToken();
+        if (forSourceOnly) {
+          appToken = await getAppAccessToken();
+        } else {
+          await getValidToken();
+        }
       } catch (e) {
         console.error('[Bot] Token refresh failed:', e.message);
       }
@@ -826,12 +838,12 @@ console.log = (...args) => {
   }, 60000);
 
   // ── Pass granting + announcement helper ──
-  async function announceGrantedPass(channel, login, reason) {
+  async function announceGrantedPass(channel, login, reason, passCount) {
     const targetChannel = String(channel || '').replace(/^#/, '').toLowerCase();
     if (!targetChannel || !login) return;
 
     const reasonLabel = reason ? ` for ${reason}` : '';
-    const message = `🎟️ Thanks for the support, @${login}! Here's an SPMT Pass${reasonLabel}! 🎁 Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS — even if you're not it!`;
+    const message = `🎟️ Thanks for the support, @${login}! Here's an SPMT Pass${reasonLabel}! 🎁 You now have ${passCount || 1}/3 passes. Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS — even if you're not it!`;
     await sendChatWithSharedFallback(client, targetChannel, message, { warnOnFallback: true });
   }
 
@@ -843,8 +855,8 @@ console.log = (...args) => {
       body: JSON.stringify({ action: 'grant-pass', userId, twitchUsername: login, reason })
     }).catch(() => null);
     if (result?.granted) {
-      console.log(`[Event] ✅ Pass granted to ${login}`);
-      await announceGrantedPass(channel, login, reason);
+      console.log(`[Event] ✅ Pass granted to ${login} (${result.passCount}/3)`);
+      await announceGrantedPass(channel, login, reason, result.passCount);
     } else {
       console.log(`[Event] ⏭️ Pass not granted to ${login}: ${result?.reason || 'already has one / not a player'}`);
     }
@@ -863,6 +875,7 @@ console.log = (...args) => {
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
     console.log(`[TMI-Event] Gift sub: ${login} gifted ${numbOfSubs} subs`);
+    forwardToDSH({ type: 'gift_sub', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', ''), quantity: numbOfSubs });
     await grantPassForEvent(channel, uid, login, `gifted ${numbOfSubs} subs (tmi)`);
   });
 
@@ -871,6 +884,7 @@ console.log = (...args) => {
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
     console.log(`[TMI-Event] Subscription: ${login}`);
+    forwardToDSH({ type: 'subscription', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', '') });
     await grantPassForEvent(channel, uid, login, `subscribed (tmi)`);
   });
 
@@ -879,6 +893,7 @@ console.log = (...args) => {
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
     console.log(`[TMI-Event] Resub: ${login} (${months} months)`);
+    forwardToDSH({ type: 'subscription', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', '') });
     await grantPassForEvent(channel, uid, login, `resubscribed ${months}mo (tmi)`);
   });
 
@@ -888,6 +903,7 @@ console.log = (...args) => {
     const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
     if (!login || !uid) return;
     console.log(`[TMI-Event] Cheer: ${login} cheered ${bits} bits`);
+    forwardToDSH({ type: 'cheer', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', ''), bits });
     if (bits < 100) return;
     await grantPassForEvent(channel, uid, login, `cheered ${bits} bits (tmi)`);
   });
@@ -895,6 +911,7 @@ console.log = (...args) => {
   client.on('raided', async (channel, username, viewers) => {
     const login = (username || '').toLowerCase();
     console.log(`[TMI-Event] Raid: ${login} raided with ${viewers} viewers`);
+    forwardToDSH({ type: 'raid', twitchLogin: login, username: login, channel: channel.replace('#', ''), viewers });
     // We don't have user-id from raided event, look it up
     const twitchUser = await helixGetUser(login);
     if (!twitchUser) return;
@@ -1122,6 +1139,7 @@ console.log = (...args) => {
     const msgBits = parseInt(tags.bits || '0');
     if (msgBits > 0 && senderLogin && senderUserId) {
       console.log(`[Cheer-Detect] ${senderLogin} cheered ${msgBits} bits in ${channel}`);
+      forwardToDSH({ type: 'cheer', twitchLogin: senderLogin, twitchId: senderUserId, username: senderLogin, channel: channel.replace('#', ''), bits: msgBits });
       if (msgBits >= 100) {
         grantPassForEvent(channel.replace('#', ''), senderUserId, senderLogin, `cheered ${msgBits} bits`);
       }
@@ -1134,11 +1152,13 @@ console.log = (...args) => {
       const giftCount = tags['msg-param-mass-gift-count'] || '1';
       if (msgType === 'submysterygift') {
         console.log(`[Sub-Detect] ${senderLogin} gifted ${giftCount} subs in ${channel}`);
+        forwardToDSH({ type: 'gift_sub', twitchLogin: senderLogin, twitchId: senderUserId, username: senderLogin, channel: channel.replace('#', ''), quantity: parseInt(giftCount) });
         grantPassForEvent(channel.replace('#', ''), senderUserId, senderLogin, `gifted ${giftCount} subs`);
       } else if (msgType === 'subgift') {
         // individual gift sub notification — skip, submysterygift covers the gifter
       } else {
         console.log(`[Sub-Detect] ${senderLogin} ${msgType} (${months}mo) in ${channel}`);
+        forwardToDSH({ type: 'subscription', twitchLogin: senderLogin, twitchId: senderUserId, username: senderLogin, channel: channel.replace('#', '') });
         grantPassForEvent(channel.replace('#', ''), senderUserId, senderLogin, `${msgType} ${months}mo`);
       }
     }
@@ -1154,6 +1174,8 @@ console.log = (...args) => {
         ? await resolveChannelFromRoomId(srcRoomId, rawCh)
         : rawCh;
       const activityChannel = (resolvedChannel !== senderLogin) ? resolvedChannel : undefined;
+      // Forward chat to DSH for leaderboard points
+      forwardToDSH({ type: 'chat', twitchLogin: senderLogin, twitchId: tags['user-id'], username: tags['display-name'] || senderLogin, channel: resolvedChannel });
       apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1631,6 +1653,7 @@ console.log = (...args) => {
         let currentLen = 0;
         for (const group of groups) {
           const addLen = (pages[pages.length - 1].length > 0 ? 3 : 0) + group.length;
+          if (currentLen + addLen > MAX_LEN && pages[pages.length - 1].length > 0) {
             pages.push([]);
             currentLen = 0;
           }
@@ -1819,7 +1842,7 @@ console.log = (...args) => {
       }
       const sorted = (data?.players || []).sort((a, b) => (b.score || 0) - (a.score || 0));
       const rank = sorted.findIndex(p => p.id === userId) + 1;
-      reply( `@${user} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.hasPass ? 'Ready' : 'None'}`);
+      reply( `@${user} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || (player.hasPass ? 1 : 0)}/${3}`);
     }
     
     else if (cmd === 'rank') {
@@ -2050,7 +2073,9 @@ console.log = (...args) => {
       if (res?.granted) {
         reply(`🎟️ @${target} got an SPMT Pass from ${user}! 🎁 Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
       } else if (res?.reason === 'cooldown') {
-        reply(`@${user} ${target} already earned a pass in the last 24h (${res.hoursLeft}h left).`);
+        reply(`@${user} ${target} already earned a pass in the last 24h (${res.hoursLeft}h left). They have ${res.passCount || 0}/3 passes.`);
+      } else if (res?.reason === 'max-passes') {
+        reply(`@${user} ${target} already has the max 3/3 passes!`);
       } else {
         reply(`@${user} ${target} already has a pass or isn't in the game.`);
       }

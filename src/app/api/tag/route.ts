@@ -76,7 +76,7 @@ export async function GET() {
     players = players.map((p: any) => {
       const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
       const score = counts.tags * 100 - counts.tagged * 50;
-      return { ...p, score, tags: counts.tags, tagged: counts.tagged, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: Boolean(p.hasPass), passGrantedAt: p.passGrantedAt || 0 };
+      return { ...p, score, tags: counts.tags, tagged: counts.tagged, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: (p.passCount || (p.hasPass ? 1 : 0)) > 0, passCount: p.passCount || (p.hasPass ? 1 : 0), passGrantedAt: p.passGrantedAt || 0 };
     });
 
     const userMap: Record<string, string> = {};
@@ -139,19 +139,30 @@ export async function POST(req: NextRequest) {
 
     if (action === 'grant-pass') {
       const PASS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+      const MAX_PASSES = 3;
       const result = await updateAppState((state) => {
         const player = state.tagPlayers[userId];
         if (!player) return { granted: false, reason: 'not-a-player' };
         
-        const lastGranted = player.passGrantedAt || 0;
-        if (Date.now() - lastGranted < PASS_COOLDOWN_MS) {
-          return { granted: false, reason: 'cooldown', hoursLeft: Math.ceil((PASS_COOLDOWN_MS - (Date.now() - lastGranted)) / 3600000) };
+        // Migrate old boolean hasPass to passCount
+        if (player.passCount === undefined) {
+          player.passCount = player.hasPass ? 1 : 0;
         }
         
+        if (player.passCount >= MAX_PASSES) {
+          return { granted: false, reason: 'max-passes', passCount: player.passCount };
+        }
+        
+        const lastGranted = player.passGrantedAt || 0;
+        if (Date.now() - lastGranted < PASS_COOLDOWN_MS) {
+          return { granted: false, reason: 'cooldown', hoursLeft: Math.ceil((PASS_COOLDOWN_MS - (Date.now() - lastGranted)) / 3600000), passCount: player.passCount };
+        }
+        
+        player.passCount = (player.passCount || 0) + 1;
         player.hasPass = true;
         player.passGrantedAt = Date.now();
         player.passReason = body.reason || 'unknown';
-        return { granted: true };
+        return { granted: true, passCount: player.passCount };
       });
       return NextResponse.json({ success: true, ...result });
     }
@@ -162,7 +173,11 @@ export async function POST(req: NextRequest) {
         const target = state.tagPlayers[targetUserId];
         if (!tagger) return { status: 404, error: 'You are not in the game!' };
         if (!target) return { status: 404, error: 'Target not in the game!' };
-        if (!tagger.hasPass) return { status: 400, error: 'You don\'t have a pass! Earn one by gifting a sub, cheering 100+ bits, or joining a hype train.' };
+        // Migrate old boolean hasPass to passCount
+        if (tagger.passCount === undefined) {
+          tagger.passCount = tagger.hasPass ? 1 : 0;
+        }
+        if (tagger.passCount <= 0) return { status: 400, error: 'You don\'t have a pass! Earn one by gifting a sub, cheering 100+ bits, or joining a hype train.' };
         if (userId === targetUserId) return { status: 400, error: 'You can\'t pass to yourself!' };
         
         const immuneCheck = isPlayerImmune(target, userId);
@@ -176,7 +191,8 @@ export async function POST(req: NextRequest) {
         }
         
         // Use the pass — always double points
-        tagger.hasPass = false;
+        tagger.passCount = (tagger.passCount || 1) - 1;
+        tagger.hasPass = tagger.passCount > 0;
         tagger.passUsedAt = Date.now();
         
         // Record in history

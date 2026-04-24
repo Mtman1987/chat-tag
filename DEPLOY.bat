@@ -13,7 +13,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-cd /d "c:\Users\mtman\Desktop\worksInProgress\chat-tag"
+cd /d "c:\Users\mtman\Desktop\finished\chat-tag"
 
 echo [1/2] Deploying chat-tag-new (web @ 3000)...
 call fly deploy -c fly.toml -a chat-tag-new
