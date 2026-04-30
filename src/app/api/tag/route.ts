@@ -624,6 +624,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'reset-scores') {
+      await updateAppState((state) => {
+        // Reset all player scores
+        for (const playerId in state.tagPlayers) {
+          state.tagPlayers[playerId].score = 0;
+        }
+        // Clear tag history to reset tag-based points
+        state.tagHistory = [];
+        // Reset game state
+        state.tagGame.state.lastTagTime = null;
+        state.tagGame.state.it = null;
+        // Log the reset
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'reset-scores',
+          performedBy: performedBy || 'unknown',
+          targetUser: 'all',
+          details: 'Reset all scores and tag history',
+          timestamp: Date.now(),
+        });
+      });
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'award-points') {
       const points = parseInt(body.points) || 0;
       if (points === 0) return NextResponse.json({ error: 'Points must be non-zero' }, { status: 400 });

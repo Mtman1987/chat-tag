@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       id: p.id,
       twitchUsername: p.twitchUsername || p.username,
       avatarUrl: p.avatarUrl || '',
-      score: c.tags * 100 - c.tagged * 50,
+      score: c.tags * 100 - c.tagged * 50 + (p.score || 0),
       tags: c.tags,
       tagged: c.tagged,
       isIt: Boolean(p.isIt),

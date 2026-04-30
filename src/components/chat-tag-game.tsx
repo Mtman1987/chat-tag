@@ -516,6 +516,22 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             }}>
             <Clock className="mr-2 h-4 w-4" /> Trigger Timeout
             </Button>
+            <Button variant="destructive" size="sm" onClick={async () => {
+              if (!confirm('Are you sure you want to reset all scores? This will clear all points and tag history.')) return;
+              try {
+                await fetch('/api/tag', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'reset-scores' })
+                });
+                setTimeout(fetchState, 500);
+                toast({ title: 'Scores Reset', description: 'All points and tag history have been cleared.' });
+              } catch (e) {
+                toast({ variant: 'destructive', title: 'Failed to reset scores' });
+              }
+            }}>
+            🔄 Reset Scores
+            </Button>
             <Button variant="ghost" size="icon" onClick={fetchState}>
                 <RefreshCw className="h-4 w-4" />
             </Button>
