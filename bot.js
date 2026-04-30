@@ -1436,7 +1436,9 @@ console.log = (...args) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'pin-tag', userId, targetUserId: 'fake_scarlett', targetUsername: 'scarlett_ai420' })
           });
-          reply( `🎯 ${user} tagged @scarlett_ai420! (Pin has tagged them ${pinRes.count} times total)`);
+          if (!isMuted) {
+            reply( `🎯 ${user} tagged @scarlett_ai420! (Pin has tagged them ${pinRes.count} times total)`);
+          }
           return;
         }
         
@@ -1467,19 +1469,25 @@ console.log = (...args) => {
           });
           
           if (realTagRes?.error) {
-            reply( `@${user} ${realTagRes.error}`);
+            if (!isMuted) {
+              reply( `@${user} ${realTagRes.error}`);
+            }
           } else {
             const msg = realTagRes.doublePoints
               ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! (Pin has tagged them ${pinRes.count} times total)`
               : `🎯 ${user} tagged @${target} who is now it! (Pin has tagged them ${pinRes.count} times total)`;
-            await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
+            if (!isMuted) {
+              await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
+            }
             if (!isMuted) {
               await broadcastToPlayers(client, msg, channelName);
             }
           }
         } else {
           // Just pin tag, no real tag
+          if (!isMuted) {
             reply( `🎯 ${user} tagged @${target}! (Pin has tagged them ${pinRes.count} times total)`);
+          }
         }
         return;
       }
@@ -1518,7 +1526,9 @@ console.log = (...args) => {
           ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! 🔥 Type "spmt join" to play!`
           : `🎯 ${user} tagged @${target} who is now it! Type "spmt join" to play!`;
         console.log(`[Bot] Sending tag message in current channel`);
-        await reply( msg);
+        if (!isMuted) {
+          await reply( msg);
+        }
         if (!isMuted) {
           console.log('[Bot] Broadcasting to other players...');
           await broadcastToPlayers(client, msg, channelName);
@@ -1949,8 +1959,10 @@ console.log = (...args) => {
         return;
       }
       // Toggle overlay mode: mute chat + enable overlay, or unmute + re-greet
+      const channelBroadcaster = await helixGetUser(channelName);
+      const channelUserId = channelBroadcaster ? `user_${channelBroadcaster.id}` : userId;
       const playersData = await apiCall('/api/tag');
-      const mePlayer = playersData?.players?.find(p => p.id === userId);
+      const mePlayer = playersData?.players?.find(p => p.id === channelUserId);
       const isCurrentlyOverlay = mePlayer?.overlayMode;
       
       if (isCurrentlyOverlay) {
@@ -1963,7 +1975,7 @@ console.log = (...args) => {
         await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'set-overlay', userId, enabled: false })
+          body: JSON.stringify({ action: 'set-overlay', userId: channelUserId, enabled: false })
         });
         reply(`🏷️ Chat Tag by MtMan1987 is active! Type "spmt join" to play, "spmt help" for commands. NEW: "spmt mute" for OBS overlay mode!`);
       } else {
@@ -1976,9 +1988,9 @@ console.log = (...args) => {
         await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'set-overlay', userId, enabled: true })
+          body: JSON.stringify({ action: 'set-overlay', userId: channelUserId, enabled: true })
         });
-        reply(`@${user} 📺 Overlay mode ON — bot muted in chat. Add to OBS: ${API_BASE}/overlay/${userId} | "spmt mute" again to go back to chat.`);
+        reply(`@${user} 📺 Overlay mode ON — bot muted in chat. Add to OBS: ${API_BASE}/overlay/${channelUserId} | "spmt mute" again to go back to chat.`);
       }
     }
     
@@ -1988,6 +2000,8 @@ console.log = (...args) => {
         return;
       }
       // Alias: same as mute toggle when overlay is on
+      const channelBroadcaster = await helixGetUser(channelName);
+      const channelUserId = channelBroadcaster ? `user_${channelBroadcaster.id}` : userId;
       await apiCall('/api/bot/unmute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1996,7 +2010,7 @@ console.log = (...args) => {
       await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set-overlay', userId, enabled: false })
+        body: JSON.stringify({ action: 'set-overlay', userId: channelUserId, enabled: false })
       });
       reply(`🏷️ Chat Tag by MtMan1987 is active! Type "spmt join" to play, "spmt help" for commands. NEW: "spmt mute" for OBS overlay mode!`);
     }

@@ -708,6 +708,28 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                       >
                         👑
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        title="Award bonus points"
+                        onClick={async () => {
+                          const points = prompt(`Award points to ${player.username}:`, '100');
+                          if (!points || isNaN(Number(points))) return;
+                          try {
+                            await fetch('/api/tag', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'award-points', userId: player.id, points: parseInt(points), performedBy: currentUsername })
+                            });
+                            toast({ title: 'Points Awarded', description: `Gave ${points} points to ${player.username}` });
+                            setTimeout(fetchState, 500);
+                          } catch (e) {
+                            toast({ variant: 'destructive', title: 'Failed to award points' });
+                          }
+                        }}
+                      >
+                        💰
+                      </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button

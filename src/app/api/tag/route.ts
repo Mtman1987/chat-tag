@@ -624,6 +624,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'award-points') {
+      const points = parseInt(body.points) || 0;
+      if (points === 0) return NextResponse.json({ error: 'Points must be non-zero' }, { status: 400 });
+      await updateAppState((state) => {
+        const player = state.tagPlayers?.[userId];
+        if (!player) return { error: 'Player not found' };
+        player.score = (player.score || 0) + points;
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'award-points',
+          performedBy: performedBy || 'unknown',
+          targetUser: player.twitchUsername || userId,
+          details: `Awarded ${points} points`,
+          timestamp: Date.now(),
+        });
+      });
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'set-overlay') {
       const enabled = body.enabled !== false;
       await updateAppState((state) => {
