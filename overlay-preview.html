@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Chat Tag Overlay Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; width: 100vw; height: 100vh; position: relative; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #fff; aspect-ratio: 16/9; }
+
+  .broadcast {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 50; opacity: 0; pointer-events: none; padding: 3%;
+  }
+  .broadcast.active { opacity: 1; pointer-events: auto; animation: broadcastIn 0.3s ease-out; }
+  .broadcast .glow { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+  .broadcast .icon {
+    font-size: min(21.6vw, 21.6vh); margin-bottom: 1vh;
+    filter: drop-shadow(0 0 3.6vw var(--glow)); animation: iconBounce 0.4s ease-out;
+  }
+  .broadcast.ffa .icon { animation: pulse 0.6s ease-in-out infinite alternate; }
+  .broadcast .line {
+    font-size: min(9.6vw, 10.8vh); font-weight: 900; text-align: center;
+    text-shadow: 0 0 4.8vw var(--glow), 0 0.4vh 1.2vh rgba(0,0,0,0.9);
+    margin-bottom: 0.3vh; animation: lineSlide 0.3s ease-out both;
+    line-height: 1.1; width: 100%; word-wrap: break-word;
+  }
+  .broadcast .line.sub { font-size: min(7.2vw, 8.4vh); font-weight: 700; animation-delay: 0.08s; }
+  .broadcast .line.hist { font-size: min(7.2vw, 8.4vh); font-weight: 700; text-align: left; width: 100%; padding: 0.3vh 2%; }
+  .broadcast .accent {
+    width: 40%; height: 0.6vh; margin-top: 1.5vh;
+    background: linear-gradient(90deg, transparent, var(--color), transparent);
+    animation: lineGrow 0.5s ease-out 0.2s both;
+  }
+
+  .bottom-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 48%;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    z-index: 20; display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .bottom-bar.dimmed { opacity: 0.12; transform: translateY(5%); }
+
+  .bar-status {
+    padding: 1.8% 3%; display: flex; align-items: center; gap: 2.4%;
+    border-top: 0.6vh solid var(--bar-color);
+  }
+  .bar-status.ffa { background: linear-gradient(180deg, #ff450022, #ff450066); }
+  .bar-status.it { background: linear-gradient(180deg, #00d9ff11, #00d9ff44); }
+  .bar-status .big-icon { font-size: min(12vw, 14.4vh); }
+  .bar-status .it-label { font-size: min(4.2vw, 4.2vh); opacity: 0.5; text-transform: uppercase; letter-spacing: 0.36vw; }
+  .bar-status .it-name { font-size: min(9.6vw, 12vh); font-weight: 900; text-shadow: 0 0 2.4vw rgba(0,217,255,0.4); line-height: 1; }
+  .bar-status .ffa-title { font-size: min(9.6vw, 12vh); font-weight: 900; color: #ff4500; text-shadow: 0 0 2.4vw rgba(255,69,0,0.5); line-height: 1; }
+  .bar-status .ffa-sub { font-size: min(4.2vw, 4.8vh); opacity: 0.8; }
+  .bar-status .elapsed { font-size: min(3.6vw, 3.6vh); opacity: 0.4; }
+  .bar-status .players { font-size: min(3.6vw, 3.6vh); opacity: 0.4; margin-left: auto; }
+
+  .bar-me {
+    padding: 1.8% 3%;
+    background: linear-gradient(180deg, rgba(0,0,0,0.3), rgba(0,0,0,0.6));
+    display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    width: 100%;
+  }
+  .bar-me .chunk {
+    font-size: min(6vw, 7.2vh); font-weight: 800; white-space: nowrap;
+  }
+  .bar-me .dim { opacity: 0.45; }
+  .bar-me .gold { color: #ffd700; }
+  .bar-me .sep { opacity: 0.2; margin: 0 min(1.2vw, 1.2vh); }
+
+  .controls {
+    position: fixed; top: 8px; right: 8px; z-index: 200;
+    background: rgba(0,0,0,0.9); border-radius: 8px; padding: 10px;
+    font-size: 11px; display: flex; flex-direction: column; gap: 4px; border: 1px solid #333;
+  }
+  .controls button {
+    background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;
+    padding: 5px 10px; cursor: pointer; font-size: 11px;
+  }
+  .controls button:hover { background: #555; }
+  .controls .hint { opacity: 0.4; font-size: 9px; margin-top: 4px; }
+
+  @keyframes broadcastIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes iconBounce { 0% { transform: scale(0.3) rotate(-10deg); opacity: 0; } 60% { transform: scale(1.15) rotate(3deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+  @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.2); } }
+  @keyframes lineSlide { 0% { opacity: 0; transform: translateY(15%); } 100% { opacity: 1; transform: translateY(0); } }
+  @keyframes lineGrow { 0% { width: 0; opacity: 0; } 100% { width: 40%; opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="broadcast" id="broadcast">
+  <div class="glow" id="broadcastGlow"></div>
+  <div class="icon" id="broadcastIcon"></div>
+  <div id="broadcastLines"></div>
+  <div class="accent" id="broadcastAccent"></div>
+</div>
+
+<div class="bottom-bar" id="bottomBar">
+  <div class="bar-status it" id="barStatus" style="--bar-color: #00d9ff">
+    <span class="big-icon">🎯</span>
+    <div>
+      <div class="it-label">IT</div>
+      <div class="it-name">👑 kyouya66</div>
+    </div>
+    <div class="elapsed">12m</div>
+    <div class="players">112 players</div>
+  </div>
+  <div class="bar-me">
+    <span class="chunk">mtman1987 <span class="dim">#3</span></span>
+    <span class="chunk">850 <span class="dim">pts</span><span class="sep">·</span>14 <span class="dim">tags</span><span class="sep">·</span>6 <span class="dim">tagged</span><span class="sep">·</span><span class="gold">🎟️2</span><span class="sep">·</span><span class="gold">🏆1</span></span>
+  </div>
+</div>
+
+<div class="controls">
+  <button onclick="simTag()">🎯 Tag</button>
+  <button onclick="simDoubleTag()">🔥 Double Tag</button>
+  <button onclick="simFFA()">🔥 FFA</button>
+  <button onclick="simNewIt()">🎯 New IT</button>
+  <button onclick="simHistory()">📜 History</button>
+  <button onclick="toggleBarMode()">Toggle Bar</button>
+  <div class="hint">BG is transparent in OBS</div>
+</div>
+
+<script>
+var broadcastEl = document.getElementById('broadcast');
+var broadcastGlow = document.getElementById('broadcastGlow');
+var broadcastIcon = document.getElementById('broadcastIcon');
+var broadcastLines = document.getElementById('broadcastLines');
+var broadcastAccent = document.getElementById('broadcastAccent');
+var bottomBar = document.getElementById('bottomBar');
+var barStatus = document.getElementById('barStatus');
+var broadcastTimeout = null;
+var isFFA = false;
+
+function fireBroadcast(opts) {
+  if (broadcastTimeout) clearTimeout(broadcastTimeout);
+  bottomBar.classList.add('dimmed');
+  broadcastEl.classList.remove('active');
+  void broadcastEl.offsetWidth;
+  broadcastEl.style.setProperty('--glow', opts.glow);
+  broadcastEl.style.setProperty('--color', opts.color);
+  broadcastEl.className = 'broadcast active' + (opts.type === 'ffa' ? ' ffa' : '');
+  broadcastGlow.style.background = 'radial-gradient(ellipse at center, ' + opts.glow + '22 0%, transparent 70%)';
+  broadcastIcon.textContent = opts.icon;
+  broadcastIcon.style.fontSize = (opts.type === 'history') ? 'min(18vw,18vh)' : 'min(21.6vw,21.6vh)';
+  broadcastLines.innerHTML = '';
+  opts.lines.forEach(function(line, i) {
+    var div = document.createElement('div');
+    div.className = 'line' + (i > 0 && opts.type !== 'history' ? ' sub' : '') + (opts.type === 'history' ? ' hist' : '');
+    div.style.animationDelay = (i * 0.06) + 's';
+    div.textContent = line;
+    broadcastLines.appendChild(div);
+  });
+  broadcastAccent.style.background = 'linear-gradient(90deg, transparent, ' + opts.color + ', transparent)';
+  broadcastTimeout = setTimeout(function() {
+    broadcastEl.classList.remove('active');
+    setTimeout(function() { bottomBar.classList.remove('dimmed'); }, 400);
+  }, opts.duration || 6000);
+}
+
+function simTag() {
+  fireBroadcast({ type: 'tag', icon: '🎯', color: '#00d9ff', glow: '#00d9ff', duration: 8000,
+    lines: ['👑 kyouya66 tagged shadow10163 who is now it!'] });
+}
+function simDoubleTag() {
+  fireBroadcast({ type: 'tag', icon: '🔥', color: '#ff4500', glow: '#ff4500', duration: 8000,
+    lines: ['lovesnightmare tagged 👑 mamafeisty for DOUBLE POINTS and is now it!'] });
+}
+function simFFA() {
+  fireBroadcast({ type: 'ffa', icon: '🔥', color: '#ff4500', glow: '#ff8c00', duration: 8000,
+    lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'] });
+}
+function simNewIt() {
+  fireBroadcast({ type: 'newit', icon: '🎯', color: '#00d9ff', glow: '#00d9ff', duration: 6000,
+    lines: ['👑 kyouya66 is now IT!'] });
+}
+function simHistory() {
+  fireBroadcast({ type: 'history', icon: '📜', color: '#9146ff', glow: '#9146ff', duration: 10000,
+    lines: [
+      '🎯 👑 kyouya66 tagged shadow10163',
+      '🔥 lovesnightmare tagged 👑 mamafeisty 2x!',
+      '🎯 therockindman tagged fidget_4_gadget',
+      '🛡️ shadow10163 → 👑 mamafeisty (offline)',
+      '🎯 fatkid4ev4 tagged crimson_orion69',
+      '🔥 mothermayrien tagged laughingjacx 2x!',
+    ] });
+}
+function toggleBarMode() {
+  isFFA = !isFFA;
+  if (isFFA) {
+    barStatus.className = 'bar-status ffa';
+    barStatus.style.setProperty('--bar-color', '#ff4500');
+    barStatus.innerHTML =
+      '<span class="big-icon">🔥</span>' +
+      '<div><div class="ffa-title">FREE FOR ALL</div><div class="ffa-sub">Anyone can tag for DOUBLE POINTS!</div></div>' +
+      '<div class="players">112 players</div>';
+  } else {
+    barStatus.className = 'bar-status it';
+    barStatus.style.setProperty('--bar-color', '#00d9ff');
+    barStatus.innerHTML =
+      '<span class="big-icon">🎯</span>' +
+      '<div><div class="it-label">IT</div><div class="it-name">👑 kyouya66</div></div>' +
+      '<div class="elapsed">12m</div><div class="players">112 players</div>';
+  }
+}
+</script>
+</body>
+</html>

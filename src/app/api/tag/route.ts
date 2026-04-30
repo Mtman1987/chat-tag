@@ -76,7 +76,7 @@ export async function GET() {
     players = players.map((p: any) => {
       const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
       const score = counts.tags * 100 - counts.tagged * 50;
-      return { ...p, score, tags: counts.tags, tagged: counts.tagged, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: (p.passCount || (p.hasPass ? 1 : 0)) > 0, passCount: p.passCount || (p.hasPass ? 1 : 0), passGrantedAt: p.passGrantedAt || 0 };
+      return { ...p, score, tags: counts.tags, tagged: counts.tagged, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: (p.passCount || (p.hasPass ? 1 : 0)) > 0, passCount: p.passCount || (p.hasPass ? 1 : 0), passGrantedAt: p.passGrantedAt || 0, overlayMode: Boolean(p.overlayMode), wins: p.wins || 0 };
     });
 
     const userMap: Record<string, string> = {};
@@ -101,12 +101,29 @@ export async function GET() {
       .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
       .slice(0, 100);
 
+    // Derive currentIt from player isIt flag as source of truth
+    const itPlayer = (players as any[]).find((p: any) => p.isIt);
+    const currentIt = itPlayer?.id || state.tagGame.state.currentIt || null;
+    const lastTagTime = toMillis(state.tagGame.state.lastTagTime);
+
+    // Auto-heal: sync tagGame.state if it drifted from player flags
+    if (itPlayer && state.tagGame.state.currentIt !== itPlayer.id) {
+      state.tagGame.state.currentIt = itPlayer.id;
+      // Fire-and-forget write to fix the drift
+      updateAppState((s) => {
+        s.tagGame.state.currentIt = itPlayer.id;
+      }).catch(() => {});
+    }
+
+    const monthlyWinners = state.tagGame.state.monthlyWinners || [];
+
     return NextResponse.json({
       players,
-      currentIt: state.tagGame.state.currentIt,
-      lastTagTime: toMillis(state.tagGame.state.lastTagTime),
+      currentIt,
+      lastTagTime,
       history,
       adminHistory,
+      monthlyWinners,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -138,7 +155,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'grant-pass') {
-      const PASS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
       const MAX_PASSES = 3;
       const result = await updateAppState((state) => {
         const player = state.tagPlayers[userId];
@@ -151,11 +167,6 @@ export async function POST(req: NextRequest) {
         
         if (player.passCount >= MAX_PASSES) {
           return { granted: false, reason: 'max-passes', passCount: player.passCount };
-        }
-        
-        const lastGranted = player.passGrantedAt || 0;
-        if (Date.now() - lastGranted < PASS_COOLDOWN_MS) {
-          return { granted: false, reason: 'cooldown', hoursLeft: Math.ceil((PASS_COOLDOWN_MS - (Date.now() - lastGranted)) / 3600000), passCount: player.passCount };
         }
         
         player.passCount = (player.passCount || 0) + 1;
@@ -582,6 +593,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'set-winner') {
+      const place = body.place; // 1, 2, or 3
+      if (![1, 2, 3].includes(place)) return NextResponse.json({ error: 'place must be 1, 2, or 3' }, { status: 400 });
+      await updateAppState((state) => {
+        const player = state.tagPlayers?.[userId];
+        if (!player) return;
+        if (!state.tagGame.state.monthlyWinners) state.tagGame.state.monthlyWinners = [];
+        // Remove any existing entry for this place or this player
+        state.tagGame.state.monthlyWinners = state.tagGame.state.monthlyWinners.filter(
+          (w: any) => w.place !== place && w.userId !== userId
+        );
+        player.wins = (player.wins || 0) + 1;
+        state.tagGame.state.monthlyWinners.push({
+          userId,
+          username: player.twitchUsername || userId,
+          place,
+          month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
+          setAt: Date.now(),
+        });
+        state.tagGame.state.monthlyWinners.sort((a: any, b: any) => a.place - b.place);
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'clear-winners') {
+      await updateAppState((state) => {
+        state.tagGame.state.monthlyWinners = [];
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'set-overlay') {
+      const enabled = body.enabled !== false;
+      await updateAppState((state) => {
+        const player = state.tagPlayers?.[userId];
+        if (!player) return;
+        player.overlayMode = enabled;
+      });
+      return NextResponse.json({ success: true, overlayMode: enabled });
+    }
+
     if (action === 'set-it') {
       await updateAppState((state) => {
         const players = Object.values(state.tagPlayers || {}) as TagPlayer[];
@@ -606,6 +658,17 @@ export async function POST(req: NextRequest) {
           state.tagGame.state.currentIt = userId;
           state.tagGame.state.lastTagTime = Date.now();
         }
+
+        // Record in tag history so there's always a log
+        state.tagHistory = state.tagHistory || [];
+        state.tagHistory.push({
+          id: makeId('hist'),
+          taggerId: performedBy || 'system',
+          taggedId: userId,
+          streamerId: 'admin-set',
+          timestamp: Date.now(),
+          doublePoints: false,
+        });
 
         state.adminHistory = state.adminHistory || [];
         state.adminHistory.push({

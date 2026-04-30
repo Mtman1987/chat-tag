@@ -8,6 +8,18 @@ const env = process.env;
 
 const API_BASE = process.env.API_BASE || 'https://chat-tag-new.fly.dev';
 const BLACKLIST = ['streamelements', 'nightbot', 'moobot', 'fossabot'];
+const joinFailSilenced = new Set();
+
+// Crown helper: wraps winner usernames with 👑
+let cachedWinners = [];
+function crown(username, winners) {
+  const w = (winners || cachedWinners);
+  const entry = w.find(e => (e.username || '').toLowerCase() === (username || '').toLowerCase());
+  return entry ? '👑' + username : username;
+}
+function updateWinnersCache(data) {
+  if (data?.monthlyWinners) cachedWinners = data.monthlyWinners;
+}
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
 const AUTO_ROTATE_MINUTES = 40;
 const STALE_LAST_TAG_HOURS = 6;
@@ -127,14 +139,40 @@ function sleep(ms) {
 }
 
 // Forward Twitch events to DSH for leaderboard points (fire and forget)
+let dshErrorSuppressedUntil = 0;
+let dshErrorCount = 0;
+const DSH_ERROR_WINDOW_MS = 60000;
+
 function forwardToDSH(eventData) {
   fetch(`${DSH_API_BASE}/api/twitch/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(eventData),
   }).then(r => {
-    if (!r.ok) console.log(`[DSH] Forward failed: ${r.status}`);
-  }).catch(e => console.error('[DSH] Forward error:', e.message));
+    if (!r.ok) {
+      if (Date.now() < dshErrorSuppressedUntil) return;
+      dshErrorCount++;
+      if (dshErrorCount > 3) {
+        console.log(`[DSH] Forward failing (${dshErrorCount} errors), suppressing logs for 60s`);
+        dshErrorSuppressedUntil = Date.now() + DSH_ERROR_WINDOW_MS;
+        dshErrorCount = 0;
+      } else {
+        console.log(`[DSH] Forward failed: ${r.status}`);
+      }
+    } else {
+      dshErrorCount = 0;
+    }
+  }).catch(e => {
+    if (Date.now() < dshErrorSuppressedUntil) return;
+    dshErrorCount++;
+    if (dshErrorCount > 3) {
+      console.log(`[DSH] Forward errors (${dshErrorCount}), suppressing logs for 60s`);
+      dshErrorSuppressedUntil = Date.now() + DSH_ERROR_WINDOW_MS;
+      dshErrorCount = 0;
+    } else {
+      console.error('[DSH] Forward error:', e.message);
+    }
+  });
 }
 
 function dedupeSharedChatChannels(members) {
@@ -174,19 +212,45 @@ function errorMessage(err) {
 
 async function handleJoinFailure(channelName, err) {
   const msg = errorMessage(err).toLowerCase();
-  if (!msg.includes('msg_banned')) return;
 
-  console.error(`[Bot] Auto-blacklisting banned channel: ${channelName}`);
-  await apiCall('/api/bot/blacklist', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel: channelName }),
-  });
-  await apiCall('/api/bot/channels/remove', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel: channelName }),
-  });
+  // Diagnose why the join failed
+  if (msg.includes('no response')) {
+    try {
+      if (!appToken) appToken = await getAppAccessToken();
+      const clientId = getTwitchClientId();
+      const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channelName)}`, {
+        headers: { 'Client-ID': clientId, 'Authorization': `Bearer ${appToken}` }
+      });
+      const data = await res.json();
+      if (!data.data || data.data.length === 0) {
+        console.error(`[Bot] Join failed ${channelName}: account does not exist or is suspended on Twitch`);
+      } else {
+        const user = data.data[0];
+        console.error(`[Bot] Join failed ${channelName}: account exists (id=${user.id}) but IRC timed out — may have chat disabled, followers-only, or Twitch IRC issue`);
+      }
+    } catch (e) {
+      console.error(`[Bot] Join failed ${channelName}: no response + Helix lookup failed (${e.message})`);
+    }
+    return; // Don't blacklist — it's an infra issue
+  }
+
+  if (msg.includes('msg_banned')) {
+    console.error(`[Bot] Auto-blacklisting banned channel: ${channelName}`);
+    await apiCall('/api/bot/blacklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: channelName }),
+    });
+    await apiCall('/api/bot/channels/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: channelName }),
+    });
+    return;
+  }
+
+  // Log any other failure reason
+  console.error(`[Bot] Join failed ${channelName}: ${msg}`);
 }
 
 async function maybeAnnounceDailyActivation(client, channelName) {
@@ -205,7 +269,7 @@ async function maybeAnnounceDailyActivation(client, channelName) {
     await sendChatWithSharedFallback(
       client,
       channel,
-      '🏷️ Chat Tag by MtMan1987 is active! Type "@spmt join" to play, "@spmt help" for commands.'
+      '🏷️ Chat Tag by MtMan1987 is active! Type "spmt join" to play, "spmt help" for commands. NEW: "spmt mute" for OBS overlay mode!'
     );
     console.log(`[Bot] Sent first-live announcement for ${channel}`);
   } catch (e) {
@@ -439,10 +503,13 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
     const playerSet = new Set(
       playersData.players.map((p) => p.twitchUsername?.toLowerCase()).filter(Boolean)
     );
+    const overlayChannels = new Set(
+      playersData.players.filter((p) => p.overlayMode).map((p) => p.twitchUsername?.toLowerCase()).filter(Boolean)
+    );
     const excludeLower = excludeChannel?.toLowerCase();
     const eligibleLive = liveMembers.filter((member) => {
       const login = (member?.twitchUsername || '').toLowerCase();
-      return login && login !== excludeLower && playerSet.has(login) && !blacklistedChannels.has(login);
+      return login && login !== excludeLower && playerSet.has(login) && !blacklistedChannels.has(login) && !overlayChannels.has(login);
     });
 
     const channels = dedupeSharedChatChannels(eligibleLive);
@@ -634,6 +701,7 @@ console.log = (...args) => {
     try {
       console.log('[Bot] Running periodic check...');
       const data = await apiCall('/api/tag');
+      updateWinnersCache(data);
       
       if (data?.currentIt && data?.lastTagTime) {
         const elapsed = Date.now() - data.lastTagTime;
@@ -674,7 +742,7 @@ console.log = (...args) => {
             });
             
             if (!isStaleTimeout) {
-              const msg = `🎲 ${itUsername} held it too long! ${chosen.twitchUsername} was randomly selected as it! Tag someone!`;
+              const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
               await broadcastToPlayers(client, msg);
               await apiCall('/api/discord/announce', {
                 method: 'POST',
@@ -715,7 +783,7 @@ console.log = (...args) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'set-it', userId: chosen.id })
               });
-              const msg = `⏰ ${itUsername} didn't tag anyone! ${chosen.twitchUsername} is now randomly it! Tag someone!`;
+              const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
               await broadcastToPlayers(client, msg);
               lastFfaAnnouncedAt = 0;
             } else {
@@ -747,7 +815,7 @@ console.log = (...args) => {
         // Re-announce FFA every 60 minutes
         if (lastFfaAnnouncedAt > 0 && Date.now() - lastFfaAnnouncedAt > FFA_REANNOUNCE_MINUTES * 60 * 1000) {
           console.log('[Bot] Re-announcing FFA (60 min reminder)');
-          await broadcastToPlayers(client, '🔥 Reminder: FREE FOR ALL is active! Type "@spmt tag @username" for DOUBLE POINTS! Type "@spmt join" to play! 🔥');
+          await broadcastToPlayers(client, '🔥 Reminder: FREE FOR ALL is active! Type "spmt tag @username" for DOUBLE POINTS! Type "spmt join" to play! 🔥');
           lastFfaAnnouncedAt = Date.now();
         } else if (lastFfaAnnouncedAt === 0) {
           lastFfaAnnouncedAt = Date.now();
@@ -786,8 +854,13 @@ console.log = (...args) => {
             }
             await sleep(1200 + Math.random() * 500);
           } catch (e) {
-            console.error(`[Bot] Failed joining ${ch}: ${errorMessage(e)}`);
-            await handleJoinFailure(ch, e);
+            const errMsg = errorMessage(e);
+            const isNoResponse = errMsg.toLowerCase().includes('no response');
+            if (!isNoResponse || !joinFailSilenced.has(ch)) {
+              console.error(`[Bot] Failed joining ${ch}: ${errMsg}`);
+              await handleJoinFailure(ch, e);
+              if (isNoResponse) joinFailSilenced.add(ch);
+            }
           }
         }
 
@@ -798,6 +871,7 @@ console.log = (...args) => {
         for (const ch of toLeave) {
           try {
             await client.part(`#${ch}`);
+            joinFailSilenced.delete(ch);
             console.log(`[Bot] Left offline channel: ${ch}`);
           } catch (e) {
             console.error(`[Bot] Failed leaving ${ch}: ${errorMessage(e)}`);
@@ -843,7 +917,7 @@ console.log = (...args) => {
     if (!targetChannel || !login) return;
 
     const reasonLabel = reason ? ` for ${reason}` : '';
-    const message = `🎟️ Thanks for the support, @${login}! Here's an SPMT Pass${reasonLabel}! 🎁 You now have ${passCount || 1}/3 passes. Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS — even if you're not it!`;
+    const message = `🎟️ Thanks for the support, @${login}! Here's an SPMT Pass${reasonLabel}! 🎁 You now have ${passCount || 1}/3 passes. Use "spmt pass @username" to tag ANYONE for DOUBLE POINTS — even if you're not it!`;
     await sendChatWithSharedFallback(client, targetChannel, message, { warnOnFallback: true });
   }
 
@@ -992,6 +1066,7 @@ console.log = (...args) => {
     switch (type) {
       case 'channel.follow': {
         console.log(`[EventSub] 🆕 Follow: ${login} followed ${broadcasterLogin}`);
+        forwardToDSH({ type: 'follow', twitchLogin: login, twitchId: event.user_id, username: login, channel: broadcasterLogin });
         if (userId && login) {
           grantPassForEvent(broadcasterLogin, userId, login, `followed ${broadcasterLogin}`);
         }
@@ -1000,6 +1075,7 @@ console.log = (...args) => {
       case 'channel.subscribe': {
         if (event.is_gift) break; // gift subs handled by subscription.gift
         console.log(`[EventSub] ⭐ Subscribe: ${login} subscribed to ${broadcasterLogin} (tier ${event.tier})`);
+        forwardToDSH({ type: 'subscription', twitchLogin: login, twitchId: event.user_id, username: login, channel: broadcasterLogin });
         if (userId && login) {
           grantPassForEvent(broadcasterLogin, userId, login, `subscribed tier ${event.tier}`);
         }
@@ -1008,6 +1084,7 @@ console.log = (...args) => {
       case 'channel.subscription.gift': {
         const total = event.total || 1;
         console.log(`[EventSub] 🎁 Gift subs: ${login} gifted ${total} subs in ${broadcasterLogin}`);
+        forwardToDSH({ type: 'gift_sub', twitchLogin: login, twitchId: event.user_id, username: login, channel: broadcasterLogin, quantity: total });
         if (userId && login) {
           grantPassForEvent(broadcasterLogin, userId, login, `gifted ${total} subs`);
         }
@@ -1016,6 +1093,7 @@ console.log = (...args) => {
       case 'channel.subscription.message': {
         const months = event.cumulative_months || event.duration_months || 1;
         console.log(`[EventSub] 🔄 Resub: ${login} resubbed ${months}mo in ${broadcasterLogin}`);
+        forwardToDSH({ type: 'subscription', twitchLogin: login, twitchId: event.user_id, username: login, channel: broadcasterLogin });
         if (userId && login) {
           grantPassForEvent(broadcasterLogin, userId, login, `resubscribed ${months}mo`);
         }
@@ -1024,6 +1102,7 @@ console.log = (...args) => {
       case 'channel.cheer': {
         const bits = event.bits || 0;
         console.log(`[EventSub] 💎 Cheer: ${login} cheered ${bits} bits in ${broadcasterLogin}`);
+        forwardToDSH({ type: 'cheer', twitchLogin: login, twitchId: event.user_id, username: login, channel: broadcasterLogin, bits });
         if (bits >= 100 && userId && login) {
           grantPassForEvent(broadcasterLogin, userId, login, `cheered ${bits} bits`);
         }
@@ -1035,6 +1114,7 @@ console.log = (...args) => {
         const viewers = event.viewers || 0;
         const targetLogin = (event.to_broadcaster_user_login || '').toLowerCase();
         console.log(`[EventSub] 🚀 Raid: ${raiderLogin} raided ${targetLogin} with ${viewers} viewers`);
+        forwardToDSH({ type: 'raid', twitchLogin: raiderLogin, twitchId: event.from_broadcaster_user_id, username: raiderLogin, channel: targetLogin, viewers });
         if (raiderId && raiderLogin) {
           grantPassForEvent(targetLogin, raiderId, raiderLogin, `raided with ${viewers} viewers`);
         }
@@ -1239,7 +1319,7 @@ console.log = (...args) => {
     if (isMirroredSharedMessage) {
       console.log(`[Bot] Shared chat mirrored command mapped ${rawChannelName} -> ${channelName}`);
     }
-    console.log(`[Bot] ${user}: @spmt ${cmd}`);
+    console.log(`[Bot] ${user}: spmt ${cmd}`);
     
     if (cmd === 'join') {
       console.log(`[Bot] Join command from ${user}`);
@@ -1276,7 +1356,7 @@ console.log = (...args) => {
           });
         }
         
-        reply( res?.error ? `@${user} ${res.error}` : `@${targetDisplay} joined the tag game! 🎯 Type "@spmt join" to play too!`);
+        reply( res?.error ? `@${user} ${res.error}` : `@${targetDisplay} joined the tag game! 🎯 Type "spmt join" to play too!`);
       } else {
         console.log(`[Bot] ${user} joining themselves`);
         // User joining themselves - get their avatar and login from Twitch
@@ -1302,7 +1382,7 @@ console.log = (...args) => {
         }
         
         try {
-          await reply( res?.error ? `@${user} ${res.error}` : `@${user} joined the tag game! 🎯 Type "@spmt join" to play too!`);
+          await reply( res?.error ? `@${user} ${res.error}` : `@${user} joined the tag game! 🎯 Type "spmt join" to play too!`);
           console.log('[Bot] Join message sent');
         } catch (e) {
           console.error('[Bot] Error sending message:', e.message);
@@ -1343,7 +1423,7 @@ console.log = (...args) => {
       const target = args[1]?.replace('@', '').toLowerCase();
       console.log(`[Bot] Tag command: target="${target}"`);
       if (!target) {
-        reply( `@${user} Usage: "@spmt tag @username"`);
+        reply( `@${user} Usage: "spmt tag @username"`);
         return;
       }
       
@@ -1390,8 +1470,8 @@ console.log = (...args) => {
             reply( `@${user} ${realTagRes.error}`);
           } else {
             const msg = realTagRes.doublePoints
-              ? `🔥 ${user} tagged @${target} for DOUBLE POINTS! @${target} is now it! (Pin has tagged them ${pinRes.count} times total)`
-              : `🎯 ${user} tagged @${target}! @${target} is now it! (Pin has tagged them ${pinRes.count} times total)`;
+              ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! (Pin has tagged them ${pinRes.count} times total)`
+              : `🎯 ${user} tagged @${target} who is now it! (Pin has tagged them ${pinRes.count} times total)`;
             await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
             if (!isMuted) {
               await broadcastToPlayers(client, msg, channelName);
@@ -1435,8 +1515,8 @@ console.log = (...args) => {
         return;
       } else {
         const msg = res.doublePoints 
-          ? `🔥 ${user} tagged @${target} for DOUBLE POINTS! @${target} is now it! 🔥 Type "@spmt join" to play!`
-          : `🎯 ${user} tagged @${target}! @${target} is now it! Type "@spmt join" to play!`;
+          ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! 🔥 Type "spmt join" to play!`
+          : `🎯 ${user} tagged @${target} who is now it! Type "spmt join" to play!`;
         console.log(`[Bot] Sending tag message in current channel`);
         await reply( msg);
         if (!isMuted) {
@@ -1462,50 +1542,21 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'sleep') {
-      const target = args[1]?.replace('@', '').toLowerCase();
-      let targetId = userId;
-      let targetName = user;
-
-      if (target) {
-        if (!isAdminUser) {
-          await reply( `@${user} Only mods/admins can set someone else to sleep.`);
-          return;
-        }
-        const data = await apiCall('/api/tag');
-        const targetPlayer = data?.players?.find(
-          (p) => (p.twitchUsername || p.username || '').toLowerCase() === target
-        );
-        if (!targetPlayer) {
-          await reply( `@${user} ${target} is not in the game.`);
-          return;
-        }
-        targetId = targetPlayer.id;
-        targetName = targetPlayer.twitchUsername || targetPlayer.username || target;
-      }
-
-      console.log(`[Bot] Sleep command from ${user} targeting ${targetName}`);
-      await apiCall('/api/tag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sleep', userId: targetId })
-      });
-      await apiCall('/api/tag/mod-log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: user, action: 'sleep', target: targetName, channel: channelName })
-      }).catch(() => {});
-      await reply( `@${targetName} is now away/sleeping 😴 (immune from tags)`);
-      console.log('[Bot] Sleep message sent');
+      reply(`@${user} "sleep" is now "away". Use "spmt away" to toggle.`);
     }
     
     else if (cmd === 'wake') {
+      reply(`@${user} "wake" is now "away". Use "spmt away" to toggle.`);
+    }
+    
+    else if (cmd === 'away') {
       const target = args[1]?.replace('@', '').toLowerCase();
       let targetId = userId;
       let targetName = user;
 
       if (target) {
         if (!isAdminUser) {
-          await reply( `@${user} Only mods/admins can wake someone else.`);
+          await reply(`@${user} Only mods/admins can toggle someone else's away status.`);
           return;
         }
         const data = await apiCall('/api/tag');
@@ -1513,26 +1564,44 @@ console.log = (...args) => {
           (p) => (p.twitchUsername || p.username || '').toLowerCase() === target
         );
         if (!targetPlayer) {
-          await reply( `@${user} ${target} is not in the game.`);
+          await reply(`@${user} ${target} is not in the game.`);
           return;
         }
         targetId = targetPlayer.id;
         targetName = targetPlayer.twitchUsername || targetPlayer.username || target;
       }
 
-      console.log(`[Bot] Wake command from ${user} targeting ${targetName}`);
-      await apiCall('/api/tag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'wake', userId: targetId })
-      });
-      await apiCall('/api/tag/mod-log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: user, action: 'wake', target: targetName, channel: channelName })
-      }).catch(() => {});
-      await reply( `@${targetName} is now awake! ☀️`);
-      console.log('[Bot] Wake message sent');
+      // Check current state to toggle
+      const data = await apiCall('/api/tag');
+      const player = data?.players?.find(p => p.id === targetId);
+      const isAway = player?.sleepingImmunity || player?.offlineImmunity;
+
+      if (isAway) {
+        // Clear ALL immunity
+        await apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear-away', userId: targetId })
+        });
+        await apiCall('/api/tag/mod-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor: user, action: 'away-off', target: targetName, channel: channelName })
+        }).catch(() => {});
+        await reply(`@${targetName} is back! ☀️ All immunity cleared.`);
+      } else {
+        await apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sleep', userId: targetId })
+        });
+        await apiCall('/api/tag/mod-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor: user, action: 'away-on', target: targetName, channel: channelName })
+        }).catch(() => {});
+        await reply(`@${targetName} is now away 😴 (immune from tags)`);
+      }
     }
     
     else if (cmd === 'status' || cmd === 'whosit') {
@@ -1541,7 +1610,7 @@ console.log = (...args) => {
       const itPlayer = data?.players?.find(p => p.isIt);
       const itName = itPlayer ? (itPlayer.twitchUsername || itPlayer.username || 'Someone') : null;
       const response = itName 
-        ? `@${user} ${itName} is it!`
+        ? `@${user} ${crown(itName)} is it!`
         : `@${user} 🔥 FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`;
       console.log(`[Bot] Sending: ${response}`);
       await reply( response);
@@ -1594,7 +1663,7 @@ console.log = (...args) => {
         return p._status ? `${p._status}${name}` : name;
       }).join(', ');
 
-      reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+      reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
       
       global.playerPages[userId] = (page + 1) % totalPages;
     }
@@ -1667,7 +1736,7 @@ console.log = (...args) => {
         const totalPages = pages.length;
         const pageContent = (pages[page] || []).join(' | ');
         
-        reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+        reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
         global.livePages[userId] = (page + 1) % totalPages;
       } else {
         // Default: advance players list
@@ -1709,7 +1778,7 @@ console.log = (...args) => {
           return p._status ? `${p._status}${name}` : name;
         }).join(', ');
         
-        reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+        reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
         global.playerPages[userId] = (page + 1) % totalPages;
       }
     }
@@ -1723,7 +1792,7 @@ console.log = (...args) => {
       }
       console.log('[Bot] Sending admin command list');
       await reply(
-        `@${user} Mod/Admin: "@spmt givepass @user" = Give pass | "@spmt newcard" = New bingo card | "@spmt newcard phrase1|phrase2|..." = Custom 25 phrases | "@spmt support" = Help ticket | "@spmt sleep @user" = Set away | "@spmt wake @user" = Clear away | "@spmt mute" = Mute bot | "@spmt unmute" = Unmute`
+        `@${user} Mod/Admin: "spmt givepass @user" = Give pass | "spmt support" = Help ticket | "spmt away @user" = Toggle away | "spmt mute" = Toggle OBS overlay mode`
       );
       console.log('[Bot] Admin command complete');
     }
@@ -1828,29 +1897,36 @@ console.log = (...args) => {
       const totalPages = pages.length;
       const pageContent = (pages[page] || []).join(' | ');
       
-      reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "@spmt more" for next' : ''}`);
+      reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
       
       global.livePages[userId] = (page + 1) % totalPages;
     }
     
     else if (cmd === 'score') {
       const data = await apiCall('/api/tag');
+      updateWinnersCache(data);
       const player = data?.players?.find(p => p.id === userId);
       if (!player) {
-        reply( `@${user} You're not in the game! Use "@spmt join"`);
+        reply( `@${user} You're not in the game! Use "spmt join"`);
         return;
       }
       const sorted = (data?.players || []).sort((a, b) => (b.score || 0) - (a.score || 0));
       const rank = sorted.findIndex(p => p.id === userId) + 1;
-      reply( `@${user} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || (player.hasPass ? 1 : 0)}/${3}`);
+      const winEntry = (data?.monthlyWinners || []).find(w => w.userId === userId);
+      const winsText = (player.wins || 0) > 0 ? ` | 🏆 Wins: ${player.wins}` : '';
+      const winnerText = winEntry ? ` | 👑 #${winEntry.place} Winner` : '';
+      reply(`@${crown(user)} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || (player.hasPass ? 1 : 0)}/3${winsText}${winnerText}`);
     }
     
     else if (cmd === 'rank') {
       const data = await apiCall('/api/tag');
       const sorted = (data?.players || []).filter(p => (p.twitchUsername || p.username)?.toLowerCase() !== 'mtman1987').sort((a, b) => (b.score || 0) - (a.score || 0));
       const top3 = sorted.slice(0, 3);
-      const rankings = top3.map((p, i) => `#${i+1} ${p.twitchUsername || p.username}: ${p.score || 0}`).join(' | ');
-      reply( `@${user} Top 3: ${rankings}`);
+      updateWinnersCache(data);
+      const rankings = top3.map((p, i) => `#${i+1} ${crown(p.twitchUsername || p.username, data?.monthlyWinners)}: ${p.score || 0}`).join(' | ');
+      const winners = (data?.monthlyWinners || []);
+      const winnerLine = winners.length > 0 ? ' | Last Winners: ' + winners.map(w => `\u{1F451}#${w.place} ${w.username}`).join(', ') : '';
+      reply(`@${user} Top 3: ${rankings}${winnerLine}`);
     }
     
     else if (cmd === 'pinrank') {
@@ -1863,155 +1939,77 @@ console.log = (...args) => {
       reply( `@${user} Pin's Top 5: ${top5}`);
     }
     
-    else if (cmd === 'stats') {
-      const data = await apiCall('/api/tag');
-      const player = data?.players?.find(p => p.id === userId);
-      reply( player 
-        ? `@${user} Tags Made: ${player.tags || 0} | Times Tagged: ${player.tagged || 0}`
-        : `@${user} You're not in the game! Use "@spmt join"`);
-    }
-    
     else if (cmd === 'rules') {
-      reply( `@${user} Tag Rules: Tag someone with "@spmt tag @user" in their chat. If you're it, tag someone else! "@spmt sleep" = go immune. "@spmt pass @user" = earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`);
-    }
-    
-    else if (cmd === 'info') {
-      reply( `@${user} Chat Tag game by SPMT! Join with @spmt join`);
+      reply( `@${user} Tag Rules: Tag someone with "spmt tag @user" in their chat. If you're it, tag someone else! "spmt away" = toggle immunity. "spmt pass @user" = earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`);
     }
     
     else if (cmd === 'mute') {
-      await apiCall('/api/bot/muted', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel: channelName })
-      });
-      reply( `@${user} Bot muted in this channel.`);
+      if (!isAdminUser) {
+        reply(`@${user} Only the broadcaster or mods can toggle overlay mode.`);
+        return;
+      }
+      // Toggle overlay mode: mute chat + enable overlay, or unmute + re-greet
+      const playersData = await apiCall('/api/tag');
+      const mePlayer = playersData?.players?.find(p => p.id === userId);
+      const isCurrentlyOverlay = mePlayer?.overlayMode;
+      
+      if (isCurrentlyOverlay) {
+        // Turn OFF overlay mode — unmute + re-greet
+        await apiCall('/api/bot/unmute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel: channelName })
+        });
+        await apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set-overlay', userId, enabled: false })
+        });
+        reply(`🏷️ Chat Tag by MtMan1987 is active! Type "spmt join" to play, "spmt help" for commands. NEW: "spmt mute" for OBS overlay mode!`);
+      } else {
+        // Turn ON overlay mode — mute + enable overlay
+        await apiCall('/api/bot/muted', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel: channelName })
+        });
+        await apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set-overlay', userId, enabled: true })
+        });
+        reply(`@${user} 📺 Overlay mode ON — bot muted in chat. Add to OBS: ${API_BASE}/overlay/${userId} | "spmt mute" again to go back to chat.`);
+      }
     }
     
     else if (cmd === 'unmute') {
+      if (!isAdminUser) {
+        reply(`@${user} Only the broadcaster or mods can toggle overlay mode.`);
+        return;
+      }
+      // Alias: same as mute toggle when overlay is on
       await apiCall('/api/bot/unmute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: channelName })
       });
-      reply( `@${user} Bot unmuted in this channel.`);
-    }
-    
-    else if (cmd === 'card') {
-      const data = await apiCall('/api/bingo/state');
-      const card = data?.bingo;
-      
-      if (!card?.phrases || card.phrases.length === 0) {
-        reply(`@${user} No bingo card yet! An admin can create one with "@spmt newcard"`);
-        return;
-      }
-
-      const covered = card.covered || {};
-      const rows = [];
-      for (let row = 0; row < 5; row++) {
-        const cells = [];
-        for (let col = 0; col < 5; col++) {
-          const idx = row * 5 + col;
-          cells.push(`${covered[idx] ? '🟩' : '⬜'}${String(idx).padStart(2, '0')}`);
-        }
-        rows.push(cells.join(' '));
-      }
-      const claimed = Object.keys(covered).length;
-      await reply(`@${user} Bingo [${claimed}/25]: ${rows.join(' | ')} — "@spmt phrases" for text, "@spmt claim [0-24]" to mark — ${API_BASE}/api/bingo/share?format=txt`);
-    }
-
-    else if (cmd === 'share' || cmd === 'export') {
-      reply(`@${user} View and download bingo state (JSON or TXT): ${API_BASE}/api/bingo/share`);
-    }
-    
-    else if (cmd === 'phrases') {
-      const data = await apiCall('/api/bingo/state');
-      const card = data?.bingo;
-      
-      if (!card?.phrases || card.phrases.length === 0) {
-        reply(`@${user} No bingo card yet!`);
-        return;
-      }
-      
-      // Show phrases in pages of 5
-      if (!global.phrasePages) global.phrasePages = {};
-      if (!global.phrasePages[userId]) global.phrasePages[userId] = 0;
-      
-      const page = global.phrasePages[userId];
-      const start = page * 5;
-      const end = Math.min(start + 5, card.phrases.length);
-      const covered = card.covered || {};
-      
-      const lines = [];
-      for (let i = start; i < end; i++) {
-        const mark = covered[i] ? '✅' : '⬜';
-        lines.push(`${mark}${i}: ${card.phrases[i]}`);
-      }
-      
-      const totalPages = Math.ceil(card.phrases.length / 5);
-      reply(`@${user} Bingo (${page + 1}/${totalPages}): ${lines.join(' | ')}${page + 1 < totalPages ? ' — "@spmt phrases" for more' : ''} | Full board + download: ${API_BASE}/api/bingo/share?format=txt`);
-      
-      global.phrasePages[userId] = (page + 1) % totalPages;
-    }
-    
-    else if (cmd === 'newcard') {
-      if (!isAdminUser) {
-        reply(`@${user} Only mods/admins can create a new bingo card.`);
-        return;
-      }
-      
-      // Custom phrases from args or use defaults
-      const customPhrases = args.slice(1).join(' ').split('|').map(p => p.trim()).filter(Boolean);
-      
-      if (customPhrases.length > 0 && customPhrases.length < 25) {
-        reply(`@${user} Need exactly 25 phrases separated by | (got ${customPhrases.length}). Or use "@spmt newcard" with no args for defaults.`);
-        return;
-      }
-      
-      if (customPhrases.length === 25) {
-        await apiCall('/api/bingo/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'reset', phrases: customPhrases })
-        });
-        reply(`@${user} New bingo card created with custom phrases! Type "@spmt card" to see it.`);
-      } else {
-        const genResult = await apiCall('/api/bingo/generate', { method: 'POST' });
-        const aiNote = genResult?.aiGenerated ? '(AI-generated!)' : '(shuffled phrases)';
-        reply(`@${user} New bingo card generated ${aiNote}! "@spmt card" to see it — ${API_BASE}/api/bingo/share?format=txt`);
-      }
-    }
-    
-    else if (cmd === 'claim') {
-      const squareNum = parseInt(args[1]);
-      if (isNaN(squareNum) || squareNum < 0 || squareNum > 24) {
-        reply( `@${user} Usage: @spmt claim [0-24]`);
-        return;
-      }
-      
-      const res = await apiCall('/api/bingo/state', {
+      await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'claim', 
-          squareIndex: squareNum,
-          userId,
-          username: user,
-          avatar: '',
-          streamerChannel: channelName
-        })
+        body: JSON.stringify({ action: 'set-overlay', userId, enabled: false })
       });
-      
-      reply( res?.success 
-        ? `@${user} Claimed square ${squareNum}! ${res.bingo ? '🎉 BINGO! +100 points!' : ''}`
-        : `@${user} ${res?.error || 'Error claiming square'}`);
+      reply(`🏷️ Chat Tag by MtMan1987 is active! Type "spmt join" to play, "spmt help" for commands. NEW: "spmt mute" for OBS overlay mode!`);
+    }
+    
+    else if (cmd === 'card' || cmd === 'phrases' || cmd === 'claim' || cmd === 'newcard' || cmd === 'share' || cmd === 'export') {
+      reply(`@${user} Bingo is currently disabled.`);
     }
     
     else if (cmd === 'pass') {
       const target = args[1]?.replace('@', '').toLowerCase();
       console.log(`[Bot] Pass command from ${user}, target=${target}`);
       if (!target) {
-        reply(`@${user} Usage: "@spmt pass @username" — Pass your tag to someone for DOUBLE POINTS! Earned by gifting subs, cheering 100+ bits, or hype train.`);
+        reply(`@${user} Usage: "spmt pass @username" — Pass your tag to someone for DOUBLE POINTS! Earned by gifting subs, cheering 100+ bits, or hype train.`);
         return;
       }
       
@@ -2031,7 +2029,7 @@ console.log = (...args) => {
       if (res?.error) {
         reply(`@${user} ${res.error}`);
       } else {
-        const msg = `🎟️ ${user} used their PASS to tag @${target} for DOUBLE POINTS! @${target} is now it! Raid, follow, cheer, or sub to earn yours!`;
+        const msg = `🎟️ ${crown(user)} used their PASS to tag @${crown(target)} for DOUBLE POINTS and is now it! Raid, follow, cheer, or sub to earn yours!`;
         await reply(msg);
         if (!isMuted) {
           await broadcastToPlayers(client, msg, channelName);
@@ -2056,7 +2054,7 @@ console.log = (...args) => {
       }
       const target = args[1]?.replace('@', '').toLowerCase();
       if (!target) {
-        reply(`@${user} Usage: "@spmt givepass @username"`);
+        reply(`@${user} Usage: "spmt givepass @username"`);
         return;
       }
       const playersData = await apiCall('/api/tag');
@@ -2071,9 +2069,7 @@ console.log = (...args) => {
         body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: target, reason: `gifted by ${user}` })
       });
       if (res?.granted) {
-        reply(`🎟️ @${target} got an SPMT Pass from ${user}! 🎁 Use "@spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
-      } else if (res?.reason === 'cooldown') {
-        reply(`@${user} ${target} already earned a pass in the last 24h (${res.hoursLeft}h left). They have ${res.passCount || 0}/3 passes.`);
+        reply(`🎟️ @${target} got an SPMT Pass from ${user}! 🎁 Use "spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
       } else if (res?.reason === 'max-passes') {
         reply(`@${user} ${target} already has the max 3/3 passes!`);
       } else {
@@ -2084,7 +2080,7 @@ console.log = (...args) => {
     else if (cmd === 'help') {
       console.log(`[Bot] Attempting to send help to ${channel}`);
       try {
-        await reply( `@${user} "@spmt join" = Join | "@spmt tag @user" = Tag | "@spmt pass @user" = Pass tag (earned) | "@spmt status" = Who's it | "@spmt score" = Stats | "@spmt rank" = Top 3 | "@spmt players" = List | "@spmt live" = Live | "@spmt sleep" = Immune | "@spmt wake" = Unimmune | "@spmt rules" = Rules | Mods: "@spmt mod"`);
+        await reply( `@${user} "spmt join" = Join | "spmt tag @user" = Tag | "spmt pass @user" = Pass (earned) | "spmt status" = Who's it | "spmt score" = Stats | "spmt rank" = Top 3 | "spmt players" = List | "spmt live" = Live | "spmt away" = Toggle immunity | "spmt rules" = Rules | Mods: "spmt mod"`);
         console.log(`[Bot] Help message sent successfully`);
       } catch (e) {
         console.error('[Bot] Error sending help:', e.message);

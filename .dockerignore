@@ -4,61 +4,48 @@
 # Dependencies
 node_modules
 .pnp
-**\.pnp.js
+**/.pnp.*
+**/.yarn/*
+!**/.yarn/patches
+!**/.yarn/plugins
+!**/.yarn/releases
+!**/.yarn/versions
 
-# Testing
+# testing
 coverage
 
-# Next.js build output
+# next.js
 .next
 out
 
-# Production
+# production
 build
 
-# Vercel
-**\.vercel
+# misc
+**/.DS_Store
+**/*.pem
 
-# Static
-public\static
+# debug
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/.pnpm-debug.log*
 
-# ENV Files - IMPORTANT!
-**\.env
-**\.env*.local
-**\.env.development.local
-**\.env.test.local
-**\.env.production.local
-**\firebase.json
+# vercel
+**/.vercel
 
-# Logs
-**\npm-debug.log*
-**\yarn-debug.log*
-**\yarn-error.log*
-**\pnpm-debug.log*
+# typescript
+**/*.tsbuildinfo
+**/next-env.d.ts
 
-# Misc
-**\.DS_Store
-**\*.pem
-**\*.suo
-**\*.user
-**\*.user.*
-**\*.sln.docstates
-**\.idea
-**\.vscode
-**\*.swp
-**\*~
-**\*.orig
-**\*yarn.lock
+**/.genkit/*
+**/.env*
 
-# Dumps
-**\*.dump
-**\*.sql
-**\*.zip
-**\*.rar
-**\*.gz
-
-# Genkit
-**\.genkit\cache
-**\.genkit\log
-**\.genkit\state
+# firebase
+**/firebase-debug.log
+**/firestore-debug.log
 fly.toml
+
+# git
+.git
+

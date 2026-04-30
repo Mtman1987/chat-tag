@@ -52,6 +52,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     lastTagTime: null as number | null,
     tagHistory: [] as any[],
     immunity: {} as Record<string, any>,
+    monthlyWinners: [] as any[],
   });
   const [communityPlayers, setCommunityPlayers] = useState<GamePlayer[]>([]);
   const [broadcastMessage, setBroadcastMessage] = useState('');
@@ -126,6 +127,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             return ts(b.timestamp) - ts(a.timestamp);
           }).slice(0, 50),
           immunity,
+          monthlyWinners: data.monthlyWinners || [],
         });
       }
     } catch (e) {
@@ -421,20 +423,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                 <UserCheck className="mr-2 h-4 w-4" /> Leave Game
                 </Button>
             )}
-            <Button variant="outline" size="sm" onClick={async () => {
-              try {
-                await fetch('/api/tag', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'auto-rotate' })
-                });
-                
-                setTimeout(fetchState, 500);
-                toast({ title: '"It" has been randomized!' });
-              } catch (e) {
-                toast({ variant: 'destructive', title: 'Failed to randomize' });
-              }
-            }}>
+            <Button variant="outline" size="sm" onClick={handleRandomizeIt}>
             <Shuffle className="mr-2 h-4 w-4" /> Randomize
             </Button>
             <Button variant="default" size="sm" onClick={async () => {
@@ -561,6 +550,9 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
               const isCurrentIt = player.id === gameState.currentIt;
               const isLive = liveChannelSet.has(String(player.username || '').toLowerCase());
               const isShared = sharedChannelSet.has(String(player.username || '').toLowerCase());
+              const rawPlayer = gameState.players.find((p: any) => p.id === player.id);
+              const hasOverlay = Boolean(rawPlayer?.overlayMode);
+              const winnerEntry = gameState.monthlyWinners.find((w: any) => w.userId === player.id);
               
               return (
                 <TableRow key={player.id} className={isImmune ? 'opacity-60' : ''}>
@@ -594,6 +586,22 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                             title="In shared chat session"
                           >
                             SHARED
+                          </span>
+                        )}
+                        {hasOverlay && (
+                          <span
+                            className={'text-[10px] font-bold px-1.5 py-0.5 rounded border border-purple-500 text-purple-500'}
+                            title={'Overlay mode - bot messages go to OBS overlay instead of chat'}
+                          >
+                            📺 OBS
+                          </span>
+                        )}
+                        {winnerEntry && (
+                          <span
+                            className={"text-[10px] font-bold px-1.5 py-0.5 rounded border border-yellow-500 text-yellow-500"}
+                            title={`Monthly winner #${winnerEntry.place} — ${winnerEntry.month || ""}`}
+                          >
+                            👑 #{winnerEntry.place}
                           </span>
                         )}
                       </div>
@@ -673,6 +681,32 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                         }}
                       >
                         <Shield className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={winnerEntry ? "default" : "outline"}
+                        title={winnerEntry ? "Remove winner" : "Set as winner (next available place)"}
+                        onClick={async () => {
+                          try {
+                            if (winnerEntry) {
+                              const others = gameState.monthlyWinners.filter((w: any) => w.userId !== player.id);
+                              await fetch("/api/tag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clear-winners" }) });
+                              for (const w of others) {
+                                await fetch("/api/tag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set-winner", userId: w.userId, place: w.place }) });
+                              }
+                              toast({ title: "Winner Removed", description: `${player.username} removed from winners` });
+                            } else {
+                              const usedPlaces = gameState.monthlyWinners.map((w: any) => w.place);
+                              const nextPlace = [1, 2, 3].find((p) => !usedPlaces.includes(p));
+                              if (!nextPlace) { toast({ variant: "destructive", title: "All 3 winner slots filled" }); return; }
+                              await fetch("/api/tag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set-winner", userId: player.id, place: nextPlace }) });
+                              toast({ title: "Winner Set!", description: `${player.username} is #${nextPlace} winner` });
+                            }
+                            setTimeout(fetchState, 500);
+                          } catch (e) { toast({ variant: "destructive", title: "Failed to update winner" }); }
+                        }}
+                      >
+                        👑
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
