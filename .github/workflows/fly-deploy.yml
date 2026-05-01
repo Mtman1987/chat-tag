@@ -12,7 +12,19 @@ jobs:
     concurrency: deploy-group    # optional: ensure only one action runs at a time
     steps:
       - uses: actions/checkout@v4
+      - name: Check commit message
+        run: |
+          if [[ "$(git log -1 --pretty=%B)" == "empty commit" ]]; then
+            echo "Skipping deployment for empty commit"
+            exit 0
+          fi
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Push empty commit
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git commit --allow-empty -m "empty commit"
+          git push
