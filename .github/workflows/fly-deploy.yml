@@ -18,8 +18,8 @@ jobs:
             echo "Skipping deployment for empty commit"
             exit 0
           fi
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+      - run: fly deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       - name: Push empty commit
