@@ -2,8 +2,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { Starfield } from '@/components/starfield';
-import { Header } from '@/components/header';
+import { RootShell } from '@/components/root-shell';
 import { LiveStreamersProvider } from '@/contexts/live-streamers-context';
 import { SessionProvider } from '@/contexts/session-context';
 
@@ -24,14 +23,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
       </head>
-      <body className="font-body antialiased min-h-screen bg-background relative">
+      <body className="font-body antialiased min-h-screen relative">
         <SessionProvider>
           <LiveStreamersProvider>
-            <Starfield />
-            <div className="relative z-10">
-              <Header />
-              {children}
-            </div>
+            <RootShell>{children}</RootShell>
             <Toaster />
           </LiveStreamersProvider>
         </SessionProvider>
