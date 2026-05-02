@@ -1,7 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = requireAdminRequest(request);
+  if (!auth.ok) return auth.response;
   try {
     const result = await updateAppState((state) => {
       const playerUsernames = new Set<string>();

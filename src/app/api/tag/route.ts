@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 
@@ -134,6 +135,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, userId, username, twitchUsername, avatar, targetUserId, streamerId, performedBy } = body;
+    const adminOnlyActions = new Set([
+      'clear-all-away',
+      'auto-rotate',
+      'set-winner',
+      'clear-winners',
+      'reset-scores',
+      'award-points',
+      'set-it',
+    ]);
+
+    if (adminOnlyActions.has(action)) {
+      const auth = requireAdminRequest(req);
+      if (!auth.ok) return auth.response;
+    }
 
     if (action === 'chat-activity') {
       await updateAppState((state) => {

@@ -1,10 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUsers } from '@/lib/twitch';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = requireAdminRequest(request);
+  if (!auth.ok) return auth.response;
   try {
     // Pre-fetch all players that need avatar or ID resolution
     const { readAppState } = await import('@/lib/volume-store');

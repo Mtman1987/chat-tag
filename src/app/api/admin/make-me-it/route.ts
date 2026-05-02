@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { makeId, updateAppState } from '@/lib/volume-store';
 
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
+  const auth = requireAdminRequest(request);
+  if (!auth.ok) return auth.response;
   try {
     const result = await updateAppState((state) => {
       const entries = Object.entries(state.users);
@@ -29,7 +32,9 @@ export async function POST(_request: NextRequest) {
   }
 }
 
-export async function PUT(_request: NextRequest) {
+export async function PUT(request: NextRequest) {
+  const auth = requireAdminRequest(request);
+  if (!auth.ok) return auth.response;
   try {
     const result = await updateAppState((state) => {
       let previousIt: string | undefined;

@@ -3,6 +3,7 @@
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import type { Player } from '@/lib/types';
+import { isAdminUsername } from '@/lib/admin';
 import { useSession } from '@/contexts/session-context';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ModActivityLog } from '@/components/mod-activity-log';
@@ -17,6 +18,7 @@ import { Card } from '@/components/ui/card';
 
 export function MainDashboard() {
   const { user, isUserLoading } = useSession();
+  const isAdmin = isAdminUsername(user?.twitchUsername);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(true);
 
@@ -69,13 +71,13 @@ export function MainDashboard() {
       <div className="min-w-0">
         <Card className="p-4 sm:p-6 bg-card/80 backdrop-blur-sm">
           <Tabs defaultValue="chat-tag" className="w-full">
-            <TabsList className="grid w-full grid-cols-6 bg-secondary/50">
+            <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-6' : 'grid-cols-3'} bg-secondary/50`}>
               <TabsTrigger value="bingo" className="font-headline">Chat Bingo</TabsTrigger>
               <TabsTrigger value="chat-tag" className="font-headline">Chat Tag</TabsTrigger>
-              <TabsTrigger value="mod-log" className="font-headline">Mod Log</TabsTrigger>
               <TabsTrigger value="live-members" className="font-headline">Live Members</TabsTrigger>
-              <TabsTrigger value="bot" className="font-headline">Bot Channels</TabsTrigger>
-              <TabsTrigger value="share" className="font-headline">Share</TabsTrigger>
+              {isAdmin && <TabsTrigger value="mod-log" className="font-headline">Mod Log</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="bot" className="font-headline">Bot Channels</TabsTrigger>}
+              {isAdmin && <TabsTrigger value="share" className="font-headline">Share</TabsTrigger>}
             </TabsList>
             <TabsContent value="bingo" className="mt-6">
               <BingoCard />
@@ -83,18 +85,24 @@ export function MainDashboard() {
             <TabsContent value="chat-tag" className="mt-6">
               <ChatTagGame players={memoizedPlayers} />
             </TabsContent>
-            <TabsContent value="mod-log" className="mt-6">
-              <ModActivityLog />
-            </TabsContent>
             <TabsContent value="live-members" className="mt-6">
               <LiveDiscordMembers />
             </TabsContent>
-            <TabsContent value="bot" className="mt-6">
-              <BotChannelManager />
-            </TabsContent>
-            <TabsContent value="share" className="mt-6">
-              <DiscordEmbedPoster />
-            </TabsContent>
+            {isAdmin && (
+              <TabsContent value="mod-log" className="mt-6">
+                <ModActivityLog />
+              </TabsContent>
+            )}
+            {isAdmin && (
+              <TabsContent value="bot" className="mt-6">
+                <BotChannelManager />
+              </TabsContent>
+            )}
+            {isAdmin && (
+              <TabsContent value="share" className="mt-6">
+                <DiscordEmbedPoster />
+              </TabsContent>
+            )}
           </Tabs>
         </Card>
       </div>

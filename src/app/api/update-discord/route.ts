@@ -1,6 +1,7 @@
 'use server';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { formatDistanceToNow } from 'date-fns';
 import { readAppState, toMillis } from '@/lib/volume-store';
 
@@ -9,7 +10,9 @@ type CombinedEvent = {
   text: string;
 };
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
+  const auth = requireAdminRequest(req);
+  if (!auth.ok) return auth.response;
   try {
     const state = await readAppState();
 

@@ -22,6 +22,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useState, useEffect } from 'react';
 import { useLiveStreamers } from '@/contexts/live-streamers-context';
+import { useSession } from '@/contexts/session-context';
+import { isAdminUsername } from '@/lib/admin';
+import { getAuthHeaders } from '@/lib/client-auth';
 import type { Player as FirestorePlayer } from '@/lib/types';
 
 interface GamePlayer {
@@ -45,6 +48,9 @@ interface ChatTagGameProps {
 export function ChatTagGame({ players = [] }: ChatTagGameProps) {
   const { toast } = useToast();
   const { liveStreamers } = useLiveStreamers();
+  const { user } = useSession();
+  const sessionUsername = user?.twitchUsername || '';
+  const isAdmin = isAdminUsername(sessionUsername);
   const [gameState, setGameState] = useState({
     currentIt: null as string | null,
     immunePlayers: new Set<string>(),
@@ -170,25 +176,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     isActive: false // You can enhance this later with live status
   }));
   
-  // Get current user from user profile API
-  const [currentUsername, setCurrentUsername] = useState<string>('');
-  
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const res = await fetch('/api/user-profile');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.twitch?.name) {
-            setCurrentUsername(data.twitch.name.toLowerCase());
-          }
-        }
-      } catch (e) {
-        console.error('Failed to fetch user profile', e);
-      }
-    };
-    fetchUserProfile();
-  }, []);
+  const currentUsername = sessionUsername.toLowerCase();
   
   const currentUser = availablePlayers.find(p => p.username?.toLowerCase() === currentUsername) || availablePlayers[0];
 
@@ -231,7 +219,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     try {
       const res = await fetch('/api/tag', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ 
           action: 'set-it',
           userId: randomPlayer.id
@@ -251,7 +239,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     if (!currentUser) return;
     
     try {
-      const response = await fetch('/api/user-profile');
+      const response = await fetch('/api/user-profile', { headers: getAuthHeaders() });
       let userInfo = { username: currentUser.username, avatar: currentUser.avatar };
       
       if (response.ok) {
@@ -296,7 +284,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     if (!currentUser) return;
     
     try {
-      const response = await fetch('/api/user-profile');
+      const response = await fetch('/api/user-profile', { headers: getAuthHeaders() });
       let userInfo = { username: currentUser.username };
       
       if (response.ok) {
@@ -423,9 +411,12 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                 <UserCheck className="mr-2 h-4 w-4" /> Leave Game
                 </Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleRandomizeIt}>
-            <Shuffle className="mr-2 h-4 w-4" /> Randomize
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={handleRandomizeIt}>
+                <Shuffle className="mr-2 h-4 w-4" /> Randomize
+              </Button>
+            )}
+            {isAdmin && (
             <Button variant="default" size="sm" onClick={async () => {
               try {
                 const mePlayer = gameState.players.find((p: any) => 
@@ -445,7 +436,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                 
                 await fetch('/api/tag', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                   body: JSON.stringify({ action: 'set-it', userId: mePlayer.id })
                 });
                 
@@ -457,6 +448,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             }}>
             <Target className="mr-2 h-4 w-4" /> Make Me It
             </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={async () => {
               try {
                 const mePlayer = gameState.players.find((p: any) => 
@@ -496,11 +488,12 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
               return me && gameState.immunity[me.id] === 'sleeping' ? 'Wake Up' : 'Go Sleep';
             })()}
             </Button>
+            {isAdmin && (
             <Button variant="destructive" size="sm" onClick={async () => {
               try {
                 await fetch('/api/tag', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                   body: JSON.stringify({ action: 'auto-rotate' })
                 });
                 await fetch('/api/bot/broadcast', {
@@ -516,12 +509,14 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             }}>
             <Clock className="mr-2 h-4 w-4" /> Trigger Timeout
             </Button>
+            )}
+            {isAdmin && (
             <Button variant="destructive" size="sm" onClick={async () => {
               if (!confirm('Are you sure you want to reset all scores? This will clear all points and tag history.')) return;
               try {
                 await fetch('/api/tag', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                   body: JSON.stringify({ action: 'reset-scores' })
                 });
                 setTimeout(fetchState, 500);
@@ -532,12 +527,14 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             }}>
             🔄 Reset Scores
             </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={fetchState}>
                 <RefreshCw className="h-4 w-4" />
             </Button>
         </div>
       </div>
 
+      {isAdmin && (
       <div className="flex gap-2">
         <Input
           placeholder="Add player by Twitch username..."
@@ -551,6 +548,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
           Add Player
         </Button>
       </div>
+      )}
 
       <ScrollArea className="h-[24rem] rounded-md border">
         <Table>
@@ -625,14 +623,14 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
-                      <Button
+                      {isAdmin && <Button
                         size="sm"
                         variant="outline"
                         onClick={async () => {
                           try {
                             await fetch('/api/tag', {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                               body: JSON.stringify({ action: 'set-it', userId: player.id })
                             });
                             
@@ -644,8 +642,8 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                         }}
                       >
                         <Target className="h-4 w-4" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {isAdmin && <Button
                         size="sm"
                         variant="ghost"
                         onClick={async () => {
@@ -669,8 +667,8 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                         }}
                       >
                         📢
-                      </Button>
-                      <Button
+                      </Button>}
+                      {isAdmin && <Button
                         size="sm"
                         variant={isImmune ? "secondary" : "outline"}
                         onClick={async () => {
@@ -697,8 +695,8 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                         }}
                       >
                         <Shield className="h-4 w-4" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {isAdmin && <Button
                         size="sm"
                         variant={winnerEntry ? "default" : "outline"}
                         title={winnerEntry ? "Remove winner" : "Set as winner (next available place)"}
@@ -706,16 +704,16 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                           try {
                             if (winnerEntry) {
                               const others = gameState.monthlyWinners.filter((w: any) => w.userId !== player.id);
-                              await fetch("/api/tag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clear-winners" }) });
+                              await fetch("/api/tag", { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: "clear-winners" }) });
                               for (const w of others) {
-                                await fetch("/api/tag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set-winner", userId: w.userId, place: w.place }) });
+                                await fetch("/api/tag", { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: "set-winner", userId: w.userId, place: w.place }) });
                               }
                               toast({ title: "Winner Removed", description: `${player.username} removed from winners` });
                             } else {
                               const usedPlaces = gameState.monthlyWinners.map((w: any) => w.place);
                               const nextPlace = [1, 2, 3].find((p) => !usedPlaces.includes(p));
                               if (!nextPlace) { toast({ variant: "destructive", title: "All 3 winner slots filled" }); return; }
-                              await fetch("/api/tag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set-winner", userId: player.id, place: nextPlace }) });
+                              await fetch("/api/tag", { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ action: "set-winner", userId: player.id, place: nextPlace }) });
                               toast({ title: "Winner Set!", description: `${player.username} is #${nextPlace} winner` });
                             }
                             setTimeout(fetchState, 500);
@@ -723,8 +721,8 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                         }}
                       >
                         👑
-                      </Button>
-                      <Button
+                      </Button>}
+                      {isAdmin && <Button
                         size="sm"
                         variant="outline"
                         title="Award bonus points"
@@ -734,7 +732,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                           try {
                             await fetch('/api/tag', {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                               body: JSON.stringify({ action: 'award-points', userId: player.id, points: parseInt(points), performedBy: currentUsername })
                             });
                             toast({ title: 'Points Awarded', description: `Gave ${points} points to ${player.username}` });
@@ -745,7 +743,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                         }}
                       >
                         💰
-                      </Button>
+                      </Button>}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -842,7 +840,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         </ScrollArea>
       </div>
 
-      <div className="space-y-2">
+      {isAdmin && <div className="space-y-2">
         <h4 className="text-sm font-medium">Broadcast Test</h4>
         <div className="flex gap-2">
           <Input
@@ -859,7 +857,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             <Send className="mr-2 h-4 w-4" /> Send
           </Button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

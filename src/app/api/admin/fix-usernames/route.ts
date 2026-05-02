@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
 
 export async function POST(req: NextRequest) {
+  const auth = requireAdminRequest(req);
+  if (!auth.ok) return auth.response;
   try {
     const body = await req.json().catch(() => ({}));
     const syncAll = body.syncAll === true;

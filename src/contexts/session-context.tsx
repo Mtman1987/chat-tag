@@ -44,6 +44,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('session');
     localStorage.removeItem('twitchUsername');
     localStorage.removeItem('twitchAvatar');
+    document.cookie = 'session=; Max-Age=0; path=/; SameSite=Lax';
     setUser(null);
     window.dispatchEvent(new Event('storage'));
   };

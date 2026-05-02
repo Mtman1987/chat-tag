@@ -70,9 +70,14 @@ const DEFAULT_STATE: AppState = {
 const DATA_DIR =
   process.env.DATA_DIR || process.env.FLY_VOLUME_PATH || path.join(process.cwd(), 'data');
 const STATE_FILE = path.join(DATA_DIR, 'app-state.json');
+const STATE_FILE_TMP = path.join(DATA_DIR, 'app-state.json.tmp');
 
 let bootstrapPromise: Promise<void> | null = null;
 let lock: Promise<void> = Promise.resolve();
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function deepMerge<T extends JsonObject>(base: T, incoming: JsonObject): T {
   const out: JsonObject = { ...base };
@@ -217,13 +222,44 @@ async function ensureBootstrapped() {
 
 async function readState(): Promise<AppState> {
   await ensureBootstrapped();
-  const raw = await fs.readFile(STATE_FILE, 'utf8');
-  return ensureDefaults(JSON.parse(raw));
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const raw = await fs.readFile(STATE_FILE, 'utf8');
+      return ensureDefaults(JSON.parse(raw));
+    } catch (error: any) {
+      lastError = error;
+      const isParseFailure =
+        error instanceof SyntaxError ||
+        /Unexpected end of JSON input|Expected .* in JSON|Unterminated string in JSON/i.test(
+          String(error?.message || '')
+        );
+
+      if (!isParseFailure || attempt === 3) {
+        throw error;
+      }
+
+      await sleep(25 * (attempt + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to read app state.');
 }
 
 async function writeState(state: AppState): Promise<void> {
   await ensureBootstrapped();
-  await fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  const payload = JSON.stringify(state, null, 2);
+  await fs.writeFile(STATE_FILE_TMP, payload, 'utf8');
+  try {
+    await fs.rename(STATE_FILE_TMP, STATE_FILE);
+  } catch (error: any) {
+    if (error?.code !== 'EEXIST' && error?.code !== 'EPERM') {
+      throw error;
+    }
+    await fs.rm(STATE_FILE, { force: true });
+    await fs.rename(STATE_FILE_TMP, STATE_FILE);
+  }
 }
 
 async function withLock<T>(work: () => Promise<T>): Promise<T> {

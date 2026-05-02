@@ -7,6 +7,18 @@
 
 ## 🔴 CRITICAL — Fix First
 
+### 0. Web app has no real role separation yet; dangerous admin actions must be server-locked
+- **Where:** `src/app/main-dashboard.tsx`, `src/components/chat-tag-game.tsx`, `src/app/settings/page.tsx`, `src/app/api/tag/route.ts`, `src/app/api/admin/*`, `src/app/api/settings/route.ts`, `src/app/api/logs/route.ts`, `src/app/api/update-discord/route.ts`
+- **Issue:** The app currently treats "signed in" and "authorized to administrate the game" as the same thing in too many places. UI controls like `Make Me It`, `Trigger Timeout`, score reset, forced winner assignment, bot channel controls, and log download were historically exposed in the main app shell. Several API routes also mutated state without checking any authenticated role. Deleting `/overlay/...` from the URL was enough to reach the base app and operate admin surfaces.
+- **Immediate fix:** Hide admin UI for non-admins and require a verified session token on all admin-only routes and tag admin actions.
+- **Future-year fix:** Move dangerous controls to a separate `/admin` surface, add persistent app roles (`owner`, `admin`, `mod`, `player`) in state, and stop using username checks as the sole authority model.
+
+### 0b. Session model is split between localStorage and server routes
+- **Where:** `src/contexts/session-context.tsx`, `src/app/auth/callback/page.tsx`, `src/app/api/auth/twitch/callback/route.ts`, all authenticated API routes
+- **Issue:** The browser session lived in `localStorage`, but server routes could only trust cookies or explicit auth headers. That made server-side authorization brittle and easy to accidentally skip.
+- **Immediate fix:** Mirror the signed session token into a cookie at login time, and send the bearer token on client-side admin fetches.
+- **Future-year fix:** Replace the ad hoc session flow with a single server-trusted auth layer and central authorization helpers used by every mutation route.
+
 ### 1. Discord tag works but sends NO confirmation back to the user
 - **Where:** `bot.js` → tag command handler + `src/app/api/discord/announce/route.ts`
 - **Issue:** When a tag happens via Discord (through DSH), the `/api/discord/announce` route only pushes game state to DSH via `/api/chat-tag/refresh` — it never sends a confirmation message back to the Discord channel or user. The bot's tag handler in `bot.js` sends confirmation to Twitch chat via `reply()` and `broadcastToPlayers()`, but there's no equivalent Discord message path. The announce route returns `{ success: true }` silently.

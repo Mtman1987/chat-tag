@@ -14,6 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, MessageSquare, Trash2, Image, Trash, Download } from "lucide-react";
+import { useSession } from "@/contexts/session-context";
+import { isAdminUsername } from "@/lib/admin";
+import { getAuthHeaders } from "@/lib/client-auth";
 
 const SettingsSchema = z.object({
   discordWebhookUrl: z.string().url("Must be a valid webhook URL.").optional().or(z.literal('')),
@@ -26,6 +29,8 @@ const SettingsSchema = z.object({
 type SettingsForm = z.infer<typeof SettingsSchema>;
 
 export default function SettingsPage() {
+  const { user, isUserLoading } = useSession();
+  const isAdmin = isAdminUsername(user?.twitchUsername);
   const [isLoading, setIsLoading] = useState(true);
   const [isPostingToDiscord, setIsPostingToDiscord] = useState(false);
   const [isClearingAway, setIsClearingAway] = useState(false);
@@ -50,7 +55,7 @@ export default function SettingsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/settings');
+        const res = await fetch('/api/settings', { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           form.reset({
@@ -102,7 +107,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -115,7 +120,7 @@ export default function SettingsPage() {
   const handlePostToDiscord = async () => {
     setIsPostingToDiscord(true);
     try {
-      const res = await fetch('/api/update-discord', { method: 'POST' });
+      const res = await fetch('/api/update-discord', { method: 'POST', headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Backend failed to update Discord.');
       toast({ title: "Update Signal Sent!", description: "The request to update the Discord leaderboard has been sent." });
     } catch (error: any) {
@@ -130,7 +135,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/tag', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ action: 'clear-all-away' })
       });
       if (!res.ok) throw new Error('Failed to clear away status');
@@ -141,6 +146,29 @@ export default function SettingsPage() {
       setIsClearingAway(false);
     }
   };
+
+  if (isUserLoading) {
+    return (
+      <main className="container mx-auto p-4 md:p-6">
+        <div className="max-w-4xl mx-auto text-sm text-muted-foreground">Loading settings...</div>
+      </main>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <main className="container mx-auto p-4 md:p-6">
+        <Card className="max-w-2xl mx-auto bg-card/80 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="font-headline">Admin Access Required</CardTitle>
+            <CardDescription>
+              This page is reserved for approved app admins.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </main>
+    );
+  }
 
   return (
     <main className="container mx-auto p-4 md:p-6">
@@ -242,7 +270,7 @@ export default function SettingsPage() {
                 setIsFixingPlayers(true);
                 setFixResult(null);
                 try {
-                  const res = await fetch('/api/admin/fix-players', { method: 'POST' });
+                  const res = await fetch('/api/admin/fix-players', { method: 'POST', headers: getAuthHeaders() });
                   if (!res.ok) throw new Error('Failed');
                   const data = await res.json();
                   setFixResult(data);
@@ -271,7 +299,7 @@ export default function SettingsPage() {
                 setIsPruning(true);
                 setPruneResult(null);
                 try {
-                  const res = await fetch('/api/admin/prune-channels', { method: 'POST' });
+                  const res = await fetch('/api/admin/prune-channels', { method: 'POST', headers: getAuthHeaders() });
                   if (!res.ok) throw new Error('Failed');
                   const data = await res.json();
                   setPruneResult(data);
@@ -289,7 +317,17 @@ export default function SettingsPage() {
             <Separator />
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">Download admin history and mod activity logs.</p>
-              <Button onClick={() => window.open('/api/logs', '_blank')} variant="outline">
+              <Button onClick={async () => {
+                const res = await fetch('/api/logs', { headers: getAuthHeaders() });
+                if (!res.ok) {
+                  toast({ variant: 'destructive', title: 'Download Failed', description: 'Could not fetch logs.' });
+                  return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+              }} variant="outline">
                 <Download className="mr-2 h-4 w-4" />
                 Download Logs
               </Button>

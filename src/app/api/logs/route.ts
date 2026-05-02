@@ -1,9 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { readAppState } from '@/lib/volume-store';
 
 const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot-new.fly.dev';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = requireAdminRequest(req);
+  if (!auth.ok) return auth.response;
   try {
     // Fetch recent mod log + admin history from volume store
     const state = await readAppState();
