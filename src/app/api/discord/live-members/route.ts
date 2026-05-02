@@ -32,6 +32,7 @@ export async function GET(_request: NextRequest) {
         gameName: user.game_name || '',
         viewerCount: user.viewer_count || 0,
         thumbnailUrl: user.thumbnail_url || '',
+        streamStartedAt: user.startedAt || user.started_at || null,
         isSharedChat: Boolean(user.isSharedChat),
         sharedSessionId: user.sharedSessionId || null,
         isSharedHost: Boolean(user.isSharedHost),

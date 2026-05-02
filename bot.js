@@ -288,14 +288,21 @@ async function handleJoinFailure(channelName, err) {
   console.error(`[Bot] Join failed ${channelName}: ${msg}`);
 }
 
-async function maybeAnnounceDailyActivation(client, channelName) {
+function findLiveMemberForChannel(liveMembers, channelName) {
+  const normalized = String(channelName || '').toLowerCase().replace(/^#/, '');
+  return (liveMembers || []).find((member) =>
+    String(member?.twitchUsername || '').toLowerCase() === normalized
+  );
+}
+
+async function maybeAnnounceDailyActivation(client, channelName, liveMember = null) {
   const channel = String(channelName || '').toLowerCase().replace(/^#/, '');
   if (!channel) return;
 
   const gate = await apiCall('/api/bot/live-announcement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel })
+    body: JSON.stringify({ channel, streamStartedAt: liveMember?.streamStartedAt || liveMember?.startedAt || null })
   });
 
   if (!gate?.shouldAnnounce) return;
@@ -727,7 +734,7 @@ console.log = (...args) => {
         try {
           await client.join(`#${ch}`);
           joinedChannels.push(ch);
-          await maybeAnnounceDailyActivation(client, ch);
+          await maybeAnnounceDailyActivation(client, ch, findLiveMemberForChannel(allLiveMembers, ch));
           // Random delay 2-3s between joins (same logic as broadcasts)
           await sleep(2000 + Math.random() * 1000);
         } catch (e) {
@@ -899,7 +906,7 @@ console.log = (...args) => {
           try {
             await client.join(`#${ch}`);
             console.log(`[Bot] Joined new live channel: ${ch}`);
-            await maybeAnnounceDailyActivation(client, ch);
+            await maybeAnnounceDailyActivation(client, ch, findLiveMemberForChannel(allLiveMembers, ch));
             // Subscribe EventSub for new channel
             if (eventSubSessionId) {
               const broadcaster = await lookupBroadcasterId(ch);

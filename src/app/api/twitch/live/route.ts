@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
         gameName: stream.game_name,
         viewerCount: stream.viewer_count,
         thumbnailUrl: stream.thumbnail_url,
+        startedAt: stream.started_at,
         isSharedChat: Boolean(sharedInfo),
         sharedSessionId: sharedInfo?.sharedSessionId || null,
         isSharedHost: sharedInfo?.isSharedHost || false,
