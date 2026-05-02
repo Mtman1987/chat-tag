@@ -225,7 +225,10 @@ export default function OverlayPage() {
         {data.me && (
           <div style={{
             padding: '2vh 3vw 2.6vh', background: 'linear-gradient(180deg, rgba(50, 55, 80, 0.75), rgba(30, 30, 45, 0.75))',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, auto) minmax(0, 1fr)',
+            alignItems: 'center',
+            columnGap: '1.5vw',
             borderTop: '2px solid rgba(255,255,255,0.2)', width: '100%',
             boxSizing: 'border-box',
           }}>
@@ -234,8 +237,8 @@ export default function OverlayPage() {
               fontWeight: 900,
               lineHeight: 1,
               whiteSpace: 'nowrap',
-              flexShrink: 1,
-              maxWidth: '40vw',
+              minWidth: 0,
+              maxWidth: '100%',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }}>
@@ -246,13 +249,13 @@ export default function OverlayPage() {
               fontWeight: 900,
               display: 'flex',
               alignItems: 'center',
-              gap: '1.5vw',
-              flexWrap: 'wrap',
+              gap: '0.8vw',
+              flexWrap: 'nowrap',
               justifyContent: 'flex-end',
-              rowGap: '0.6vh',
-              flexShrink: 0,
               lineHeight: 1,
-              maxWidth: '48vw',
+              minWidth: 0,
+              width: '100%',
+              overflow: 'hidden',
             }}>
               <StatItem value={data.me.score} label="pts" />
               <span style={{opacity: 0.3}}>|</span>
