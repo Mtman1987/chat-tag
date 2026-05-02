@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       score: c.tags * 100 - c.tagged * 50 + (p.score || 0),
       tags: c.tags,
       tagged: c.tagged,
+      wins: p.wins || 0,
       isIt: Boolean(p.isIt),
       sleepingImmunity: Boolean(p.sleepingImmunity),
       offlineImmunity: Boolean(p.offlineImmunity),

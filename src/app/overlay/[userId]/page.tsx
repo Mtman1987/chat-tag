@@ -20,6 +20,20 @@ interface OverlayState {
 type BroadcastType = 'tag' | 'ffa' | 'newit' | 'history' | 'message';
 interface Broadcast { type: BroadcastType; lines: string[]; icon: string; color: string; glow: string; }
 
+function StatItem({ value, label, color }: { value: string | number; label: string; color?: string }) {
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'baseline',
+      gap: '0.35vw',
+      color: color || '#fff',
+    }}>
+      <span>{value}</span>
+      <small style={{ fontSize: '0.45em', opacity: 0.7, textTransform: 'uppercase' }}>{label}</small>
+    </span>
+  );
+}
+
 export default function OverlayPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -228,30 +242,27 @@ export default function OverlayPage() {
               {crown(data.me.twitchUsername)} <span style={{ opacity: 0.5, fontWeight: 400 }}>#{data.myRank}</span>
             </span>
             <div style={{
-              fontSize: 'min(5vw, 5.5vh)',
+              fontSize: 'min(4.2vw, 4.8vh)',
               fontWeight: 900,
               display: 'flex',
               alignItems: 'center',
               gap: '1.5vw',
-              whiteSpace: 'nowrap',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+              rowGap: '0.6vh',
               flexShrink: 0,
               lineHeight: 1,
+              maxWidth: '48vw',
             }}>
-              <span>{data.me.score}<small style={{fontSize:'0.5em', opacity:0.7}}>pts</small></span>
+              <StatItem value={data.me.score} label="pts" />
               <span style={{opacity: 0.3}}>|</span>
-              <span>{data.me.tags}<small style={{fontSize:'0.5em', opacity:0.7}}>tags</small></span>
-              {data.me.passCount > 0 && (
-                <>
-                  <span style={{opacity: 0.3}}>|</span>
-                  <span style={{color: '#ffd700', filter: 'drop-shadow(0 0 5px rgba(255,215,0,0.3))'}}>🎟️{data.me.passCount}</span>
-                </>
-              )}
-              {(data.me.wins || 0) > 0 && (
-                <>
-                  <span style={{opacity: 0.3}}>|</span>
-                  <span style={{color: '#ffd700', filter: 'drop-shadow(0 0 5px rgba(255,215,0,0.3))'}}>🏆{data.me.wins}</span>
-                </>
-              )}
+              <StatItem value={data.me.tags} label="tags" />
+              <span style={{opacity: 0.3}}>|</span>
+              <StatItem value={data.me.tagged || 0} label="tagged" />
+              <span style={{opacity: 0.3}}>|</span>
+              <StatItem value={`🎟️${data.me.passCount || 0}`} label="passes" color="#ffd700" />
+              <span style={{opacity: 0.3}}>|</span>
+              <StatItem value={`🏆${data.me.wins || 0}`} label="wins" color="#ffd700" />
             </div>
           </div>
         )}
