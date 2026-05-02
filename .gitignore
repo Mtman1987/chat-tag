@@ -48,7 +48,6 @@ pnpm-debug.log*
 *~
 *.orig
 *yarn.lock
-*package-lock.json
 
 # Dumps
 *.dump
