@@ -134,6 +134,41 @@ async function apiCall(endpoint, options = {}) {
   }
 }
 
+let mutedChannelsCache = { fetchedAt: 0, channels: new Set() };
+const MUTED_CHANNELS_CACHE_MS = 5000;
+
+async function getMutedChannelsCached(force = false) {
+  const now = Date.now();
+  if (!force && now - mutedChannelsCache.fetchedAt < MUTED_CHANNELS_CACHE_MS) {
+    return mutedChannelsCache.channels;
+  }
+
+  const data = await apiCall('/api/bot/muted');
+  const channels = new Set((data?.muted || []).map((channel) =>
+    String(channel || '').toLowerCase().replace(/^#/, '')
+  ));
+  mutedChannelsCache = { fetchedAt: now, channels };
+  return channels;
+}
+
+async function sendOverlayMessage(targetChannel, message) {
+  const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
+  if (!normalized || !message) return false;
+
+  const result = await apiCall('/api/overlay/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: normalized, message, type: 'bot-message' }),
+  });
+
+  if (!result?.success) {
+    console.error(`[Overlay] Failed to queue message for ${normalized}: ${result?.error || 'unknown error'}`);
+    return false;
+  }
+
+  return true;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -429,6 +464,12 @@ async function sendChatWithSharedFallback(client, targetChannel, message, option
   const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
   if (!normalized || !message) return;
 
+  const mutedChannels = await getMutedChannelsCached();
+  if (!options.forceChat && mutedChannels.has(normalized)) {
+    await sendOverlayMessage(normalized, message);
+    return;
+  }
+
   await getLiveMembersCached();
   const member = liveMembersCache.map.get(normalized);
   const inSharedChat = Boolean(member?.isSharedChat);
@@ -511,8 +552,13 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
       const login = (member?.twitchUsername || '').toLowerCase();
       return login && login !== excludeLower && playerSet.has(login) && !blacklistedChannels.has(login) && !overlayChannels.has(login);
     });
+    const eligibleOverlay = liveMembers.filter((member) => {
+      const login = (member?.twitchUsername || '').toLowerCase();
+      return login && login !== excludeLower && playerSet.has(login) && !blacklistedChannels.has(login) && overlayChannels.has(login);
+    });
 
     const channels = dedupeSharedChatChannels(eligibleLive);
+    const overlayOnlyChannels = dedupeSharedChatChannels(eligibleOverlay);
     
     console.log(`[Bot] Broadcasting to ${channels.length} live players`);
     
@@ -522,6 +568,13 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
         await new Promise(r => setTimeout(r, 1500)); // 1.5s delay
       } catch (e) {
         console.error(`[Bot] Error broadcasting to ${ch}:`, e.message);
+      }
+    }
+    for (const ch of overlayOnlyChannels) {
+      try {
+        await sendOverlayMessage(ch, message);
+      } catch (e) {
+        console.error(`[Bot] Error broadcasting to overlay ${ch}:`, e.message);
       }
     }
     console.log('[Bot] Broadcast complete');
@@ -1972,6 +2025,7 @@ console.log = (...args) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ channel: channelName })
         });
+        mutedChannelsCache.channels.delete(channelName.toLowerCase());
         await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1990,7 +2044,14 @@ console.log = (...args) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'set-overlay', userId: channelUserId, enabled: true })
         });
-        reply(`@${user} 📺 Overlay mode ON — bot muted in chat. Add to OBS: ${API_BASE}/overlay/${channelUserId} | "spmt mute" again to go back to chat.`);
+        await sendChatWithSharedFallback(
+          client,
+          channelName,
+          `@${user} 📺 Overlay mode ON — bot muted in chat. Add to OBS: ${API_BASE}/overlay/${channelUserId} | "spmt mute" again to go back to chat.`,
+          { warnOnFallback: true, forceChat: true }
+        );
+        mutedChannelsCache.channels.add(channelName.toLowerCase());
+        mutedChannelsCache.fetchedAt = Date.now();
       }
     }
     
@@ -2007,6 +2068,7 @@ console.log = (...args) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: channelName })
       });
+      mutedChannelsCache.channels.delete(channelName.toLowerCase());
       await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

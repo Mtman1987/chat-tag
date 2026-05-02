@@ -62,6 +62,10 @@ export async function GET(req: NextRequest) {
     });
 
   const monthlyWinners = state.tagGame.state.monthlyWinners || [];
+  const overlayMessages = (state.overlayMessages?.[userId] || [])
+    .slice()
+    .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
+    .slice(0, 10);
 
   return NextResponse.json({
     me: me || null,
@@ -72,6 +76,7 @@ export async function GET(req: NextRequest) {
     playerCount: players.length,
     leaderboard,
     recentHistory,
+    overlayMessages,
     monthlyWinners,
     timestamp: Date.now(),
   });

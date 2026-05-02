@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { channel } = await req.json();
@@ -14,22 +10,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'channel is required' }, { status: 400 });
     }
 
-    const today = todayUtc();
-
     const shouldAnnounce = await updateAppState((state) => {
       const map = state.botRuntime.firstLiveAnnouncementByChannel || {};
-      const lastDate = map[normalized];
 
-      if (lastDate === today) {
+      if (map[normalized]) {
         return false;
       }
 
-      map[normalized] = today;
+      map[normalized] = new Date().toISOString();
       state.botRuntime.firstLiveAnnouncementByChannel = map;
       return true;
     });
 
-    return NextResponse.json({ shouldAnnounce, date: today, channel: normalized });
+    return NextResponse.json({ shouldAnnounce, channel: normalized });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

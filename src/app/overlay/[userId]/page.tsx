@@ -12,11 +12,12 @@ interface OverlayState {
   playerCount: number;
   leaderboard: any[];
   recentHistory: any[];
+  overlayMessages?: any[];
   monthlyWinners: any[];
   timestamp: number;
 }
 
-type BroadcastType = 'tag' | 'ffa' | 'newit' | 'history';
+type BroadcastType = 'tag' | 'ffa' | 'newit' | 'history' | 'message';
 interface Broadcast { type: BroadcastType; lines: string[]; icon: string; color: string; glow: string; }
 
 export default function OverlayPage() {
@@ -31,6 +32,7 @@ export default function OverlayPage() {
   const broadcastTimer = useRef<NodeJS.Timeout | null>(null);
   const historyTimer = useRef<NodeJS.Timeout | null>(null);
   const prevHistoryTs = useRef<number | null>(null);
+  const prevOverlayMessageTs = useRef<number | null>(null);
   const prevIt = useRef<string | null>(null);
   const lastHistoryShow = useRef<number>(0);
 
@@ -66,9 +68,24 @@ export default function OverlayPage() {
         const res = await fetch(`/api/overlay/state?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' });
         if (!res.ok) return;
         const next: OverlayState = await res.json();
+        let showedOverlayMessage = false;
+
+        const latestMessage = next.overlayMessages?.[0];
+        const latestMessageTs = latestMessage?.timestamp || 0;
+        if (prevOverlayMessageTs.current !== null && latestMessageTs > prevOverlayMessageTs.current) {
+          showedOverlayMessage = true;
+          fireBroadcast({
+            type: 'message',
+            lines: [latestMessage.message],
+            icon: '💬',
+            color: '#9146ff',
+            glow: '#9146ff',
+          }, 8000);
+        }
+        prevOverlayMessageTs.current = latestMessageTs;
 
         const latestTs = next.recentHistory[0]?.timestamp || 0;
-        if (prevHistoryTs.current !== null && latestTs > prevHistoryTs.current) {
+        if (!showedOverlayMessage && prevHistoryTs.current !== null && latestTs > prevHistoryTs.current) {
           const h = next.recentHistory[0];
           if (h && !h.blocked) {
             const dp = h.doublePoints ? ' for DOUBLE POINTS and is now it!' : ' who is now it!';
@@ -83,7 +100,7 @@ export default function OverlayPage() {
         prevHistoryTs.current = latestTs;
 
         const newIt = next.it?.username || null;
-        if (prevIt.current !== null && newIt !== prevIt.current) {
+        if (!showedOverlayMessage && prevIt.current !== null && newIt !== prevIt.current) {
           if (!newIt) {
             fireBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00' }, 8000);
           } else {
@@ -112,7 +129,7 @@ export default function OverlayPage() {
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
 
   return (
-    <div style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', sans-serif", color: '#fff' }}>
+    <div style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff' }}>
 
       {/* FULL-SCREEN BROADCAST */}
       {broadcast && (
@@ -147,56 +164,89 @@ export default function OverlayPage() {
         </div>
       )}
 
-      {/* BOTTOM BAR */}
+      {/* BOTTOM UI CONTAINER */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: '48%',
+        position: 'absolute', bottom: 0, left: 0, right: 0,
         transition: 'opacity 0.4s ease, transform 0.4s ease',
         opacity: dimBar ? 0.12 : 1, transform: dimBar ? 'translateY(5%)' : 'translateY(0)',
-        zIndex: 20, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        zIndex: 20, display: 'flex', flexDirection: 'column',
       }}>
         {/* IT / FFA Status */}
         <div style={{
-          padding: '1.8% 3%', display: 'flex', alignItems: 'center', gap: '2.4%',
-          borderTop: `0.6vh solid ${data.isFFA ? '#ff4500' : '#00d9ff'}`,
-          background: data.isFFA ? 'linear-gradient(180deg, #ff450022, #ff450066)' : 'linear-gradient(180deg, #00d9ff11, #00d9ff44)',
+          padding: '2.5vh 3vw', display: 'flex', alignItems: 'center', gap: '2vw',
+          borderTop: `0.8vh solid ${data.isFFA ? '#ff4500' : '#00d9ff'}`,
+          background: data.isFFA
+            ? 'linear-gradient(180deg, rgba(255, 69, 0, 0.75), rgba(255, 100, 0, 0.75))'
+            : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
         }}>
-          <span style={{ fontSize: 'min(12vw, 14.4vh)' }}>{data.isFFA ? '🔥' : '🎯'}</span>
-          <div>
+          <span style={{ fontSize: 'min(12vw, 100px)' }}>{data.isFFA ? '🔥' : '🎯'}</span>
+          <div style={{ flexShrink: 1, overflow: 'hidden' }}>
             {data.isFFA ? (
               <>
-                <div style={{ fontSize: 'min(9.6vw, 12vh)', fontWeight: 900, color: '#ff4500', textShadow: '0 0 2.4vw rgba(255,69,0,0.5)', lineHeight: 1 }}>FREE FOR ALL</div>
-                <div style={{ fontSize: 'min(4.2vw, 4.8vh)', opacity: 0.8 }}>Anyone can tag for DOUBLE POINTS!</div>
+                <div style={{ fontSize: 'min(3vw, 2.8vh)', opacity: 0.9, fontWeight: 700, textTransform: 'uppercase' }}>FREE FOR ALL</div>
+                <div style={{ fontSize: 'min(4vw, 3.5vh)', opacity: 0.8 }}>Anyone can tag for DOUBLE POINTS!</div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 'min(4.2vw, 4.2vh)', opacity: 0.5, textTransform: 'uppercase' as const, letterSpacing: '0.36vw' }}>IT</div>
-                <div style={{ fontSize: 'min(9.6vw, 12vh)', fontWeight: 900, textShadow: '0 0 2.4vw rgba(0,217,255,0.4)', lineHeight: 1 }}>{crown(data.it?.username || '?')}</div>
+                <div style={{ fontSize: 'min(3vw, 2.8vh)', opacity: 0.9, fontWeight: 700, textTransform: 'uppercase' }}>IT</div>
+                <div style={{
+                  fontSize: 'min(9vw, 10vh)',
+                  fontWeight: 900,
+                  lineHeight: 0.9,
+                  whiteSpace: 'nowrap',
+                  textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                }}>{crown(data.it?.username || '?')}</div>
               </>
             )}
           </div>
-          <div style={{ fontSize: 'min(3.6vw, 3.6vh)', opacity: 0.4 }}>{!data.isFFA && `${elapsed}m`}</div>
-          <div style={{ fontSize: 'min(3.6vw, 3.6vh)', opacity: 0.4, marginLeft: 'auto' }}>{data.playerCount} players</div>
+          <div style={{ fontSize: 'min(4vw, 4vh)', fontWeight: 700, opacity: 0.8, marginLeft: 'auto' }}>
+            {!data.isFFA && `${elapsed}m · `}{data.playerCount}
+          </div>
         </div>
 
         {/* My Stats */}
         {data.me && (
           <div style={{
-            padding: '1.8% 3%', background: 'linear-gradient(180deg, rgba(0,0,0,0.3), rgba(0,0,0,0.6))',
+            padding: '2vh 3vw', background: 'linear-gradient(180deg, rgba(50, 55, 80, 0.75), rgba(30, 30, 45, 0.75))',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderTop: '1px solid rgba(255,255,255,0.08)', width: '100%',
+            borderTop: '2px solid rgba(255,255,255,0.2)', width: '100%',
           }}>
-            <span style={{ fontSize: 'min(6vw, 7.2vh)', fontWeight: 800, whiteSpace: 'nowrap' as const }}>
-              {crown(data.me.twitchUsername)} <span style={{ opacity: 0.45 }}>#{data.myRank}</span>
+            <span style={{
+              fontSize: 'min(6vw, 6.5vh)',
+              fontWeight: 900,
+              whiteSpace: 'nowrap',
+              flexShrink: 1,
+              maxWidth: '40vw',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {crown(data.me.twitchUsername)} <span style={{ opacity: 0.5, fontWeight: 400 }}>#{data.myRank}</span>
             </span>
-            <span style={{ fontSize: 'min(6vw, 7.2vh)', fontWeight: 800, whiteSpace: 'nowrap' as const }}>
-              {data.me.score} <span style={{ opacity: 0.45 }}>pts</span>
-              <span style={{ opacity: 0.2, margin: '0 min(1.2vw, 1.2vh)' }}>·</span>
-              {data.me.tags} <span style={{ opacity: 0.45 }}>tags</span>
-              <span style={{ opacity: 0.2, margin: '0 min(1.2vw, 1.2vh)' }}>·</span>
-              {data.me.tagged} <span style={{ opacity: 0.45 }}>tagged</span>
-              {data.me.passCount > 0 && <><span style={{ opacity: 0.2, margin: '0 min(1.2vw, 1.2vh)' }}>·</span><span style={{ color: '#ffd700' }}>🎟️{data.me.passCount}</span></>}
-              {(data.me.wins || 0) > 0 && <><span style={{ opacity: 0.2, margin: '0 min(1.2vw, 1.2vh)' }}>·</span><span style={{ color: '#ffd700' }}>🏆{data.me.wins}</span></>}
-            </span>
+            <div style={{
+              fontSize: 'min(5.5vw, 6vh)',
+              fontWeight: 900,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1.5vw',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}>
+              <span>{data.me.score}<small style={{fontSize:'0.5em', opacity:0.7}}>pts</small></span>
+              <span style={{opacity: 0.3}}>|</span>
+              <span>{data.me.tags}<small style={{fontSize:'0.5em', opacity:0.7}}>tags</small></span>
+              {data.me.passCount > 0 && (
+                <>
+                  <span style={{opacity: 0.3}}>|</span>
+                  <span style={{color: '#ffd700', filter: 'drop-shadow(0 0 5px rgba(255,215,0,0.3))'}}>🎟️{data.me.passCount}</span>
+                </>
+              )}
+              {(data.me.wins || 0) > 0 && (
+                <>
+                  <span style={{opacity: 0.3}}>|</span>
+                  <span style={{color: '#ffd700', filter: 'drop-shadow(0 0 5px rgba(255,215,0,0.3))'}}>🏆{data.me.wins}</span>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

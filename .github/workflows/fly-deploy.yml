@@ -5,26 +5,32 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
+
 jobs:
-  deploy:
-    name: Deploy app
+  deploy-web:
+    name: Deploy web app
     runs-on: ubuntu-latest
-    concurrency: deploy-group    # optional: ensure only one action runs at a time
+    concurrency: fly-deploy-web
     steps:
       - uses: actions/checkout@v4
-      - name: Check commit message
-        run: |
-          if [[ "$(git log -1 --pretty=%B)" == "empty commit" ]]; then
-            echo "Skipping deployment for empty commit"
-            exit 0
-          fi
       - uses: superfly/flyctl-actions/setup-flyctl@v1
-      - run: fly deploy --remote-only
+      - name: Deploy chat-tag-new
+        run: fly deploy --remote-only --config fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      - name: Push empty commit
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git commit --allow-empty -m "empty commit"
-          git push
+
+  deploy-bot:
+    name: Deploy bot app
+    runs-on: ubuntu-latest
+    concurrency: fly-deploy-bot
+    needs: deploy-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+      - name: Deploy chat-tag-bot-new
+        run: fly deploy --remote-only --config fly-bot.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
