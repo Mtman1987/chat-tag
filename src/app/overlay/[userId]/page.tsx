@@ -60,8 +60,8 @@ function StackStat({ value, label, align = 'right' }: { value: string | number; 
       lineHeight: 1,
       minWidth: 0,
     }}>
-      <span style={{ fontSize: 'min(4.6vw, 5.2vh)', fontWeight: 900, whiteSpace: 'nowrap' }}>{value}</span>
-      <small style={{ fontSize: 'min(1.45vw, 1.65vh)', opacity: 0.72, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{label}</small>
+      <span style={{ fontSize: 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
+      <small style={{ fontSize: 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.04em', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
     </div>
   );
 }
@@ -70,6 +70,7 @@ export default function OverlayPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const userId = params.userId as string;
+  const isPreview = userId === 'preview';
   const historyInterval = parseInt(searchParams.get('cycle') || '240') * 1000;
 
   const [data, setData] = useState<OverlayState | null>(null);
@@ -86,6 +87,7 @@ export default function OverlayPage() {
   const lastHistoryShow = useRef<number>(0);
   const nextCycleMode = useRef<'history' | 'leaderboard'>('history');
   const audioContextRef = useRef<AudioContext | null>(null);
+  const previewTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const crown = (name: string) => {
     if (!data?.monthlyWinners?.length) return name;
@@ -265,6 +267,85 @@ export default function OverlayPage() {
   };
 
   useEffect(() => {
+    if (!isPreview) return;
+
+    const previewState: OverlayState = {
+      me: {
+        twitchUsername: 'mtman1987',
+        score: 700,
+        tags: 2,
+        tagged: 0,
+        passCount: 1,
+        wins: 0,
+      },
+      myRank: 1,
+      it: { id: 'preview-it', username: 'niniav 23' },
+      isFFA: false,
+      lastTagTime: Date.now() - 4 * 60 * 1000,
+      liveCount: 9,
+      playerCount: 114,
+      leaderboard: [
+        { twitchUsername: 'niniav 23', score: 1200 },
+        { twitchUsername: 'mtman1987', score: 700 },
+        { twitchUsername: 'van braak', score: 650 },
+        { twitchUsername: 'scarlett_ai420', score: 620 },
+        { twitchUsername: 'pinscorpion6521', score: 500 },
+      ],
+      recentHistory: [
+        { tagger: 'van braak', tagged: 'niniav 23', doublePoints: false, blocked: null, timestamp: Date.now() - 60_000 },
+      ],
+      overlayMessages: [],
+      monthlyWinners: [],
+      timestamp: Date.now(),
+    };
+
+    setData(previewState);
+
+    const previewEvents: Record<string, OverlayMessage> = {
+      tag: { type: 'tag-card', payload: { tagger: 'van braak', tagged: 'niniav 23', doublePoints: false }, timestamp: Date.now() },
+      pass: { type: 'pass-card', payload: { tagger: 'mtman1987', tagged: 'niniav 23', doublePoints: true, passUsed: true }, timestamp: Date.now() },
+      grantpass: { type: 'pass-card', payload: { tagged: 'mtman1987', granted: true }, timestamp: Date.now() },
+      rank: { type: 'leaderboard-card', payload: { rows: previewState.leaderboard.map((row, index) => ({ rank: index + 1, username: row.twitchUsername, score: row.score })) }, timestamp: Date.now() },
+      score: { type: 'score-card', payload: { playerName: 'mtman1987', rank: 1, totalPlayers: 114, score: 700, tags: 2, tagged: 0, passCount: 1, wins: 0 }, timestamp: Date.now() },
+      live: { type: 'live-card', payload: { liveCount: 9, chatterCount: 12, page: 1, totalPages: 1, groups: ['🟢niniav23 > 💬mtman1987, vanbraak', '🟢vanbraak', '🟣Discord > 💬scarlett_ai420'] }, timestamp: Date.now() },
+      history: { type: 'history', message: 'preview history', payload: null, timestamp: Date.now() },
+      message: { type: 'message', message: 'Overlay mode ON - bot replies now appear here.', timestamp: Date.now() },
+      ffa: { type: 'ffa', message: 'preview ffa', timestamp: Date.now() },
+      newit: { type: 'newit', message: 'preview newit', timestamp: Date.now() },
+    };
+
+    const triggerPreview = (kind: string) => {
+      if (kind === 'ffa') {
+        queueBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00' }, 13000);
+        return;
+      }
+      if (kind === 'newit') {
+        queueBroadcast({ type: 'newit', lines: ['niniav 23 is now IT!'], icon: '🎯', color: '#00d9ff', glow: '#00d9ff' }, 11000);
+        return;
+      }
+      if (kind === 'history') {
+        fireHistoryBroadcast(previewState.recentHistory);
+        return;
+      }
+      const event = previewEvents[kind];
+      const built = event ? buildBroadcastFromOverlayMessage(event) : null;
+      if (built) queueBroadcast(built, built.type === 'history' ? 15000 : 13000);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'overlay-preview-trigger') return;
+      triggerPreview(String(event.data.kind || 'message'));
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    };
+  }, [isPreview]);
+
+  useEffect(() => {
+    if (isPreview) return;
     const poll = async () => {
       try {
         const res = await fetch(`/api/overlay/state?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' });
@@ -319,9 +400,10 @@ export default function OverlayPage() {
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [userId, isPreview]);
 
   useEffect(() => {
+    if (isPreview) return;
     historyTimer.current = setInterval(() => {
       if (!data || broadcast || Date.now() - lastHistoryShow.current <= historyInterval) return;
 
@@ -342,7 +424,7 @@ export default function OverlayPage() {
       }
     }, historyInterval);
     return () => { if (historyTimer.current) clearInterval(historyTimer.current); };
-  }, [data, broadcast, historyInterval]);
+  }, [data, broadcast, historyInterval, isPreview]);
 
   if (!data) return null;
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
@@ -417,40 +499,47 @@ export default function OverlayPage() {
       }}>
         {/* IT / FFA Status */}
         <div style={{
-          padding: '2.5vh 3vw', display: 'flex', alignItems: 'center', gap: '2vw',
+          padding: '2.2vh 2.6vw', display: 'flex', alignItems: 'center', gap: '1.35vw',
           borderTop: `0.8vh solid ${data.isFFA ? '#ff4500' : '#00d9ff'}`,
           background: data.isFFA
             ? 'linear-gradient(180deg, rgba(255, 69, 0, 0.75), rgba(255, 100, 0, 0.75))'
             : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
           boxSizing: 'border-box',
         }}>
-          <span style={{ fontSize: 'min(12vw, 100px)' }}>{data.isFFA ? '🔥' : '🎯'}</span>
-          <div style={{ flexShrink: 1, overflow: 'hidden' }}>
+          <span style={{ fontSize: 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
+          <div style={{ flexShrink: 0, overflow: 'hidden', minWidth: 0, maxWidth: 'min(40vw, 380px)' }}>
             {data.isFFA ? (
               <>
-                <div style={{ fontSize: 'min(3vw, 2.8vh)', opacity: 0.9, fontWeight: 700, textTransform: 'uppercase' }}>FREE FOR ALL</div>
-                <div style={{ fontSize: 'min(4vw, 3.5vh)', opacity: 0.8 }}>Anyone can tag for DOUBLE POINTS!</div>
+                <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>FREE FOR ALL</div>
+                <div style={{ fontSize: 'min(3.4vw, 3vh)', opacity: 0.92, fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>Anyone can tag for DOUBLE POINTS!</div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 'min(3vw, 2.8vh)', opacity: 0.9, fontWeight: 700, textTransform: 'uppercase' }}>IT</div>
+                <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>IT</div>
                 <div style={{
-                  fontSize: 'min(9vw, 10vh)',
+                  fontSize: 'min(7.4vw, 7.8vh)',
                   fontWeight: 900,
-                  lineHeight: 0.9,
+                  lineHeight: 0.95,
                   whiteSpace: 'nowrap',
-                  textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  textShadow: '0 2px 6px rgba(0,0,0,0.5)',
                 }}>{crown(data.it?.username || '?')}</div>
               </>
             )}
           </div>
           <div style={{
-            marginLeft: 'auto',
+            marginLeft: '0.9vw',
             display: 'grid',
             gridTemplateColumns: 'repeat(3, minmax(0, auto))',
             alignItems: 'center',
-            columnGap: '1.6vw',
-            rowGap: '0.4vh',
+            columnGap: '1.05vw',
+            rowGap: '0.3vh',
+            padding: '0.95vh 1.1vw 0.85vh',
+            background: 'linear-gradient(180deg, rgba(7, 16, 30, 0.72), rgba(6, 12, 24, 0.82))',
+            border: '1px solid rgba(255,255,255,0.14)',
+            borderRadius: '0.6vw',
+            boxShadow: '0 0.4vh 1.4vh rgba(0,0,0,0.35)',
           }}>
             <StackStat value={data.liveCount || 0} label="live" />
             <StackStat value={data.isFFA ? 'FFA' : `${elapsed}m`} label={data.isFFA ? 'mode' : 'it time'} />
