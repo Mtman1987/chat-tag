@@ -129,7 +129,7 @@ export default function OverlayPage() {
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
 
   return (
-    <div style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff' }}>
+    <div style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff', boxSizing: 'border-box' }}>
 
       {/* FULL-SCREEN BROADCAST */}
       {broadcast && (
@@ -170,6 +170,8 @@ export default function OverlayPage() {
         transition: 'opacity 0.4s ease, transform 0.4s ease',
         opacity: dimBar ? 0.12 : 1, transform: dimBar ? 'translateY(5%)' : 'translateY(0)',
         zIndex: 20, display: 'flex', flexDirection: 'column',
+        paddingBottom: 'max(1.25vh, env(safe-area-inset-bottom))',
+        boxSizing: 'border-box',
       }}>
         {/* IT / FFA Status */}
         <div style={{
@@ -178,6 +180,7 @@ export default function OverlayPage() {
           background: data.isFFA
             ? 'linear-gradient(180deg, rgba(255, 69, 0, 0.75), rgba(255, 100, 0, 0.75))'
             : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
+          boxSizing: 'border-box',
         }}>
           <span style={{ fontSize: 'min(12vw, 100px)' }}>{data.isFFA ? '🔥' : '🎯'}</span>
           <div style={{ flexShrink: 1, overflow: 'hidden' }}>
@@ -207,13 +210,15 @@ export default function OverlayPage() {
         {/* My Stats */}
         {data.me && (
           <div style={{
-            padding: '2vh 3vw', background: 'linear-gradient(180deg, rgba(50, 55, 80, 0.75), rgba(30, 30, 45, 0.75))',
+            padding: '2vh 3vw 2.6vh', background: 'linear-gradient(180deg, rgba(50, 55, 80, 0.75), rgba(30, 30, 45, 0.75))',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             borderTop: '2px solid rgba(255,255,255,0.2)', width: '100%',
+            boxSizing: 'border-box',
           }}>
             <span style={{
               fontSize: 'min(6vw, 6.5vh)',
               fontWeight: 900,
+              lineHeight: 1,
               whiteSpace: 'nowrap',
               flexShrink: 1,
               maxWidth: '40vw',
@@ -223,13 +228,14 @@ export default function OverlayPage() {
               {crown(data.me.twitchUsername)} <span style={{ opacity: 0.5, fontWeight: 400 }}>#{data.myRank}</span>
             </span>
             <div style={{
-              fontSize: 'min(5.5vw, 6vh)',
+              fontSize: 'min(5vw, 5.5vh)',
               fontWeight: 900,
               display: 'flex',
               alignItems: 'center',
               gap: '1.5vw',
               whiteSpace: 'nowrap',
               flexShrink: 0,
+              lineHeight: 1,
             }}>
               <span>{data.me.score}<small style={{fontSize:'0.5em', opacity:0.7}}>pts</small></span>
               <span style={{opacity: 0.3}}>|</span>
