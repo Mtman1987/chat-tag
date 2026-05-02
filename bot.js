@@ -151,14 +151,19 @@ async function getMutedChannelsCached(force = false) {
   return channels;
 }
 
-async function sendOverlayMessage(targetChannel, message) {
+async function sendOverlayMessage(targetChannel, message, options = {}) {
   const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
-  if (!normalized || !message) return false;
+  if (!normalized || (!message && !options.payload)) return false;
 
   const result = await apiCall('/api/overlay/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel: normalized, message, type: 'bot-message' }),
+    body: JSON.stringify({
+      channel: normalized,
+      message,
+      type: options.type || 'bot-message',
+      payload: options.payload || null,
+    }),
   });
 
   if (!result?.success) {
@@ -167,6 +172,62 @@ async function sendOverlayMessage(targetChannel, message) {
   }
 
   return true;
+}
+
+async function sendRichOverlayEvent(targetChannel, type, message, payload) {
+  return sendOverlayMessage(targetChannel, message, { type, payload });
+}
+
+async function mirrorOverlayLinkReply(client, targetChannel, text) {
+  const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
+  if (!normalized || !text) return;
+  await sendChatWithSharedFallback(client, normalized, text, { warnOnFallback: true, forceChat: true });
+}
+
+async function queueScoreOverlay(channelName, playerName, rank, totalPlayers, player, winnerText = '') {
+  await sendRichOverlayEvent(
+    channelName,
+    'score-card',
+    `${playerName} score`,
+    {
+      playerName,
+      rank,
+      totalPlayers,
+      score: player?.score || 0,
+      tags: player?.tags || 0,
+      tagged: player?.tagged || 0,
+      passCount: player?.passCount || (player?.hasPass ? 1 : 0) || 0,
+      wins: player?.wins || 0,
+      winnerText,
+    }
+  );
+}
+
+async function queueLeaderboardOverlay(channelName, players = [], winners = []) {
+  const rows = players.slice(0, 5).map((p, i) => ({
+    rank: i + 1,
+    username: crown(p.twitchUsername || p.username, winners),
+    score: p.score || 0,
+  }));
+  await sendRichOverlayEvent(channelName, 'leaderboard-card', 'Top players', { rows });
+}
+
+async function queueLiveOverlay(channelName, groups = [], liveCount = 0, chatterCount = 0, page = 1, totalPages = 1) {
+  await sendRichOverlayEvent(channelName, 'live-card', 'Live players', {
+    groups: groups.slice(0, 8),
+    liveCount,
+    chatterCount,
+    page,
+    totalPages,
+  });
+}
+
+async function queueTagOverlay(channelName, type, tagger, tagged, extra = {}) {
+  await sendRichOverlayEvent(channelName, type, `${tagger} tagged ${tagged}`, {
+    tagger,
+    tagged,
+    ...extra,
+  });
 }
 
 function sleep(ms) {
@@ -593,7 +654,7 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
 const username = env.TWITCH_BOT_USERNAME;
 const recentMessages = new Set();
 const BOT_TEST_CHANNEL = (env.BOT_TEST_CHANNEL || '').toLowerCase().replace(/^#/, '');
-const ALWAYS_JOINED_CHANNELS = []; // Empty — bot only joins live channels
+const ALWAYS_JOINED_CHANNELS = ['mtman1987']; // Channels the bot should keep joined even while offline
 let isIrcConnected = false;
 let lastPeriodicSuccessAt = Date.now();
 const logBuffer = [];
@@ -1496,9 +1557,7 @@ console.log = (...args) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'pin-tag', userId, targetUserId: 'fake_scarlett', targetUsername: 'scarlett_ai420' })
           });
-          if (!isMuted) {
-            reply( `🎯 ${user} tagged @scarlett_ai420! (Pin has tagged them ${pinRes.count} times total)`);
-          }
+          await reply( `🎯 ${user} tagged @scarlett_ai420! (Pin has tagged them ${pinRes.count} times total)`);
           return;
         }
         
@@ -1529,15 +1588,14 @@ console.log = (...args) => {
           });
           
           if (realTagRes?.error) {
-            if (!isMuted) {
-              reply( `@${user} ${realTagRes.error}`);
-            }
+            await reply( `@${user} ${realTagRes.error}`);
           } else {
             const msg = realTagRes.doublePoints
               ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! (Pin has tagged them ${pinRes.count} times total)`
               : `🎯 ${user} tagged @${target} who is now it! (Pin has tagged them ${pinRes.count} times total)`;
-            if (!isMuted) {
-              await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
+            await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
+            if (isMuted) {
+              await queueTagOverlay(channelName, realTagRes.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(target), { doublePoints: Boolean(realTagRes.doublePoints) });
             }
             if (!isMuted) {
               await broadcastToPlayers(client, msg, channelName);
@@ -1545,9 +1603,7 @@ console.log = (...args) => {
           }
         } else {
           // Just pin tag, no real tag
-          if (!isMuted) {
-            reply( `🎯 ${user} tagged @${target}! (Pin has tagged them ${pinRes.count} times total)`);
-          }
+          await reply( `🎯 ${user} tagged @${target}! (Pin has tagged them ${pinRes.count} times total)`);
         }
         return;
       }
@@ -1586,8 +1642,9 @@ console.log = (...args) => {
           ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! 🔥 Type "spmt join" to play!`
           : `🎯 ${user} tagged @${target} who is now it! Type "spmt join" to play!`;
         console.log(`[Bot] Sending tag message in current channel`);
-        if (!isMuted) {
-          await reply( msg);
+        await reply( msg);
+        if (isMuted) {
+          await queueTagOverlay(channelName, res.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(target), { doublePoints: Boolean(res.doublePoints) });
         }
         if (!isMuted) {
           console.log('[Bot] Broadcasting to other players...');
@@ -1968,6 +2025,9 @@ console.log = (...args) => {
       const pageContent = (pages[page] || []).join(' | ');
       
       reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
+      if (isMuted) {
+        await queueLiveOverlay(channelName, pages[page] || [], liveMembers.length, totalChatters, page + 1, totalPages);
+      }
       
       global.livePages[userId] = (page + 1) % totalPages;
     }
@@ -1986,6 +2046,9 @@ console.log = (...args) => {
       const winsText = (player.wins || 0) > 0 ? ` | 🏆 Wins: ${player.wins}` : '';
       const winnerText = winEntry ? ` | 👑 #${winEntry.place} Winner` : '';
       reply(`@${crown(user)} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || (player.hasPass ? 1 : 0)}/3${winsText}${winnerText}`);
+      if (isMuted) {
+        await queueScoreOverlay(channelName, crown(user), rank, sorted.length, player, winnerText.replace(/^ \| /, ''));
+      }
     }
     
     else if (cmd === 'rank') {
@@ -1997,6 +2060,9 @@ console.log = (...args) => {
       const winners = (data?.monthlyWinners || []);
       const winnerLine = winners.length > 0 ? ' | Last Winners: ' + winners.map(w => `\u{1F451}#${w.place} ${w.username}`).join(', ') : '';
       reply(`@${user} Top 3: ${rankings}${winnerLine}`);
+      if (isMuted) {
+        await queueLeaderboardOverlay(channelName, sorted, winners);
+      }
     }
     
     else if (cmd === 'pinrank') {
@@ -2010,7 +2076,13 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'rules') {
-      reply( `@${user} Tag Rules: Tag someone with "spmt tag @user" in their chat. If you're it, tag someone else! "spmt away" = toggle immunity. "spmt pass @user" = earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`);
+      const rulesText = `@${user} Tag Rules: Tag someone with "spmt tag @user" in their chat. If you're it, tag someone else! "spmt away" = toggle immunity. "spmt pass @user" = earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`;
+      if (isMuted) {
+        await mirrorOverlayLinkReply(client, channelName, rulesText);
+        await sendOverlayMessage(channelName, rulesText);
+      } else {
+        await reply(rulesText);
+      }
     }
     
     else if (cmd === 'mute') {
@@ -2114,6 +2186,9 @@ console.log = (...args) => {
       } else {
         const msg = `🎟️ ${crown(user)} used their PASS to tag @${crown(target)} for DOUBLE POINTS and is now it! Raid, follow, cheer, or sub to earn yours!`;
         await reply(msg);
+        if (isMuted) {
+          await queueTagOverlay(channelName, 'pass-card', crown(user), crown(target), { doublePoints: true, passUsed: true });
+        }
         if (!isMuted) {
           await broadcastToPlayers(client, msg, channelName);
         }
@@ -2153,6 +2228,15 @@ console.log = (...args) => {
       });
       if (res?.granted) {
         reply(`🎟️ @${target} got an SPMT Pass from ${user}! 🎁 Use "spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
+        if (isMuted) {
+          await sendRichOverlayEvent(channelName, 'pass-card', `${target} got a pass`, {
+            tagger: user,
+            tagged: target,
+            granted: true,
+            passUsed: false,
+            doublePoints: true,
+          });
+        }
       } else if (res?.reason === 'max-passes') {
         reply(`@${user} ${target} already has the max 3/3 passes!`);
       } else {

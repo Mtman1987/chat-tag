@@ -67,6 +67,25 @@ export async function GET(req: NextRequest) {
     .slice()
     .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
     .slice(0, 10);
+  const trackedChannels = Object.keys(state.botChannels || {});
+  let liveCount = 0;
+
+  if (trackedChannels.length > 0) {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+      const liveResponse = await fetch(`${baseUrl}/api/twitch/live`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames: trackedChannels }),
+        cache: 'no-store',
+      });
+
+      if (liveResponse.ok) {
+        const liveData = await liveResponse.json();
+        liveCount = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.length : 0;
+      }
+    } catch {}
+  }
 
   return NextResponse.json({
     me: me || null,
@@ -74,6 +93,7 @@ export async function GET(req: NextRequest) {
     it: itPlayer ? { id: itPlayer.id, username: itPlayer.twitchUsername } : null,
     isFFA: !itPlayer,
     lastTagTime: toMillis(state.tagGame.state.lastTagTime),
+    liveCount,
     playerCount: players.length,
     leaderboard,
     recentHistory,

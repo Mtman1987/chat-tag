@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const message = String(body.message || '').trim();
     const channel = normalizeChannel(body.channel || '');
 
-    if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 });
+    if (!message && !body.payload) return NextResponse.json({ error: 'message or payload required' }, { status: 400 });
     if (!body.userId && !channel) {
       return NextResponse.json({ error: 'userId or channel required' }, { status: 400 });
     }
@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         channel,
         message,
         type: body.type || 'bot-message',
+        payload: body.payload || null,
         timestamp: Date.now(),
       });
       state.overlayMessages[userId] = messages.slice(-50);

@@ -12,7 +12,7 @@ export function DiscordEmbedPoster() {
   const [isPosting, setIsPosting] = useState(false);
   const { toast } = useToast();
 
-  const gameUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const gameUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 
   const postEmbed = async () => {
     if (!webhookUrl.trim()) {
@@ -30,6 +30,7 @@ export function DiscordEmbedPoster() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          content: gameUrl,
           embeds: [{
             title: '🎮 Astro Twitch Clash',
             description: 'Join the fun! Play Chat Bingo and Tag Game with the community.',
