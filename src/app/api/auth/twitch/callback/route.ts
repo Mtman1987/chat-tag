@@ -91,15 +91,7 @@ export async function GET(req: NextRequest) {
     callbackUrl.searchParams.set('twitchUsername', twitchUser.display_name);
     callbackUrl.searchParams.set('avatarUrl', twitchUser.profile_image_url);
 
-    const response = NextResponse.redirect(callbackUrl);
-    response.cookies.set('session', sessionToken, {
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60,
-      sameSite: 'lax',
-      secure: appUrl.startsWith('https://'),
-    });
-
-    return response;
+    return NextResponse.redirect(callbackUrl);
   } catch (err: any) {
     callbackUrl.searchParams.set('error', 'server_error');
     callbackUrl.searchParams.set('error_description', err.message || 'An internal server error occurred.');
