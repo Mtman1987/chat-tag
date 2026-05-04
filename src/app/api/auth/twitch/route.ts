@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function getAppUrl(req: NextRequest): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || new URL(req.url).host;
+  return `${proto}://${host}`;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const twitchClientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID || process.env.TWITCH_CLIENT_ID;
@@ -7,9 +14,8 @@ export async function GET(req: NextRequest) {
       throw new Error('Twitch Client ID is not configured.');
     }
 
-    // Use env var or derive from request for redirect URI
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
-    const redirectUri = `${appUrl}/api/auth/twitch/callback`;
+    const appUrl = getAppUrl(req);
+    const redirectUri = `${appUrl}/api/twitch/oauth/callback`;
 
     const authUrl = new URL('https://id.twitch.tv/oauth2/authorize');
     authUrl.searchParams.set('client_id', twitchClientId);

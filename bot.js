@@ -21,11 +21,10 @@ function updateWinnersCache(data) {
   if (data?.monthlyWinners) cachedWinners = data.monthlyWinners;
 }
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
-const AUTO_ROTATE_MINUTES = 40;
-const STALE_LAST_TAG_HOURS = 6;
-const FORCE_RANDOM_IT_HOURS = 5;
+const AUTO_ROTATE_MINUTES = 60;
 const FFA_REANNOUNCE_MINUTES = 60;
 let lastFfaAnnouncedAt = 0;
+let lastRotationAt = 0;
 
 // ── EventSub state ──
 let eventSubSocket = null;
@@ -829,22 +828,13 @@ console.log = (...args) => {
         const elapsedMin = Math.floor(elapsed / 60000);
         console.log(`[Bot] Current it: ${data.currentIt}, elapsed: ${elapsedMin} minutes`);
         
-        const itPlayer = data.players?.find(p => p.id === data.currentIt);
-        const itUsername = itPlayer?.twitchUsername || 'unknown';
-        
-        // Live holders should rotate randomly, not force a double-points FFA.
-        const liveNow = await getLiveMembersCached(true);
-        const itIsLive = liveNow.some(m => (m.twitchUsername || '').toLowerCase() === itUsername.toLowerCase());
-        const itLastChat = itPlayer?.lastChatAt || 0;
-        const recentlySeenInPlayerChat = Date.now() - itLastChat < AUTO_ROTATE_MINUTES * 60 * 1000;
-        const shouldRandomRotate = itIsLive || recentlySeenInPlayerChat;
-        
-        // FORCE RANDOM after 4-6 hours — no matter what
-        if (elapsed > FORCE_RANDOM_IT_HOURS * 60 * 60 * 1000) {
-          const isStaleTimeout = elapsed > STALE_LAST_TAG_HOURS * 60 * 60 * 1000;
-          console.log(`[Bot] Force random assign after ${elapsedMin} min, stale=${isStaleTimeout}`);
+        // Only rotate if over 1 hour AND we haven't already rotated recently
+        const timeSinceLastRotation = Date.now() - lastRotationAt;
+        if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000 && timeSinceLastRotation > AUTO_ROTATE_MINUTES * 60 * 1000) {
+          const itPlayer = data.players?.find(p => p.id === data.currentIt);
+          const itUsername = itPlayer?.twitchUsername || 'unknown';
+          const liveNow = await getLiveMembersCached(true);
           
-          // Pick a random non-immune, non-sleeping player (prefer live ones)
           const eligible = (data.players || []).filter(p => 
             p.id !== data.currentIt && !p.sleepingImmunity && !p.offlineImmunity
           );
@@ -854,6 +844,7 @@ console.log = (...args) => {
           const pool = liveEligible.length > 0 ? liveEligible : eligible;
           
           if (pool.length > 0) {
+            // Random pick a new person
             const chosen = pool[Math.floor(Math.random() * pool.length)];
             console.log(`[Bot] Random assign to ${chosen.twitchUsername} (${chosen.id})`);
             await apiCall('/api/tag', {
@@ -861,16 +852,14 @@ console.log = (...args) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'set-it', userId: chosen.id })
             });
-            
-            if (!isStaleTimeout) {
-              const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
-              await broadcastToPlayers(client, msg);
-              await apiCall('/api/discord/announce', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tagger: 'System', tagged: chosen.twitchUsername, doublePoints: false, message: 'Random rotation' })
-              });
-            }
+            lastRotationAt = Date.now();
+            const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
+            await broadcastToPlayers(client, msg);
+            await apiCall('/api/discord/announce', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tagger: 'System', tagged: chosen.twitchUsername, doublePoints: false, message: 'Auto-rotation (1hr)' })
+            });
           } else {
             // No eligible players, go to FFA
             await apiCall('/api/tag', {
@@ -878,54 +867,8 @@ console.log = (...args) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'auto-rotate' })
             });
-            if (!isStaleTimeout) {
-              await broadcastToPlayers(client, '⏰ No eligible players — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
-            }
-          }
-          lastFfaAnnouncedAt = 0;
-          
-        } else if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000) {
-          // 40+ min timeout
-          if (shouldRandomRotate) {
-            // If they are still live or recently seen in any participating chat, rotate normally.
-            console.log(`[Bot] ${itUsername} is still active enough to avoid FFA — random assign (live=${itIsLive}, recentChat=${recentlySeenInPlayerChat})`);
-            const eligible = (data.players || []).filter(p => 
-              p.id !== data.currentIt && !p.sleepingImmunity && !p.offlineImmunity
-            );
-            const liveEligible = eligible.filter(p => 
-              liveNow.some(m => (m.twitchUsername || '').toLowerCase() === (p.twitchUsername || '').toLowerCase())
-            );
-            const pool = liveEligible.length > 0 ? liveEligible : eligible;
-            
-            if (pool.length > 0) {
-              const chosen = pool[Math.floor(Math.random() * pool.length)];
-              await apiCall('/api/tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'set-it', userId: chosen.id })
-              });
-              const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
-              await broadcastToPlayers(client, msg);
-              lastFfaAnnouncedAt = 0;
-            } else {
-              // No one to assign to, go FFA
-              await apiCall('/api/tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'auto-rotate' })
-              });
-              await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
-              lastFfaAnnouncedAt = Date.now();
-            }
-          } else {
-            // Only grant FFA if they are neither live nor recently seen in player chats.
-            console.log(`[Bot] ${itUsername} is inactive and unseen, triggering FFA`);
-            await apiCall('/api/tag', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'auto-rotate' })
-            });
-            await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
+            lastRotationAt = Date.now();
+            await broadcastToPlayers(client, '⏰ No eligible players — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
             lastFfaAnnouncedAt = Date.now();
           }
         }

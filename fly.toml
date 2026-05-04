@@ -10,6 +10,7 @@ primary_region = 'iad'
 
 [env]
   DATA_DIR = '/data'
+  NEXT_PUBLIC_APP_URL = 'https://discord-stream-hub-new.fly.dev'
 
 [[mounts]]
   source = 'chat_tag_data'

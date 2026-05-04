@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const errorDescription = searchParams.get('error_description');
 
   const appUrl = getAppUrl(req);
-  const callbackUrl = new URL('/auth/callback', appUrl);
+  const callbackUrl = new URL('/auth/hearmeout/callback', appUrl);
 
   if (error) {
     callbackUrl.searchParams.set('error', 'twitch_auth_failed');
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
       throw new Error('Twitch client ID or secret is not configured.');
     }
 
+    // redirect_uri must match exactly what was sent during authorize
     const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
         client_secret: twitchClientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: `${appUrl}/api/auth/twitch/callback`,
+        redirect_uri: `${appUrl}/auth/hearmeout/callback`,
       }),
     });
 
@@ -70,7 +71,6 @@ export async function GET(req: NextRequest) {
     const { data: userData } = await userResponse.json();
     const twitchUser = userData[0];
 
-    // Store user in volume
     await updateAppState((draft) => {
       draft.users[twitchUser.id] = {
         ...(draft.users[twitchUser.id] || {}),
@@ -80,7 +80,6 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Create session token
     const sessionToken = createSessionToken({
       id: twitchUser.id,
       twitchUsername: twitchUser.display_name,
@@ -91,15 +90,7 @@ export async function GET(req: NextRequest) {
     callbackUrl.searchParams.set('twitchUsername', twitchUser.display_name);
     callbackUrl.searchParams.set('avatarUrl', twitchUser.profile_image_url);
 
-    const response = NextResponse.redirect(callbackUrl);
-    response.cookies.set('session', sessionToken, {
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60,
-      sameSite: 'lax',
-      secure: appUrl.startsWith('https://'),
-    });
-
-    return response;
+    return NextResponse.redirect(callbackUrl);
   } catch (err: any) {
     callbackUrl.searchParams.set('error', 'server_error');
     callbackUrl.searchParams.set('error_description', err.message || 'An internal server error occurred.');

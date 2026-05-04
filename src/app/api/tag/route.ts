@@ -107,15 +107,6 @@ export async function GET() {
     const currentIt = itPlayer?.id || state.tagGame.state.currentIt || null;
     const lastTagTime = toMillis(state.tagGame.state.lastTagTime);
 
-    // Auto-heal: sync tagGame.state if it drifted from player flags
-    if (itPlayer && state.tagGame.state.currentIt !== itPlayer.id) {
-      state.tagGame.state.currentIt = itPlayer.id;
-      // Fire-and-forget write to fix the drift
-      updateAppState((s) => {
-        s.tagGame.state.currentIt = itPlayer.id;
-      }).catch(() => {});
-    }
-
     const monthlyWinners = state.tagGame.state.monthlyWinners || [];
 
     return NextResponse.json({
