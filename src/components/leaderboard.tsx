@@ -29,12 +29,7 @@ export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
         if (res.ok) {
           const data = await res.json();
           console.log('[Leaderboard] Player count:', data.players?.length);
-          // Ensure scores are calculated from tags/tagged counts
-          const playersWithScores = (data.players || []).map((p: any) => ({
-            ...p,
-            score: ((p.tags || 0) * 100) - ((p.tagged || 0) * 50)
-          }));
-          setTagPlayers(playersWithScores);
+          setTagPlayers(data.players || []);
         }
       } catch (e) {
         console.error('Failed to fetch tag players', e);
@@ -93,8 +88,8 @@ export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Tags: {player.tags || 0} (+{(player.tags || 0) * 100} pts)</p>
-                        <p>Tagged: {player.tagged || 0} (-{(player.tagged || 0) * 50} pts)</p>
+                        <p>Tags made: {player.tags || 0}</p>
+                        <p>Times tagged: {player.tagged || 0}</p>
                       </TooltipContent>
                     </Tooltip>
                     <span className="font-bold text-primary font-mono w-32 text-right whitespace-nowrap">{(player.score || 0).toLocaleString()} pts</span>

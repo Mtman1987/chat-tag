@@ -34,7 +34,13 @@ export type AppState = {
   };
   overlayMessages: Record<string, JsonObject[]>;
   modLog: JsonObject[];
+  // Quackverse per-room state to allow parallel matches.
+  quackverseRooms: Record<string, JsonObject>;
+  // Legacy single-room state (kept for compatibility/migration).
+  quackverse: JsonObject;
+  quackversePackOpens: JsonObject[];
   botRuntime: {
+
     joinedChannels: string[];
     firstLiveAnnouncementByChannel: Record<string, string>;
   };
@@ -61,7 +67,12 @@ const DEFAULT_STATE: AppState = {
   discordMessages: {},
   overlayMessages: {},
   modLog: [],
+  quackverseRooms: {},
+  // Legacy single-room state.
+  quackverse: {},
+  quackversePackOpens: [],
   botRuntime: {
+
     joinedChannels: [],
     firstLiveAnnouncementByChannel: {},
   },

@@ -5,6 +5,10 @@ import { lookupTwitchUsers } from '@/lib/twitch';
 
 export const dynamic = 'force-dynamic';
 
+function isPlaceholderAvatar(avatarUrl: string | undefined): boolean {
+  return !avatarUrl || avatarUrl === '' || avatarUrl.includes('ui-avatars.com');
+}
+
 export async function POST(request: NextRequest) {
   const auth = requireAdminRequest(request);
   if (!auth.ok) return auth.response;
@@ -13,8 +17,7 @@ export async function POST(request: NextRequest) {
     const { readAppState } = await import('@/lib/volume-store');
     const preState = await readAppState();
     const allPlayers = Object.entries(preState.tagPlayers) as [string, any][];
-    const needWork = allPlayers.filter(([k, p]) => !p.avatarUrl || p.avatarUrl === '' || k.startsWith('manual_'));
-    const logins = [...new Set(needWork.map(([, p]) => (p.twitchUsername || '').toLowerCase()).filter(Boolean))];
+    const logins = [...new Set(allPlayers.map(([, p]) => (p.twitchUsername || '').toLowerCase()).filter(Boolean))];
 
     // Batch lookup via shared helper
     const twitchUsers = await lookupTwitchUsers(logins);
@@ -22,6 +25,44 @@ export async function POST(request: NextRequest) {
 
     const result = await updateAppState((state) => {
       const stats = { mergedDupes: 0, avatarsFetched: 0, channelsAdded: 0, errors: [] as string[] };
+
+      function remapPlayerKey(oldKey: string, newKey: string) {
+        if (oldKey === newKey) return;
+        const oldPlayer = state.tagPlayers[oldKey];
+        if (!oldPlayer) return;
+
+        const existing = state.tagPlayers[newKey];
+        if (existing) {
+          if (oldPlayer.isIt) existing.isIt = true;
+          existing.score = Math.max(existing.score || 0, oldPlayer.score || 0);
+          existing.tags = Math.max(existing.tags || 0, oldPlayer.tags || 0);
+          existing.tagged = Math.max(existing.tagged || 0, oldPlayer.tagged || 0);
+          existing.avatarUrl = existing.avatarUrl || oldPlayer.avatarUrl || '';
+          existing.twitchUsername = existing.twitchUsername || oldPlayer.twitchUsername;
+        } else {
+          oldPlayer.id = newKey;
+          state.tagPlayers[newKey] = oldPlayer;
+        }
+
+        delete state.tagPlayers[oldKey];
+
+        if (state.tagGame?.state?.currentIt === oldKey) {
+          state.tagGame.state.currentIt = newKey;
+        }
+        for (const p of Object.values(state.tagPlayers) as any[]) {
+          if (p?.noTagbackFrom === oldKey) p.noTagbackFrom = newKey;
+        }
+        for (const h of state.tagHistory) {
+          if (h.taggerId === oldKey) h.taggerId = newKey;
+          if (h.taggedId === oldKey) h.taggedId = newKey;
+        }
+        for (const t of state.chatTags || []) {
+          if (t.taggerId === oldKey) t.taggerId = newKey;
+          if (t.taggedId === oldKey) t.taggedId = newKey;
+        }
+
+        stats.mergedDupes++;
+      }
 
       // 1. Merge manual_ duplicates into their real user_ entries
       const manualKeys = Object.keys(state.tagPlayers).filter(k => k.startsWith('manual_'));
@@ -62,27 +103,15 @@ export async function POST(request: NextRequest) {
         const twitchUser = twitchByLogin.get(login);
         if (!twitchUser) continue;
 
-        if (!player.avatarUrl || player.avatarUrl === '') {
+        if (isPlaceholderAvatar(player.avatarUrl)) {
           player.avatarUrl = twitchUser.profile_image_url;
           stats.avatarsFetched++;
         }
 
-        // Migrate manual_ to real user_ ID
-        if (key.startsWith('manual_')) {
-          const realId = `user_${twitchUser.id}`;
-          if (!state.tagPlayers[realId]) {
-            player.id = realId;
-            state.tagPlayers[realId] = player;
-            delete state.tagPlayers[key];
-            if (state.tagGame?.state?.currentIt === key) {
-              state.tagGame.state.currentIt = realId;
-            }
-            for (const h of state.tagHistory) {
-              if (h.taggerId === key) h.taggerId = realId;
-              if (h.taggedId === key) h.taggedId = realId;
-            }
-            stats.mergedDupes++;
-          }
+        // Migrate manual_ IDs and old fake user_<timestamp> IDs to real Twitch IDs.
+        const realId = `user_${twitchUser.id}`;
+        if (key !== realId) {
+          remapPlayerKey(key, realId);
         }
       }
 

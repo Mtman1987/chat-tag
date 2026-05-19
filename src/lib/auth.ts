@@ -11,9 +11,25 @@ export function getSessionUserFromRequest(req: NextRequest): SessionUser | null 
   return verifySessionToken(token);
 }
 
+export function isBotRequest(req: NextRequest): boolean {
+  const secret = req.headers.get('x-bot-secret') || req.nextUrl.searchParams.get('secret');
+  return Boolean(secret && secret === (process.env.BOT_SECRET_KEY || '1234'));
+}
+
 export function requireAdminRequest(
   req: NextRequest
 ): { ok: true; user: SessionUser } | { ok: false; response: NextResponse } {
+  if (isBotRequest(req)) {
+    return {
+      ok: true,
+      user: {
+        id: 'bot-service',
+        twitchUsername: 'bot-service',
+        avatarUrl: '',
+      },
+    };
+  }
+
   const sessionUser = getSessionUserFromRequest(req);
   if (!sessionUser) {
     return {

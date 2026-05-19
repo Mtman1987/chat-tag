@@ -1,21 +1,32 @@
 import { cn } from "@/lib/utils";
 
-// Function to generate random box-shadows for stars
-const generateStars = (count: number, width: number, height: number) => {
-  let value = `${Math.floor(Math.random() * width)}px ${Math.floor(
-    Math.random() * height
+const seededRandom = (seed: number) => {
+  let value = seed;
+
+  return () => {
+    value = (value * 1664525 + 1013904223) % 4294967296;
+    return value / 4294967296;
+  };
+};
+
+const generateStars = (count: number, width: number, height: number, seed: number) => {
+  const random = seededRandom(seed);
+  let value = `${Math.floor(random() * width)}px ${Math.floor(
+    random() * height
   )}px #FFF`;
+
   for (let i = 2; i <= count; i++) {
-    value += `, ${Math.floor(Math.random() * width)}px ${Math.floor(
-      Math.random() * height
+    value += `, ${Math.floor(random() * width)}px ${Math.floor(
+      random() * height
     )}px #FFF`;
   }
+
   return value;
 };
 
-const stars1 = generateStars(700, 2000, 2000);
-const stars2 = generateStars(200, 2000, 2000);
-const stars3 = generateStars(100, 2000, 2000);
+const stars1 = generateStars(700, 2000, 2000, 11);
+const stars2 = generateStars(200, 2000, 2000, 23);
+const stars3 = generateStars(100, 2000, 2000, 37);
 
 export function Starfield() {
   return (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import { getChatTagSoundUrl, type ChatTagSoundKey } from '@/lib/sound-effects';
 
 interface OverlayState {
   me: any;
@@ -10,6 +11,7 @@ interface OverlayState {
   isFFA: boolean;
   lastTagTime: number | null;
   liveCount: number;
+  liveUsers?: any[];
   playerCount: number;
   leaderboard: any[];
   recentHistory: any[];
@@ -19,7 +21,7 @@ interface OverlayState {
 }
 
 type BroadcastType = 'tag' | 'ffa' | 'newit' | 'history' | 'message';
-interface Broadcast { type: BroadcastType; lines: string[]; icon: string; color: string; glow: string; }
+interface Broadcast { type: BroadcastType; lines: string[]; icon: string; color: string; glow: string; sound?: ChatTagSoundKey; }
 interface OverlayMessage {
   type?: string;
   message?: string;
@@ -85,8 +87,11 @@ export default function OverlayPage() {
   const prevOverlayMessageTs = useRef<number | null>(null);
   const prevIt = useRef<string | null>(null);
   const lastHistoryShow = useRef<number>(0);
-  const nextCycleMode = useRef<'history' | 'leaderboard'>('history');
+  const nextCycleMode = useRef<'history' | 'leaderboard' | 'live'>('leaderboard');
+  const dataRef = useRef<OverlayState | null>(null);
+  const broadcastRef = useRef<Broadcast | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const previewTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const crown = (name: string) => {
@@ -95,7 +100,35 @@ export default function OverlayPage() {
     return w ? `👑 ${name}` : name;
   };
 
-  const playBroadcastSound = (type: BroadcastType) => {
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtor) {
+          const ctx = audioContextRef.current || new AudioCtor();
+          audioContextRef.current = ctx;
+          if (ctx.state === 'suspended') {
+            void ctx.resume().catch(() => {});
+          }
+        }
+
+        for (const audio of audioCacheRef.current.values()) {
+          audio.load();
+        }
+      } catch {}
+    };
+
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
+  const playGeneratedBroadcastSound = (type: BroadcastType) => {
     try {
       const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtor) return;
@@ -130,6 +163,28 @@ export default function OverlayPage() {
     } catch {}
   };
 
+  const playBroadcastSound = (broadcast: Broadcast) => {
+    const soundUrl = getChatTagSoundUrl(broadcast.sound);
+    if (!soundUrl) {
+      playGeneratedBroadcastSound(broadcast.type);
+      return;
+    }
+
+    try {
+      let audio = audioCacheRef.current.get(soundUrl);
+      if (!audio) {
+        audio = new Audio(soundUrl);
+        audio.preload = 'auto';
+        audio.volume = 0.78;
+        audioCacheRef.current.set(soundUrl, audio);
+      }
+      audio.currentTime = 0;
+      void audio.play().catch(() => playGeneratedBroadcastSound(broadcast.type));
+    } catch {
+      playGeneratedBroadcastSound(broadcast.type);
+    }
+  };
+
   const spawnConfetti = (colors: string[]) => {
     const pieces: ConfettiPiece[] = Array.from({ length: 28 }, (_, index) => ({
       id: `${Date.now()}-${index}`,
@@ -150,7 +205,7 @@ export default function OverlayPage() {
     activeBroadcastRef.current = true;
     setDimBar(true);
     setBroadcast(b);
-    playBroadcastSound(b.type);
+    playBroadcastSound(b);
     if (b.type !== 'history' && b.type !== 'message') {
       spawnConfetti([b.color, '#ffffff', b.glow, '#ffd700']);
     }
@@ -181,7 +236,7 @@ export default function OverlayPage() {
       if (h.blocked) return `🛡️ ${h.tagger} → ${h.tagged} (${h.blocked})`;
       return `${h.doublePoints ? '🔥' : '🎯'} ${crown(h.tagger)} tagged ${crown(h.tagged)}${h.doublePoints ? ' 2x!' : ''}`;
     });
-    fireBroadcast({ type: 'history', lines, icon: '📜', color: '#9146ff', glow: '#9146ff' }, 15000);
+    fireBroadcast({ type: 'history', lines, icon: '📜', color: '#9146ff', glow: '#9146ff', sound: 'history' }, 15000);
     lastHistoryShow.current = Date.now();
   };
 
@@ -190,8 +245,29 @@ export default function OverlayPage() {
     const lines = leaderboard.slice(0, 5).map((player: any, index: number) =>
       `#${index + 1} ${crown(player.twitchUsername || player.username || '?')} ${player.score} pts`
     );
-    fireBroadcast({ type: 'history', lines, icon: '🏆', color: '#ffd700', glow: '#ffb300' }, 15000);
+    fireBroadcast({ type: 'history', lines, icon: '🏆', color: '#ffd700', glow: '#ffb300', sound: 'leaderboard' }, 15000);
     spawnConfetti(['#ffd700', '#fff2a8', '#ffffff', '#ffb300']);
+    lastHistoryShow.current = Date.now();
+  };
+
+  const fireLiveBroadcast = (state: OverlayState) => {
+    const liveUsers = state.liveUsers || [];
+    const lines = liveUsers.length
+      ? liveUsers.slice(0, 5).map((user: any) => {
+          const name = user.displayName || user.username || '?';
+          const viewers = typeof user.viewerCount === 'number' ? ` • ${user.viewerCount} viewers` : '';
+          const shared = user.isSharedChat ? ' • shared chat' : '';
+          return `🟢 ${name}${viewers}${shared}`;
+        })
+      : [`${state.liveCount || 0} live right now`, `${state.playerCount || 0} players tracked`];
+
+    if (state.it?.username) {
+      lines.unshift(`IT: ${crown(state.it.username)}`);
+    } else {
+      lines.unshift('FREE FOR ALL');
+    }
+
+    fireBroadcast({ type: 'history', lines, icon: '📺', color: '#34d399', glow: '#34d399', sound: 'live' }, 15000);
     lastHistoryShow.current = Date.now();
   };
 
@@ -204,6 +280,7 @@ export default function OverlayPage() {
           icon: '🏆',
           color: '#ffd700',
           glow: '#ffb300',
+          sound: 'leaderboard',
           lines: (payload.rows || []).map((row: any) => `#${row.rank} ${row.username} ${row.score} pts`),
         };
       case 'score-card':
@@ -212,6 +289,7 @@ export default function OverlayPage() {
           icon: '📊',
           color: '#00d9ff',
           glow: '#00d9ff',
+          sound: 'score',
           lines: [
             `${payload.playerName || 'Player'} #${payload.rank || '-'}/${payload.totalPlayers || '-'}`,
             `${payload.score || 0} pts • ${payload.tags || 0} tags • ${payload.tagged || 0} tagged`,
@@ -224,6 +302,7 @@ export default function OverlayPage() {
           icon: '🟢',
           color: '#34d399',
           glow: '#34d399',
+          sound: 'live',
           lines: [
             `Live now: ${payload.liveCount || 0} • Chatters: ${payload.chatterCount || 0}`,
             ...((payload.groups || []) as string[]),
@@ -235,6 +314,7 @@ export default function OverlayPage() {
           icon: payload.doublePoints ? '🔥' : '🎯',
           color: payload.doublePoints ? '#ff4500' : '#00d9ff',
           glow: payload.doublePoints ? '#ff4500' : '#00d9ff',
+          sound: payload.doublePoints ? 'pass-used' : 'tag',
           lines: [`${payload.tagger || '?'} tagged ${payload.tagged || '?'}${payload.doublePoints ? ' for DOUBLE POINTS and is now it!' : ' who is now it!'}`],
         };
       case 'pass-card':
@@ -244,6 +324,7 @@ export default function OverlayPage() {
             icon: '🎟️',
             color: '#ffd700',
             glow: '#ffd700',
+            sound: 'pass-granted',
             lines: [`${payload.tagged || '?'} got an SPMT Pass!`, 'Use "spmt pass @username" for a DOUBLE POINTS tag!'],
           };
         }
@@ -252,7 +333,35 @@ export default function OverlayPage() {
           icon: '🎟️',
           color: '#ffd700',
           glow: '#ffd700',
+          sound: 'pass-used',
           lines: [`${payload.tagger || '?'} used a PASS on ${payload.tagged || '?'} for DOUBLE POINTS!`],
+        };
+      case 'ffa':
+        return {
+          type: 'ffa',
+          icon: '🔥',
+          color: '#ff4500',
+          glow: '#ff8c00',
+          sound: 'ffa',
+          lines: ['FREE FOR ALL!', message.message || 'Anyone can tag for DOUBLE POINTS!'],
+        };
+      case 'newit':
+        return {
+          type: 'newit',
+          icon: '🎯',
+          color: '#00d9ff',
+          glow: '#00d9ff',
+          sound: 'new-it',
+          lines: [message.message || `${payload.username || payload.tagged || 'Someone'} is now IT!`],
+        };
+      case 'history':
+        return {
+          type: 'history',
+          icon: '📜',
+          color: '#9146ff',
+          glow: '#9146ff',
+          sound: 'history',
+          lines: payload.lines || (message.message ? [message.message] : []),
         };
       default:
         if (!message.message) return null;
@@ -262,6 +371,7 @@ export default function OverlayPage() {
           icon: '💬',
           color: '#9146ff',
           glow: '#9146ff',
+          sound: 'message',
         };
     }
   };
@@ -283,6 +393,11 @@ export default function OverlayPage() {
       isFFA: false,
       lastTagTime: Date.now() - 4 * 60 * 1000,
       liveCount: 9,
+      liveUsers: [
+        { username: 'niniav23', displayName: 'niniav23', viewerCount: 42, isSharedChat: true },
+        { username: 'vanbraak', displayName: 'vanbraak', viewerCount: 18, isSharedChat: false },
+        { username: 'scarlett_ai420', displayName: 'scarlett_ai420', viewerCount: 9, isSharedChat: false },
+      ],
       playerCount: 114,
       leaderboard: [
         { twitchUsername: 'niniav 23', score: 1200 },
@@ -316,11 +431,11 @@ export default function OverlayPage() {
 
     const triggerPreview = (kind: string) => {
       if (kind === 'ffa') {
-        queueBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00' }, 13000);
+        queueBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00', sound: 'ffa' }, 13000);
         return;
       }
       if (kind === 'newit') {
-        queueBroadcast({ type: 'newit', lines: ['niniav 23 is now IT!'], icon: '🎯', color: '#00d9ff', glow: '#00d9ff' }, 11000);
+        queueBroadcast({ type: 'newit', lines: ['niniav 23 is now IT!'], icon: '🎯', color: '#00d9ff', glow: '#00d9ff', sound: 'new-it' }, 11000);
         return;
       }
       if (kind === 'history') {
@@ -372,7 +487,7 @@ export default function OverlayPage() {
 
         const latestTs = next.recentHistory[0]?.timestamp || 0;
         if (!showedOverlayMessage && prevHistoryTs.current !== null && latestTs > prevHistoryTs.current) {
-          const h = next.recentHistory[0];
+            const h = next.recentHistory[0];
           if (h && !h.blocked) {
             const dp = h.doublePoints ? ' for DOUBLE POINTS and is now it!' : ' who is now it!';
             fireBroadcast({
@@ -380,6 +495,7 @@ export default function OverlayPage() {
               icon: h.doublePoints ? '🔥' : '🎯',
               color: h.doublePoints ? '#ff4500' : '#00d9ff',
               glow: h.doublePoints ? '#ff4500' : '#00d9ff',
+              sound: h.doublePoints ? 'pass-used' : 'tag',
             }, 13000);
           }
         }
@@ -388,13 +504,14 @@ export default function OverlayPage() {
         const newIt = next.it?.username || null;
         if (!showedOverlayMessage && prevIt.current !== null && newIt !== prevIt.current) {
           if (!newIt) {
-            fireBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00' }, 13000);
+            fireBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00', sound: 'ffa' }, 13000);
           } else {
-            fireBroadcast({ type: 'newit', lines: [`${crown(newIt)} is now IT!`], icon: '🎯', color: '#00d9ff', glow: '#00d9ff' }, 11000);
+            fireBroadcast({ type: 'newit', lines: [`${crown(newIt)} is now IT!`], icon: '🎯', color: '#00d9ff', glow: '#00d9ff', sound: 'new-it' }, 11000);
           }
         }
         prevIt.current = newIt;
         setData(next);
+        dataRef.current = next;
       } catch {}
     };
     poll();
@@ -403,28 +520,36 @@ export default function OverlayPage() {
   }, [userId, isPreview]);
 
   useEffect(() => {
+    broadcastRef.current = broadcast;
+  }, [broadcast]);
+
+  useEffect(() => {
     if (isPreview) return;
     historyTimer.current = setInterval(() => {
-      if (!data || broadcast || Date.now() - lastHistoryShow.current <= historyInterval) return;
+      const current = dataRef.current;
+      if (!current || broadcastRef.current || Date.now() - lastHistoryShow.current <= historyInterval) return;
 
-      if (nextCycleMode.current === 'leaderboard' && data.leaderboard?.length) {
-        fireLeaderboardBroadcast(data.leaderboard);
-        nextCycleMode.current = data.recentHistory?.length ? 'history' : 'leaderboard';
-        return;
+      if (nextCycleMode.current === 'leaderboard') {
+        nextCycleMode.current = 'history';
+        if (current.leaderboard?.length) {
+          fireLeaderboardBroadcast(current.leaderboard);
+          return;
+        }
       }
 
-      if (data.recentHistory?.length) {
-        fireHistoryBroadcast(data.recentHistory);
-        nextCycleMode.current = data.leaderboard?.length ? 'leaderboard' : 'history';
-        return;
+      if (nextCycleMode.current === 'history') {
+        nextCycleMode.current = 'live';
+        if (current.recentHistory?.length) {
+          fireHistoryBroadcast(current.recentHistory);
+          return;
+        }
       }
 
-      if (data.leaderboard?.length) {
-        fireLeaderboardBroadcast(data.leaderboard);
-      }
-    }, historyInterval);
+      nextCycleMode.current = 'leaderboard';
+      fireLiveBroadcast(current);
+    }, 10000);
     return () => { if (historyTimer.current) clearInterval(historyTimer.current); };
-  }, [data, broadcast, historyInterval, isPreview]);
+  }, [historyInterval, isPreview]);
 
   if (!data) return null;
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
@@ -507,7 +632,7 @@ export default function OverlayPage() {
           boxSizing: 'border-box',
         }}>
           <span style={{ fontSize: 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
-          <div style={{ flexShrink: 0, overflow: 'hidden', minWidth: 0, maxWidth: 'min(40vw, 380px)' }}>
+          <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0 }}>
             {data.isFFA ? (
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>FREE FOR ALL</div>
@@ -529,7 +654,8 @@ export default function OverlayPage() {
             )}
           </div>
           <div style={{
-            marginLeft: '0.9vw',
+            marginLeft: 'auto',
+            flex: '0 0 auto',
             display: 'grid',
             gridTemplateColumns: 'repeat(3, minmax(0, auto))',
             alignItems: 'center',

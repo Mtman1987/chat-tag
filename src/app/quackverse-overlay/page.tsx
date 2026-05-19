@@ -1,0 +1,163 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { quackverseCards } from '@/lib/quackverse-data';
+import {
+  defaultQuackverseState,
+  quackverseGridSize,
+  type QuackverseSavedState,
+} from '@/lib/quackverse-state';
+import { quackverseRoomIdFromParams, quackverseRoomLabel, quackverseScopeFromParams } from '@/lib/quackverse-rooms';
+import { cn } from '@/lib/utils';
+
+const players = {
+  playerOne: { label: 'Player 1', short: 'P1', accent: 'border-cyan-300 bg-cyan-400/15 text-cyan-50' },
+  playerTwo: { label: 'Player 2', short: 'P2', accent: 'border-rose-300 bg-rose-400/15 text-rose-50' },
+} as const;
+
+const numberFromText = (text: string, pattern: RegExp) => {
+  const match = text.match(pattern);
+  return match ? Number(match[1]) : 0;
+};
+
+function getEffectiveStats(piece: { cardId: number; equipmentIds?: number[]; fatigue?: number; statModifiers?: { atk?: number; def?: number; spd?: number } }) {
+  const card = quackverseCards.find((item) => item.id === piece.cardId);
+  const equipmentIds = piece.equipmentIds || [];
+  const effectText = equipmentIds
+    .map((id) => quackverseCards.find((item) => item.id === id)?.effect || '')
+    .join(' ');
+  const fatigue = Number(piece.fatigue || 0);
+  const modifiers = piece.statModifiers || {};
+
+  return {
+    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + numberFromText(effectText, /\+(\d+)\s*ATK/i) - fatigue),
+    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + numberFromText(effectText, /\+(\d+)\s*DEF/i)),
+    spd: Math.max(1, (card?.spd || 0) + Number(modifiers.spd || 0) + numberFromText(effectText, /\+(\d+)\s*SPD/i) - fatigue),
+  };
+}
+
+export default function QuackverseOverlayPage() {
+  const [state, setState] = useState<QuackverseSavedState>(defaultQuackverseState);
+  const [roomScope, setRoomScope] = useState('');
+  const [roomId, setRoomId] = useState('default');
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const nextScope = quackverseScopeFromParams(params);
+    const nextRoomId = quackverseRoomIdFromParams(params);
+    const roomQuery = new URLSearchParams({ roomId: nextRoomId });
+    if (nextScope) roomQuery.set('tenant', nextScope);
+    setRoomScope(nextScope);
+    setRoomId(nextRoomId);
+
+    async function loadState() {
+      try {
+        const response = await fetch(`/api/quackverse/state?${roomQuery.toString()}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled) setState(data.state);
+      } catch {}
+    }
+
+    loadState();
+    const interval = setInterval(loadState, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  return (
+    <main className="h-dvh w-dvw overflow-hidden bg-transparent p-[min(1.5vw,1rem)] text-white">
+      <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-[min(1vw,0.75rem)]">
+        <header className="shrink-0 rounded-lg border border-white/10 bg-black/20 p-[min(1vw,0.75rem)] backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="font-headline text-[clamp(1rem,2vw,1.75rem)]">Quackverse Space-Force</h1>
+            <p className="text-sm text-slate-300">Room {quackverseRoomLabel(roomScope, roomId)} · Turn {state.turnNumber} · {players[state.activePlayer].label}</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <div className="rounded-md border border-cyan-300/40 bg-cyan-300/10 px-3 py-2">P1 {state.score.playerOne}/6 VP · KOs {state.koCount.playerOne}</div>
+            <div className="rounded-md border border-rose-300/40 bg-rose-300/10 px-3 py-2">P2 {state.score.playerTwo}/6 VP · KOs {state.koCount.playerTwo}</div>
+            {state.winner && (
+              <div className="rounded-md border border-amber-200/60 bg-amber-300/20 px-3 py-2 text-amber-100">
+                {players[state.winner].label} wins
+              </div>
+            )}
+          </div>
+          </div>
+        </header>
+
+        <div className="grid min-h-0 flex-1 gap-[min(1vw,0.75rem)] xl:grid-cols-[minmax(0,1fr)_minmax(240px,22vw)]">
+          <section className="flex min-h-0 items-center justify-center rounded-lg border border-white/5 bg-transparent p-[min(1vw,0.75rem)]">
+            <div className="grid aspect-square h-full max-h-full max-w-full grid-cols-7 gap-[min(0.55vw,0.5rem)]">
+              {state.grid.map((piece, index) => {
+                const card = piece ? quackverseCards.find((item) => item.id === piece.cardId) : null;
+                const stats = piece ? getEffectiveStats(piece) : null;
+                const row = Math.floor(index / quackverseGridSize);
+                const isP1Entry = row === quackverseGridSize - 1;
+                const isP2Entry = row === 0;
+
+                return (
+                  <div
+                    key={index}
+                    className={cn(
+                      'aspect-square min-h-0 rounded-lg border bg-transparent p-[min(0.6vw,0.5rem)] text-center',
+                      isP1Entry && 'border-cyan-300/25 shadow-[inset_0_0_18px_rgba(34,211,238,0.08)]',
+                      isP2Entry && 'border-rose-300/25 shadow-[inset_0_0_18px_rgba(251,113,133,0.08)]',
+                      !isP1Entry && !isP2Entry && 'border-white/5',
+                      piece && players[piece.owner].accent,
+                    )}
+                  >
+                    {piece && card ? (
+                      <div className="flex h-full flex-col justify-between">
+                        <div className="flex justify-between text-[clamp(0.5rem,0.75vw,0.7rem)]">
+                          <span className="rounded bg-black/40 px-1.5 py-0.5">{players[piece.owner].short}</span>
+                          <span>#{index + 1}</span>
+                        </div>
+                        <div className="px-1 text-[clamp(0.52rem,0.85vw,0.82rem)] font-semibold leading-tight">{card.name}</div>
+                        <div>
+                          <div className="grid grid-cols-4 gap-1 text-[clamp(0.45rem,0.65vw,0.65rem)] text-slate-200">
+                            <span>ATK {stats?.atk}</span>
+                            <span>DEF {stats?.def}</span>
+                            <span>SPD {stats?.spd}</span>
+                            <span>HP {piece.currentHp}</span>
+                          </div>
+                          {!!piece.equipmentIds?.length && (
+                            <div className="mt-1 text-[clamp(0.45rem,0.65vw,0.62rem)] text-cyan-100">Gear x{piece.equipmentIds.length}</div>
+                          )}
+                          {piece.fatigued && <div className="text-[clamp(0.45rem,0.65vw,0.62rem)] text-amber-100">Fatigued</div>}
+                          <div className="mt-1 h-1.5 rounded-full bg-black/50">
+                            <div
+                              className="h-full rounded-full bg-emerald-300"
+                              style={{ width: `${Math.max(4, (piece.currentHp / piece.maxHp) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-slate-600">{index + 1}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <aside className="min-h-0 overflow-hidden rounded-lg border border-white/10 bg-black/20 p-[min(1vw,0.75rem)] backdrop-blur-sm">
+            <h2 className="font-headline text-[clamp(0.9rem,1.5vw,1.25rem)]">Match Log</h2>
+            <div className="mt-2 space-y-2">
+              {state.matchLog.slice(0, 6).map((entry, index) => (
+                <div key={`${entry}-${index}`} className="rounded-md bg-white/[0.06] p-2 text-[clamp(0.58rem,0.9vw,0.85rem)] text-slate-200">
+                  {entry}
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+  );
+}

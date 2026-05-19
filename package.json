@@ -8,7 +8,7 @@
     "ws": "node ws-server.js",
     "migrate": "node migrate-data.js",
     "migrate:volume": "node scripts/migrate-to-volume.js",
-    "build": "NODE_ENV=production next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

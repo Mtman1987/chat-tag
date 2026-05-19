@@ -43,14 +43,16 @@ interface StreamHost {
 
 interface ChatTagGameProps {
   players?: FirestorePlayer[];
+  adminMode?: boolean;
 }
 
-export function ChatTagGame({ players = [] }: ChatTagGameProps) {
+export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProps) {
   const { toast } = useToast();
   const { liveStreamers } = useLiveStreamers();
   const { user } = useSession();
   const sessionUsername = user?.twitchUsername || '';
   const isAdmin = isAdminUsername(sessionUsername);
+  const showAdminControls = isAdmin && adminMode;
   const [gameState, setGameState] = useState({
     currentIt: null as string | null,
     immunePlayers: new Set<string>(),
@@ -204,6 +206,27 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         toast({ variant: 'destructive', title: 'Tag Failed', description: error.error || 'Could not process tag.' });
         return;
       }
+
+      const tagData = await res.json().catch(() => ({}));
+      const message = tagData.doublePoints
+        ? `🔥 ${taggerPlayer.twitchUsername || taggerPlayer.username || 'Someone'} tagged @${taggedPlayer.username} for DOUBLE POINTS and is now it! 🔥 Type "spmt join" to play!`
+        : `🎯 ${taggerPlayer.twitchUsername || taggerPlayer.username || 'Someone'} tagged @${taggedPlayer.username} who is now it! Type "spmt join" to play!`;
+      const notifyRes = await fetch('/api/bot/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+
+      if (!notifyRes.ok) {
+        const error = await notifyRes.json().catch(() => null);
+        toast({
+          variant: 'destructive',
+          title: 'Tagged, But Broadcast Failed',
+          description: error?.error || 'Could not broadcast the tag in chat.',
+        });
+        setTimeout(fetchState, 500);
+        return;
+      }
       
       toast({ title: 'Tagged!', description: `${taggedPlayer.username} is now "It"!` });
       setTimeout(fetchState, 500);
@@ -240,12 +263,13 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     
     try {
       const response = await fetch('/api/user-profile', { headers: getAuthHeaders() });
-      let userInfo = { username: currentUser.username, avatar: currentUser.avatar };
+      let userInfo = { id: currentUser.id, username: currentUser.username, avatar: currentUser.avatar };
       
       if (response.ok) {
         const data = await response.json();
         if (data.twitch) {
           userInfo = {
+            id: `user_${data.twitch.id}`,
             username: data.twitch.name,
             avatar: data.twitch.avatar
           };
@@ -258,8 +282,8 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'join',
-          userId: userInfo.username,
-          username: userInfo.username,
+          userId: userInfo.id,
+          twitchUsername: userInfo.username,
           avatar: userInfo.avatar
         })
       });
@@ -285,12 +309,12 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     
     try {
       const response = await fetch('/api/user-profile', { headers: getAuthHeaders() });
-      let userInfo = { username: currentUser.username };
+      let userInfo = { id: currentUser.id, username: currentUser.username };
       
       if (response.ok) {
         const data = await response.json();
         if (data.twitch) {
-          userInfo = { username: data.twitch.name };
+          userInfo = { id: `user_${data.twitch.id}`, username: data.twitch.name };
         }
       }
       
@@ -299,7 +323,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'leave',
-          userId: userInfo.username
+          userId: userInfo.id
         })
       });
       
@@ -310,8 +334,8 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     }
   };
 
-  const currentUserIsIt = gameState.players.some((p: any) => 
-    (p.id === currentUser?.username || p.username === currentUser?.username) && 
+  const currentUserIsIt = gameState.players.some((p: any) =>
+    (p.twitchUsername || p.username || '').toLowerCase() === currentUsername &&
     p.id === gameState.currentIt
   );
 
@@ -352,16 +376,21 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
     if (!broadcastMessage.trim()) return;
     
     try {
-      await fetch('/api/bot/broadcast', {
+      const res = await fetch('/api/bot/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: broadcastMessage })
       });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.error || 'Could not queue message.');
+      }
       
       toast({ title: 'Broadcast Sent', description: `Message sent to all live channels` });
       setBroadcastMessage('');
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Broadcast Failed', description: 'Could not queue message.' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Broadcast Failed', description: error?.message || 'Could not queue message.' });
     }
   };
 
@@ -411,12 +440,12 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                 <UserCheck className="mr-2 h-4 w-4" /> Leave Game
                 </Button>
             )}
-            {isAdmin && (
+            {showAdminControls && (
               <Button variant="outline" size="sm" onClick={handleRandomizeIt}>
                 <Shuffle className="mr-2 h-4 w-4" /> Randomize
               </Button>
             )}
-            {isAdmin && (
+            {showAdminControls && (
             <Button variant="default" size="sm" onClick={async () => {
               try {
                 const mePlayer = gameState.players.find((p: any) => 
@@ -488,7 +517,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
               return me && gameState.immunity[me.id] === 'sleeping' ? 'Wake Up' : 'Go Sleep';
             })()}
             </Button>
-            {isAdmin && (
+            {showAdminControls && (
             <Button variant="destructive" size="sm" onClick={async () => {
               try {
                 await fetch('/api/tag', {
@@ -510,7 +539,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
             <Clock className="mr-2 h-4 w-4" /> Trigger Timeout
             </Button>
             )}
-            {isAdmin && (
+            {showAdminControls && (
             <Button variant="destructive" size="sm" onClick={async () => {
               if (!confirm('Are you sure you want to reset all scores? This will clear all points and tag history.')) return;
               try {
@@ -534,7 +563,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         </div>
       </div>
 
-      {isAdmin && (
+      {showAdminControls && (
       <div className="flex gap-2">
         <Input
           placeholder="Add player by Twitch username..."
@@ -623,7 +652,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
-                      {isAdmin && <Button
+                      {showAdminControls && <Button
                         size="sm"
                         variant="outline"
                         onClick={async () => {
@@ -643,7 +672,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                       >
                         <Target className="h-4 w-4" />
                       </Button>}
-                      {isAdmin && <Button
+                      {showAdminControls && <Button
                         size="sm"
                         variant="ghost"
                         onClick={async () => {
@@ -655,20 +684,24 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                                 ? `🛡️ @${player.username} Status: You are currently away/immune. Use @spmt wake when ready.`
                                 : `ℹ️ @${player.username} Status: You are not IT right now. Current IT: ${currentItName}.`;
                             
-                            await fetch('/api/bot/broadcast', {
+                            const res = await fetch('/api/bot/broadcast', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ message, channel: player.username.toLowerCase() })
                             });
+                            if (!res.ok) {
+                              const error = await res.json().catch(() => null);
+                              throw new Error(error?.error || 'Could not send status message');
+                            }
                             toast({ title: 'Status Sent', description: `Sent status to ${player.username}` });
-                          } catch (e) {
-                            toast({ variant: 'destructive', title: 'Failed to queue' });
+                          } catch (e: any) {
+                            toast({ variant: 'destructive', title: 'Failed to queue', description: e?.message || 'Could not send status message' });
                           }
                         }}
                       >
                         📢
                       </Button>}
-                      {isAdmin && <Button
+                      {showAdminControls && <Button
                         size="sm"
                         variant={isImmune ? "secondary" : "outline"}
                         onClick={async () => {
@@ -696,7 +729,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                       >
                         <Shield className="h-4 w-4" />
                       </Button>}
-                      {isAdmin && <Button
+                      {showAdminControls && <Button
                         size="sm"
                         variant={winnerEntry ? "default" : "outline"}
                         title={winnerEntry ? "Remove winner" : "Set as winner (next available place)"}
@@ -722,7 +755,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
                       >
                         👑
                       </Button>}
-                      {isAdmin && <Button
+                      {showAdminControls && <Button
                         size="sm"
                         variant="outline"
                         title="Award bonus points"
@@ -840,7 +873,7 @@ export function ChatTagGame({ players = [] }: ChatTagGameProps) {
         </ScrollArea>
       </div>
 
-      {isAdmin && <div className="space-y-2">
+      {showAdminControls && <div className="space-y-2">
         <h4 className="text-sm font-medium">Broadcast Test</h4>
         <div className="flex gap-2">
           <Input

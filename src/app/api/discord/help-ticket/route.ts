@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { dataDirPath } from '@/lib/volume-store';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     // Get current game state
     console.log('[help-ticket] Fetching game state...');
-    const appOrigin = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    const appOrigin = getPublicAppOrigin(req);
     const stateResponse = await fetch(`${appOrigin}/api/tag`);
     const gameState = await stateResponse.json();
     console.log('[help-ticket] Game state fetched, players:', gameState?.players?.length);
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
       new Date(b.resolvedAt || 0).getTime() - new Date(a.resolvedAt || 0).getTime()
     )[0];
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    const appUrl = getPublicAppOrigin(req);
     const ticketNum = totalTickets + 1;
     
     // Truncate long values to fit Discord limits

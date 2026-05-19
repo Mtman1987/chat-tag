@@ -4,6 +4,7 @@ export type Player = {
   twitchUsername: string;
   avatarUrl: string;
   score: number;
+  bingoPoints?: number;
   communityPoints: number;
   isIt: boolean;
   isActive: boolean;
@@ -28,8 +29,6 @@ export type GameSettings = {
   discordServerId?: string;
   twitchBotToken?: string;
   discordChannelId?: string;
-  discordWebhookUrl?: string;
-  discordLeaderboardMessageId?: string;
   externalApiUrl?: string;
   tagSuccessPoints?: number;
   tagPenaltyPoints?: number;

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +10,7 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
 
   const state = await readAppState();
+  const scoring = getScoringSettings(state);
 
   const tagCounts: Record<string, { tags: number; tagged: number }> = {};
   for (const entry of state.tagHistory) {
@@ -30,9 +33,10 @@ export async function GET(req: NextRequest) {
       id: p.id,
       twitchUsername: p.twitchUsername || p.username,
       avatarUrl: p.avatarUrl || '',
-      score: c.tags * 100 - c.tagged * 50 + (p.score || 0),
+      score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0),
       tags: c.tags,
       tagged: c.tagged,
+      bingoPoints: p.bingoPoints || 0,
       wins: p.wins || 0,
       isIt: Boolean(p.isIt),
       sleepingImmunity: Boolean(p.sleepingImmunity),
@@ -69,10 +73,11 @@ export async function GET(req: NextRequest) {
     .slice(0, 10);
   const trackedChannels = Object.keys(state.botChannels || {});
   let liveCount = 0;
+  let liveUsers: any[] = [];
 
   if (trackedChannels.length > 0) {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+      const baseUrl = getPublicAppOrigin(req);
       const liveResponse = await fetch(`${baseUrl}/api/twitch/live`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,6 +88,7 @@ export async function GET(req: NextRequest) {
       if (liveResponse.ok) {
         const liveData = await liveResponse.json();
         liveCount = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.length : 0;
+        liveUsers = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.slice(0, 12) : [];
       }
     } catch {}
   }
@@ -94,6 +100,7 @@ export async function GET(req: NextRequest) {
     isFFA: !itPlayer,
     lastTagTime: toMillis(state.tagGame.state.lastTagTime),
     liveCount,
+    liveUsers,
     playerCount: players.length,
     leaderboard,
     recentHistory,

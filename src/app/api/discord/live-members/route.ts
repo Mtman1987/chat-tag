@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export async function GET(_request: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function GET(_request: NextRequest) {
         return { liveMembers: [], allMembers: [] };
       }
 
-      const liveResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/twitch/live`, {
+      const liveResponse = await fetch(`${getPublicAppOrigin(_request)}/api/twitch/live`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usernames: channels }),

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 const DSH_URL = process.env.DSH_URL || 'https://discord-stream-hub-new.fly.dev';
 
 async function refreshDSHEmbed() {
   try {
     const state = await readAppState();
+    const scoring = getScoringSettings(state);
     const tagCounts: Record<string, { tags: number; tagged: number }> = {};
     for (const entry of state.tagHistory) {
       if (entry.blocked) continue;
@@ -16,7 +18,7 @@ async function refreshDSHEmbed() {
     }
     const players = Object.values(state.tagPlayers).map((p: any) => {
       const c = tagCounts[p.id] || { tags: 0, tagged: 0 };
-      return { id: p.id, twitchUsername: p.twitchUsername || p.username, score: c.tags * 100 - c.tagged * 50, tags: c.tags, tagged: c.tagged, isIt: Boolean(p.isIt), sleepingImmunity: Boolean(p.sleepingImmunity), offlineImmunity: Boolean(p.offlineImmunity), hasPass: Boolean(p.hasPass) };
+      return { id: p.id, twitchUsername: p.twitchUsername || p.username, score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0), tags: c.tags, tagged: c.tagged, isIt: Boolean(p.isIt), sleepingImmunity: Boolean(p.sleepingImmunity), offlineImmunity: Boolean(p.offlineImmunity), hasPass: Boolean(p.hasPass) };
     });
     const leaderboard = [...players].sort((a, b) => b.score - a.score).map((p, i) => ({ rank: i + 1, ...p }));
     const currentIt = players.find(p => p.isIt);
@@ -88,6 +90,7 @@ export async function POST(req: NextRequest) {
       }
 
       const result = await updateAppState((state) => {
+        const scoring = getScoringSettings(state);
         const card = state.bingoCards.current_user || { phrases: [], covered: {} };
 
         if (card.covered?.[squareIndex]) {
@@ -99,17 +102,22 @@ export async function POST(req: NextRequest) {
         state.bingoCards.current_user = { ...card, covered, updatedAt: new Date().toISOString() };
 
         const hasBingo = checkBingo(covered, username || userId);
+        const playerKey = userId && state.tagPlayers?.[userId] ? userId : username;
+        const player = playerKey ? state.tagPlayers?.[playerKey] : null;
+        if (player) {
+          player.bingoPoints = (player.bingoPoints || 0) + scoring.bingoSquarePoints;
+        }
+
         if (hasBingo) {
-          const player = state.tagPlayers?.[username || userId];
           if (player) {
-            player.score = (player.score || 0) + 100;
+            player.bingoPoints = (player.bingoPoints || 0) + scoring.bingoWinPoints;
             player.bingoWins = (player.bingoWins || 0) + 1;
           }
           state.bingoEvents = state.bingoEvents || [];
           state.bingoEvents.push({
             id: makeId('bingo'),
             userId: userId || username,
-            points: 100,
+            points: scoring.bingoWinPoints,
             timestamp: Date.now(),
           });
         }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminRequest } from '@/lib/auth';
+import { isBotRequest, requireAdminRequest } from '@/lib/auth';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,30 +18,68 @@ interface TagPlayer {
   [key: string]: any;
 }
 
-// Migrate manual_ players to their real user_ ID when they show up in chat
-function migrateManualPlayer(state: any, realUserId: string, username: string): void {
-  if (!realUserId?.startsWith('user_') || !username) return;
-  if (state.tagPlayers?.[realUserId]) return; // already correct
+function normalizeUsername(value: string | undefined | null): string {
+  return String(value || '').trim().toLowerCase().replace(/^@+/, '');
+}
 
-  const manualKey = `manual_${username.toLowerCase()}`;
-  const manualPlayer = state.tagPlayers?.[manualKey];
-  if (!manualPlayer) return;
+function replacePlayerReferences(state: any, oldId: string, newId: string): void {
+  if (!oldId || !newId || oldId === newId) return;
+
+  if (state.tagGame?.state?.currentIt === oldId) {
+    state.tagGame.state.currentIt = newId;
+  }
+  if (state.tagGame?.state?.it === oldId) {
+    state.tagGame.state.it = newId;
+  }
+
+  for (const p of Object.values(state.tagPlayers || {}) as TagPlayer[]) {
+    if (p?.noTagbackFrom === oldId) p.noTagbackFrom = newId;
+  }
+
+  for (const entry of [...(state.tagHistory || []), ...(state.chatTags || [])] as any[]) {
+    if (entry.taggerId === oldId) entry.taggerId = newId;
+    if (entry.taggedId === oldId) entry.taggedId = newId;
+    if (entry.from === oldId) entry.from = newId;
+    if (entry.to === oldId) entry.to = newId;
+  }
+}
+
+// Migrate old player keys to the real Twitch user_ ID when they show up in chat.
+function migrateManualPlayer(state: any, realUserId: string, username: string): string {
+  if (!realUserId?.startsWith('user_') || !username) return realUserId;
+  state.tagPlayers = state.tagPlayers || {};
+  const normalizedUsername = normalizeUsername(username);
+
+  const existing = state.tagPlayers?.[realUserId];
+  if (existing) {
+    existing.twitchUsername = existing.twitchUsername || normalizedUsername;
+    return realUserId;
+  }
+
+  const manualKey = `manual_${normalizedUsername}`;
+  let oldKey = state.tagPlayers?.[manualKey] ? manualKey : '';
+
+  if (!oldKey) {
+    const match = Object.entries(state.tagPlayers || {}).find(([key, player]: [string, any]) => {
+      if (key === realUserId) return false;
+      return [player?.twitchUsername, player?.username, player?.displayName]
+        .map(normalizeUsername)
+        .some((name) => name === normalizedUsername);
+    });
+    oldKey = match?.[0] || '';
+  }
+
+  const oldPlayer = oldKey ? state.tagPlayers?.[oldKey] : null;
+  if (!oldPlayer) return realUserId;
 
   // Move player data to real ID
-  console.log(`[Migration] Migrating ${manualKey} -> ${realUserId} (${username})`);
-  manualPlayer.id = realUserId;
-  state.tagPlayers[realUserId] = manualPlayer;
-  delete state.tagPlayers[manualKey];
-
-  // Fix currentIt reference
-  if (state.tagGame?.state?.currentIt === manualKey) {
-    state.tagGame.state.currentIt = realUserId;
-  }
-
-  // Fix noTagbackFrom references
-  for (const p of Object.values(state.tagPlayers) as TagPlayer[]) {
-    if (p?.noTagbackFrom === manualKey) p.noTagbackFrom = realUserId;
-  }
+  console.log(`[Migration] Migrating ${oldKey} -> ${realUserId} (${username})`);
+  oldPlayer.id = realUserId;
+  oldPlayer.twitchUsername = oldPlayer.twitchUsername || normalizedUsername;
+  state.tagPlayers[realUserId] = oldPlayer;
+  delete state.tagPlayers[oldKey];
+  replacePlayerReferences(state, oldKey, realUserId);
+  return realUserId;
 }
 
 function isPlayerImmune(player: TagPlayer | undefined, taggerId: string): { immune: boolean; reason?: string } {
@@ -58,6 +97,7 @@ export async function GET() {
     let players = Object.values(state.tagPlayers);
 
     const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+    const scoring = getScoringSettings(state);
     for (const entry of state.tagHistory) {
       if (entry.blocked) continue;
 
@@ -76,8 +116,8 @@ export async function GET() {
 
     players = players.map((p: any) => {
       const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
-      const score = counts.tags * 100 - counts.tagged * 50;
-      return { ...p, score, tags: counts.tags, tagged: counts.tagged, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: (p.passCount || (p.hasPass ? 1 : 0)) > 0, passCount: p.passCount || (p.hasPass ? 1 : 0), passGrantedAt: p.passGrantedAt || 0, overlayMode: Boolean(p.overlayMode), wins: p.wins || 0 };
+      const score = scoreFromTagCounts(counts, scoring) + (p.bingoPoints || 0);
+      return { ...p, score, tags: counts.tags, tagged: counts.tagged, bingoPoints: p.bingoPoints || 0, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: (p.passCount || (p.hasPass ? 1 : 0)) > 0, passCount: p.passCount || (p.hasPass ? 1 : 0), passGrantedAt: p.passGrantedAt || 0, overlayMode: Boolean(p.overlayMode), wins: p.wins || 0 };
     });
 
     const userMap: Record<string, string> = {};
@@ -138,6 +178,7 @@ export async function POST(req: NextRequest) {
     const adminOnlyActions = new Set([
       'clear-all-away',
       'auto-rotate',
+      'trigger-ffa',
       'set-winner',
       'clear-winners',
       'reset-scores',
@@ -145,7 +186,7 @@ export async function POST(req: NextRequest) {
       'set-it',
     ]);
 
-    if (adminOnlyActions.has(action)) {
+    if (adminOnlyActions.has(action) && !isBotRequest(req)) {
       const auth = requireAdminRequest(req);
       if (!auth.ok) return auth.response;
     }
@@ -195,7 +236,8 @@ export async function POST(req: NextRequest) {
 
     if (action === 'use-pass') {
       const result = await updateAppState((state) => {
-        const tagger = state.tagPlayers[userId];
+        const resolvedUserId = twitchUsername ? migrateManualPlayer(state, userId, twitchUsername) : userId;
+        const tagger = state.tagPlayers[resolvedUserId];
         const target = state.tagPlayers[targetUserId];
         if (!tagger) return { status: 404, error: 'You are not in the game!' };
         if (!target) return { status: 404, error: 'Target not in the game!' };
@@ -204,9 +246,9 @@ export async function POST(req: NextRequest) {
           tagger.passCount = tagger.hasPass ? 1 : 0;
         }
         if (tagger.passCount <= 0) return { status: 400, error: 'You don\'t have a pass! Earn one by gifting a sub, cheering 100+ bits, or joining a hype train.' };
-        if (userId === targetUserId) return { status: 400, error: 'You can\'t pass to yourself!' };
+        if (resolvedUserId === targetUserId) return { status: 400, error: 'You can\'t pass to yourself!' };
         
-        const immuneCheck = isPlayerImmune(target, userId);
+        const immuneCheck = isPlayerImmune(target, resolvedUserId);
         if (immuneCheck.immune) {
           let errorMsg = 'Target is immune';
           if (immuneCheck.reason === 'sleeping') errorMsg = `${target.twitchUsername || 'Target'} is immune (sleeping)`;
@@ -224,7 +266,7 @@ export async function POST(req: NextRequest) {
         // Record in history
         state.tagHistory.push({
           id: makeId('hist'),
-          taggerId: userId,
+          taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
           timestamp: Date.now(),
@@ -233,7 +275,7 @@ export async function POST(req: NextRequest) {
         });
         state.chatTags.push({
           id: makeId('tag'),
-          taggerId: userId,
+          taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
           timestamp: Date.now(),
@@ -251,15 +293,16 @@ export async function POST(req: NextRequest) {
         state.tagGame.state.currentIt = targetUserId;
         state.tagGame.state.lastTagTime = Date.now();
         
-        tagger.score = (tagger.score || 0) + 200; // always double
+        const scoring = getScoringSettings(state);
+        tagger.score = (tagger.score || 0) + scoring.tagSuccessPoints * 2; // always double
         tagger.tags = (tagger.tags || 0) + 1;
         tagger.isIt = false;
         tagger.timedImmunityUntil = Date.now() + 20 * 60 * 1000;
         
-        target.score = (target.score || 0) - 50;
+        target.score = (target.score || 0) - scoring.tagPenaltyPoints;
         target.tagged = (target.tagged || 0) + 1;
         target.isIt = true;
-        target.noTagbackFrom = userId;
+        target.noTagbackFrom = resolvedUserId;
         target.lastTaggedInStreamId = streamerId;
         
         return { success: true, doublePoints: true };
@@ -271,6 +314,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result);
     }
 
+    if (action === 'link-platform') {
+      const { platform, platformUsername } = body;
+      if (!platform || !platformUsername) {
+        return NextResponse.json({ error: 'platform and platformUsername required' }, { status: 400 });
+      }
+      const fieldMap: Record<string, string> = { kick: 'kickUsername', discord: 'discordUsername', twitch: 'twitchUsername' };
+      const field = fieldMap[platform];
+      if (!field) return NextResponse.json({ error: 'Invalid platform. Use: kick, discord, twitch' }, { status: 400 });
+
+      const result = await updateAppState((state) => {
+        const player = state.tagPlayers[userId];
+        if (!player) return { error: 'You are not in the game! Use "spmt join" first.' };
+        player[field] = platformUsername.toLowerCase();
+      });
+      if ((result as any)?.error) return NextResponse.json({ error: (result as any).error }, { status: 400 });
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'fix-user') {
       await updateAppState((state) => {
         if (state.tagPlayers[userId]) state.tagPlayers[userId].twitchUsername = twitchUsername;
@@ -280,22 +341,27 @@ export async function POST(req: NextRequest) {
 
     if (action === 'join') {
       const normalizedUsername = (twitchUsername || username || userId).toLowerCase();
+      let resolvedUserId = userId;
+      let twitchUser: Awaited<ReturnType<typeof lookupTwitchUser>> | null = null;
+
+      try {
+        twitchUser = await lookupTwitchUser(normalizedUsername);
+        if (twitchUser) resolvedUserId = `user_${twitchUser.id}`;
+      } catch {}
 
       // Auto-fetch avatar from Twitch if not provided
-      let resolvedAvatar = avatar || '';
-      if (!resolvedAvatar) {
-        try {
-          const twitchUser = await lookupTwitchUser(normalizedUsername);
-          if (twitchUser) resolvedAvatar = twitchUser.profile_image_url;
-        } catch {}
-      }
+      const resolvedAvatar = avatar || twitchUser?.profile_image_url || '';
 
       const result = await updateAppState((state) => {
-        if (state.tagPlayers[userId]) return { error: 'Already in game' };
+        if (state.tagPlayers[resolvedUserId]) return { error: 'Already in game' };
+        const existingByUsername = Object.values(state.tagPlayers || {}).find(
+          (p: any) => (p?.twitchUsername || '').toLowerCase() === normalizedUsername
+        );
+        if (existingByUsername) return { error: 'Already in game' };
 
         const isAnyoneIt = Object.values(state.tagPlayers).some((p: any) => p.isIt);
-        state.tagPlayers[userId] = {
-          id: userId,
+        state.tagPlayers[resolvedUserId] = {
+          id: resolvedUserId,
           twitchUsername: normalizedUsername,
           avatarUrl: resolvedAvatar,
           score: 0,
@@ -331,17 +397,26 @@ export async function POST(req: NextRequest) {
 
     if (action === 'leave') {
       await updateAppState((state) => {
-        const player = state.tagPlayers[userId];
+        const leaveKey = state.tagPlayers[userId]
+          ? userId
+          : Object.keys(state.tagPlayers || {}).find((key) => {
+              const player = state.tagPlayers[key] as any;
+              const login = String(player?.twitchUsername || player?.username || '').toLowerCase();
+              return login && login === String(userId || '').toLowerCase();
+            });
+        if (!leaveKey) return;
+
+        const player = state.tagPlayers[leaveKey];
         if (!player) return;
-        const playerName = player.twitchUsername || userId;
-        const wasIt = player.isIt || state.tagGame?.state?.currentIt === userId;
+        const playerName = player.twitchUsername || leaveKey;
+        const wasIt = player.isIt || state.tagGame?.state?.currentIt === leaveKey;
 
         // Remove bot channel entry for this player
         if (playerName) {
           delete state.botChannels[playerName.toLowerCase()];
         }
 
-        delete state.tagPlayers[userId];
+        delete state.tagPlayers[leaveKey];
 
         // If the leaving player was "it", clear currentIt and go free-for-all
         if (wasIt && state.tagGame?.state) {
@@ -381,18 +456,17 @@ export async function POST(req: NextRequest) {
     if (action === 'tag') {
       const result = await updateAppState((state) => {
         // Migrate manual_ IDs to real user_ IDs if needed
-        if (twitchUsername) migrateManualPlayer(state, userId, twitchUsername);
+        const resolvedUserId = twitchUsername ? migrateManualPlayer(state, userId, twitchUsername) : userId;
 
-        const tagger: TagPlayer | undefined = state.tagPlayers?.[userId];
+        const tagger: TagPlayer | undefined = state.tagPlayers?.[resolvedUserId];
         const target: TagPlayer | undefined = state.tagPlayers?.[targetUserId];
         
         // Enhanced validation with better error messages
         if (!tagger) {
-          const playerIds = Object.keys(state.tagPlayers || {}).slice(0, 5).join(', ');
-          return { status: 404, error: `Tagger not found. Your ID: ${userId}. (Available: ${playerIds}...)` };
+          return { status: 404, error: 'You are not in the game! Use "spmt join" first.' };
         }
         if (!target) {
-          return { status: 404, error: `Target player not found. ID: ${targetUserId}` };
+          return { status: 404, error: 'Target is not in the game!' };
         }
 
         const playersForItCheck = Object.values(state.tagPlayers || {}) as TagPlayer[];
@@ -404,12 +478,12 @@ export async function POST(req: NextRequest) {
           return { status: 400, error: `You are not it! ${whoIsIt?.twitchUsername || whoIsIt?.id || 'Unknown'} is it.` };
         }
 
-        const immuneCheck = isPlayerImmune(target, userId);
+        const immuneCheck = isPlayerImmune(target, resolvedUserId);
         if (immuneCheck.immune) {
           state.tagHistory = state.tagHistory || [];
           state.tagHistory.push({
             id: makeId('hist'),
-            taggerId: userId,
+            taggerId: resolvedUserId,
             taggedId: targetUserId,
             streamerId,
             timestamp: Date.now(),
@@ -437,7 +511,7 @@ export async function POST(req: NextRequest) {
 
         state.tagHistory.push({
           id: makeId('hist'),
-          taggerId: userId,
+          taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
           timestamp: Date.now(),
@@ -446,7 +520,7 @@ export async function POST(req: NextRequest) {
 
         state.chatTags.push({
           id: makeId('tag'),
-          taggerId: userId,
+          taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
           timestamp: Date.now(),
@@ -460,17 +534,18 @@ export async function POST(req: NextRequest) {
         }
 
         // Update tagger (now no longer "it")
-        tagger.score = (tagger.score || 0) + (doublePoints ? 200 : 100);
+        const scoring = getScoringSettings(state);
+        tagger.score = (tagger.score || 0) + (doublePoints ? scoring.tagSuccessPoints * 2 : scoring.tagSuccessPoints);
         tagger.tags = (tagger.tags || 0) + 1;
         tagger.isIt = false;
         tagger.timedImmunityUntil = Date.now() + 20 * 60 * 1000;
         tagger.lastTaggedInStreamId = null;
 
         // Update target (now "it")
-        target.score = (target.score || 0) - 50;
+        target.score = (target.score || 0) - scoring.tagPenaltyPoints;
         target.tagged = (target.tagged || 0) + 1;
         target.isIt = true;
-        target.noTagbackFrom = userId;
+        target.noTagbackFrom = resolvedUserId;
         target.lastTaggedInStreamId = streamerId;
 
         return { success: true, doublePoints };
@@ -602,6 +677,52 @@ export async function POST(req: NextRequest) {
           action: 'auto-rotate',
           performedBy: performedBy || 'system',
           details: currentIt ? `Rotated from ${currentIt.twitchUsername || 'unknown'}` : 'Free for all',
+          timestamp: Date.now(),
+        });
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === 'trigger-ffa') {
+      await updateAppState((state) => {
+        const players = Object.values(state.tagPlayers || {}) as TagPlayer[];
+        const currentIt = players.find((p) => p?.isIt);
+
+        for (const player of players) {
+          if (player) player.isIt = false;
+        }
+
+        if (state.tagGame?.state) {
+          state.tagGame.state.currentIt = null;
+          state.tagGame.state.lastTagTime = Date.now();
+        }
+
+        state.chatTags = state.chatTags || [];
+        state.chatTags.push({
+          id: makeId('tag'),
+          taggerId: performedBy || 'discord-admin',
+          taggedId: 'free-for-all',
+          streamerId: 'admin-ffa',
+          timestamp: Date.now(),
+          doublePoints: true,
+        });
+
+        state.tagHistory = state.tagHistory || [];
+        state.tagHistory.push({
+          id: makeId('hist'),
+          taggerId: performedBy || 'discord-admin',
+          taggedId: 'free-for-all',
+          streamerId: 'admin-ffa',
+          timestamp: Date.now(),
+          doublePoints: true,
+        });
+
+        state.adminHistory = state.adminHistory || [];
+        state.adminHistory.push({
+          id: makeId('admin'),
+          action: 'trigger-ffa',
+          performedBy: performedBy || 'discord-admin',
+          details: currentIt ? `Triggered FFA from ${currentIt.twitchUsername || currentIt.id || 'unknown'}` : 'Triggered FFA',
           timestamp: Date.now(),
         });
       });

@@ -8,7 +8,7 @@ import { SessionProvider } from '@/contexts/session-context';
 
 export const metadata: Metadata = {
   title: 'Astro Twitch Clash',
-  description: 'Bingo and Chat Tag for Twitch Streams',
+  description: 'Quackverse Space-Force and Chat Tag for Twitch Streams',
 };
 
 export default function RootLayout({

@@ -11,7 +11,11 @@ type RootShellProps = {
 
 export function RootShell({ children }: RootShellProps) {
   const pathname = usePathname();
-  const isOverlayView = /^\/overlay\/[^/]+$/.test(pathname);
+  const isOverlayView =
+    /^\/overlay\/[^/]+$/.test(pathname) ||
+    pathname === '/quackverse' ||
+    pathname === '/quackverse-overlay' ||
+    pathname === '/quackverse-command';
 
   useEffect(() => {
     document.body.classList.toggle('overlay-route', isOverlayView);

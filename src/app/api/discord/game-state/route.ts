@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const state = await readAppState();
+    const scoring = getScoringSettings(state);
 
     // Build tag counts from history
     const tagCounts: Record<string, { tags: number; tagged: number }> = {};
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
     // Build full player list with computed scores
     const players = Object.values(state.tagPlayers).map((p: any) => {
       const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
-      const score = counts.tags * 100 - counts.tagged * 50;
+      const score = scoreFromTagCounts(counts, scoring) + (p.bingoPoints || 0);
       return {
         id: p.id,
         twitchUsername: p.twitchUsername || p.username,

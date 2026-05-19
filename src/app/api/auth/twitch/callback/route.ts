@@ -1,15 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 import { createSessionToken } from '@/lib/session';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
+  const success = searchParams.get('success');
+  const bridgedUserId = searchParams.get('user_id');
+  const bridgedUsername = searchParams.get('username') || searchParams.get('display_name');
+  const bridgedAvatarUrl = searchParams.get('photo_url') || '';
   const code = searchParams.get('code');
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+  const appUrl = getPublicAppOrigin(req);
   const callbackUrl = new URL('/auth/callback', appUrl);
+
+  if (success === 'true' && bridgedUserId && bridgedUsername) {
+    await updateAppState((draft) => {
+      draft.users[bridgedUserId] = {
+        ...(draft.users[bridgedUserId] || {}),
+        id: bridgedUserId,
+        twitchUsername: bridgedUsername,
+        avatarUrl: bridgedAvatarUrl,
+      };
+    });
+
+    const sessionToken = createSessionToken({
+      id: bridgedUserId,
+      twitchUsername: bridgedUsername,
+      avatarUrl: bridgedAvatarUrl,
+    });
+
+    callbackUrl.searchParams.set('session', sessionToken);
+    callbackUrl.searchParams.set('twitchUsername', bridgedUsername);
+    if (bridgedAvatarUrl) callbackUrl.searchParams.set('avatarUrl', bridgedAvatarUrl);
+
+    const response = NextResponse.redirect(callbackUrl);
+    response.cookies.set('session', sessionToken, {
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60,
+      sameSite: 'lax',
+      secure: appUrl.startsWith('https://'),
+    });
+    return response;
+  }
 
   if (error) {
     callbackUrl.searchParams.set('error', 'twitch_auth_failed');

@@ -57,7 +57,9 @@
     @apply bg-background text-foreground;
   }
 
-  body.overlay-route {
+  html:has(body.overlay-route),
+  body.overlay-route,
+  body.overlay-route > div {
     background: transparent;
   }
 }

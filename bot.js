@@ -7,8 +7,107 @@ const WebSocket = require('ws');
 const env = process.env;
 
 const API_BASE = process.env.API_BASE || 'https://chat-tag-new.fly.dev';
-const BLACKLIST = ['streamelements', 'nightbot', 'moobot', 'fossabot'];
+const IGNORED_SENDER_NAMES = new Set([
+  'frostytools',
+  'streamelements',
+  'serybot',
+  'nightbot',
+  'moobot',
+  'fossabot',
+  ...(env.CHAT_TAG_IGNORED_BOTS || env.STREAMWEAVER_BOT_NAMES || env.BOT_NAMES || '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean),
+]);
 const joinFailSilenced = new Set();
+
+function isIgnoredSender(login, channelName = '') {
+  const normalizedLogin = String(login || '').toLowerCase().replace(/^#/, '');
+  const normalizedChannel = String(channelName || '').toLowerCase().replace(/^#/, '');
+  if (!normalizedLogin) return true;
+  if (normalizedLogin === normalizedChannel) return false;
+  return IGNORED_SENDER_NAMES.has(normalizedLogin);
+}
+
+function normalizeChatHandle(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, '')
+    .replace(/[^a-z0-9_]/g, '');
+}
+
+function getPlayerDisplayName(player, fallback = '') {
+  return player?.twitchUsername || player?.username || player?.displayName || fallback;
+}
+
+function getPlayerLookupKeys(player) {
+  return [
+    player?.twitchUsername,
+    player?.username,
+    player?.displayName,
+    player?.login,
+    player?.kickUsername,
+    player?.discordUsername,
+  ]
+    .map(normalizeChatHandle)
+    .filter(Boolean);
+}
+
+function resolvePlayerTarget(players, rawTarget) {
+  const target = normalizeChatHandle(rawTarget);
+  const list = Array.isArray(players) ? players : [];
+  if (!target) return { target, error: 'empty' };
+
+  const exact = list.find((player) => getPlayerLookupKeys(player).includes(target));
+  if (exact) return { target, player: exact, matchType: 'exact' };
+
+  if (target.length >= 4) {
+    const prefixMatches = list.filter((player) =>
+      getPlayerLookupKeys(player).some((key) => key.startsWith(target))
+    );
+    if (prefixMatches.length === 1) {
+      return { target, player: prefixMatches[0], matchType: 'prefix' };
+    }
+    if (prefixMatches.length > 1) {
+      return { target, error: 'ambiguous', matches: prefixMatches };
+    }
+  }
+
+  return { target, error: 'not-found' };
+}
+
+async function replyPlayerLookupFailure(reply, requester, resolution, players) {
+  const target = resolution?.target || 'that player';
+  if (resolution?.error === 'ambiguous') {
+    const matches = resolution.matches
+      .slice(0, 5)
+      .map((player) => getPlayerDisplayName(player))
+      .filter(Boolean)
+      .join(', ');
+    await reply(`@${requester} ${target} matches multiple players: ${matches}. Use the full username.`);
+    return;
+  }
+
+  const knownPlayers = (Array.isArray(players) ? players : [])
+    .slice(0, 12)
+    .map((player) => getPlayerDisplayName(player))
+    .filter(Boolean)
+    .join(', ');
+  console.log(`[Bot] ${target} not in game. Known players: ${knownPlayers || 'none'}`);
+  await reply(`@${requester} ${target} is not in the game!`);
+}
+
+function publicTagError(error) {
+  const message = String(error || '');
+  if (/tagger not found|your id:|available:/i.test(message)) {
+    return 'You are not in the game! Use "spmt join" first.';
+  }
+  if (/target player not found|target not in the game/i.test(message)) {
+    return 'Target is not in the game!';
+  }
+  return message;
+}
 
 // Crown helper: wraps winner usernames with 👑
 let cachedWinners = [];
@@ -21,11 +120,15 @@ function updateWinnersCache(data) {
   if (data?.monthlyWinners) cachedWinners = data.monthlyWinners;
 }
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
-const AUTO_ROTATE_MINUTES = 40;
+const AUTO_ROTATE_MINUTES = Number.parseInt(process.env.AUTO_ROTATE_MINUTES || '60', 10);
 const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
-const FFA_REANNOUNCE_MINUTES = 60;
+const FFA_REANNOUNCE_MINUTES = 120;
+const NULL_STATE_COOLDOWN_MINUTES = 30;
+const MAX_ROTATE_FAILURES_BEFORE_FFA = 3;
 let lastFfaAnnouncedAt = 0;
+let lastNullFfaAnnouncedAt = 0;
+let rotateFailureState = { key: null, count: 0 };
 
 // ── EventSub state ──
 let eventSubSocket = null;
@@ -126,12 +229,61 @@ async function getValidToken() {
 
 async function apiCall(endpoint, options = {}) {
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, options);
-    return await res.json();
+    const headers = {
+      ...(options.headers || {}),
+      'x-bot-secret': process.env.BOT_SECRET_KEY || '1234',
+    };
+    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      console.error(`[API Error] ${endpoint}: ${res.status} ${text.slice(0, 300)}`);
+    }
+    if (data && typeof data === 'object') {
+      data.__ok = res.ok;
+      data.__status = res.status;
+    }
+    return data;
   } catch (e) {
     console.error(`[API Error] ${endpoint}:`, e.message);
     return null;
   }
+}
+
+function resetRotateFailures() {
+  rotateFailureState = { key: null, count: 0 };
+}
+
+function recordRotateFailure(data, reason) {
+  const key = `${data?.currentIt || 'none'}:${data?.lastTagTime || 0}`;
+  if (rotateFailureState.key !== key) {
+    rotateFailureState = { key, count: 0 };
+  }
+  rotateFailureState.count += 1;
+  console.error(`[Bot] Auto-rotate failed (${rotateFailureState.count}/${MAX_ROTATE_FAILURES_BEFORE_FFA}): ${reason}`);
+  return rotateFailureState.count;
+}
+
+async function triggerFfaFallback(client, data, itUsername, reason) {
+  const failures = recordRotateFailure(data, reason);
+  if (failures < MAX_ROTATE_FAILURES_BEFORE_FFA) return false;
+
+  console.log(`[Bot] Auto-rotate failed ${failures} times for ${itUsername}; triggering FFA fallback`);
+  const res = await apiCall('/api/tag', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'auto-rotate', performedBy: 'bot-rotation-fallback' })
+  });
+
+  if (res?.__ok === false || res?.error) {
+    console.error(`[Bot] FFA fallback failed: ${res?.error || res?.__status || 'unknown error'}`);
+    return false;
+  }
+
+  await broadcastToPlayers(client, `⏰ ${crown(itUsername)} could not be auto-rotated after ${MAX_ROTATE_FAILURES_BEFORE_FFA} attempts — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`);
+  lastFfaAnnouncedAt = Date.now();
+  resetRotateFailures();
+  return true;
 }
 
 let mutedChannelsCache = { fetchedAt: 0, channels: new Set() };
@@ -645,6 +797,13 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
         console.error(`[Bot] Error broadcasting to overlay ${ch}:`, e.message);
       }
     }
+    // Also broadcast to Kick channels via Streamweaver
+    apiCall('/api/kick/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    }).catch((e) => console.error('[Bot] Kick broadcast error:', e.message));
+
     console.log('[Bot] Broadcast complete');
   } catch (e) {
     console.error('[Bot] Broadcast error:', e.message);
@@ -856,36 +1015,41 @@ console.log = (...args) => {
           if (pool.length > 0) {
             const chosen = pool[Math.floor(Math.random() * pool.length)];
             console.log(`[Bot] Random assign to ${chosen.twitchUsername} (${chosen.id})`);
-            await apiCall('/api/tag', {
+            const rotateRes = await apiCall('/api/tag', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'set-it', userId: chosen.id })
+              body: JSON.stringify({ action: 'set-it', userId: chosen.id, performedBy: 'bot-auto-rotate' })
             });
-            
-            if (!isStaleTimeout) {
-              const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
-              await broadcastToPlayers(client, msg);
-              await apiCall('/api/discord/announce', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tagger: 'System', tagged: chosen.twitchUsername, doublePoints: false, message: 'Random rotation' })
-              });
+
+            if (rotateRes?.__ok === false || rotateRes?.error) {
+              await triggerFfaFallback(client, data, itUsername, rotateRes?.error || `set-it returned ${rotateRes?.__status || 'unknown status'}`);
+            } else {
+              resetRotateFailures();
+              lastFfaAnnouncedAt = 0;
+              if (!isStaleTimeout) {
+                const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
+                await broadcastToPlayers(client, msg);
+                await apiCall('/api/discord/announce', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tagger: 'System', tagged: chosen.twitchUsername, doublePoints: false, message: 'Random rotation' })
+                });
+              }
             }
           } else {
             // No eligible players, go to FFA
-            await apiCall('/api/tag', {
+            const ffaRes = await apiCall('/api/tag', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'auto-rotate' })
+              body: JSON.stringify({ action: 'auto-rotate', performedBy: 'bot-auto-rotate' })
             });
+            if (ffaRes?.__ok !== false && !ffaRes?.error) resetRotateFailures();
             if (!isStaleTimeout) {
               await broadcastToPlayers(client, '⏰ No eligible players — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
             }
           }
-          lastFfaAnnouncedAt = 0;
-          
         } else if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000) {
-          // 40+ min timeout
+          // Timeout after the configured rotation window.
           if (shouldRandomRotate) {
             // If they are still live or recently seen in any participating chat, rotate normally.
             console.log(`[Bot] ${itUsername} is still active enough to avoid FFA — random assign (live=${itIsLive}, recentChat=${recentlySeenInPlayerChat})`);
@@ -895,51 +1059,94 @@ console.log = (...args) => {
             const liveEligible = eligible.filter(p => 
               liveNow.some(m => (m.twitchUsername || '').toLowerCase() === (p.twitchUsername || '').toLowerCase())
             );
-            const pool = liveEligible.length > 0 ? liveEligible : eligible;
+            const pool = itIsLive ? liveEligible : (liveEligible.length > 0 ? liveEligible : eligible);
             
             if (pool.length > 0) {
               const chosen = pool[Math.floor(Math.random() * pool.length)];
-              await apiCall('/api/tag', {
+              const rotateRes = await apiCall('/api/tag', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'set-it', userId: chosen.id })
+                body: JSON.stringify({ action: 'set-it', userId: chosen.id, performedBy: 'bot-auto-rotate' })
               });
-              const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
-              await broadcastToPlayers(client, msg);
-              lastFfaAnnouncedAt = 0;
+              if (rotateRes?.__ok === false || rotateRes?.error) {
+                await triggerFfaFallback(client, data, itUsername, rotateRes?.error || `set-it returned ${rotateRes?.__status || 'unknown status'}`);
+              } else {
+                const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
+                await broadcastToPlayers(client, msg);
+                lastFfaAnnouncedAt = 0;
+                resetRotateFailures();
+              }
             } else {
-              // No one to assign to, go FFA
-              await apiCall('/api/tag', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'auto-rotate' })
-              });
-              await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
-              lastFfaAnnouncedAt = Date.now();
+              const reason = itIsLive ? 'no other live eligible players' : 'no eligible players';
+              const shouldFfa = await triggerFfaFallback(client, data, itUsername, reason);
+              if (!shouldFfa) {
+                console.log(`[Bot] Waiting for more eligible players before FFA (${reason})`);
+              }
             }
           } else {
             // Only grant FFA if they are neither live nor recently seen in player chats.
             console.log(`[Bot] ${itUsername} is inactive and unseen, triggering FFA`);
-            await apiCall('/api/tag', {
+            const ffaRes = await apiCall('/api/tag', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'auto-rotate' })
+              body: JSON.stringify({ action: 'auto-rotate', performedBy: 'bot-auto-rotate' })
             });
+            if (ffaRes?.__ok !== false && !ffaRes?.error) resetRotateFailures();
             await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
             lastFfaAnnouncedAt = Date.now();
           }
         }
       } else {
-        // No one is it — FFA mode
-        console.log('[Bot] No current it or lastTagTime');
+        // No one is it — try random assignment first
+        console.log('[Bot] No current it or lastTagTime — trying random assign');
         
-        // Re-announce FFA every 60 minutes
-        if (lastFfaAnnouncedAt > 0 && Date.now() - lastFfaAnnouncedAt > FFA_REANNOUNCE_MINUTES * 60 * 1000) {
-          console.log('[Bot] Re-announcing FFA (60 min reminder)');
-          await broadcastToPlayers(client, '🔥 Reminder: FREE FOR ALL is active! Type "spmt tag @username" for DOUBLE POINTS! Type "spmt join" to play! 🔥');
-          lastFfaAnnouncedAt = Date.now();
-        } else if (lastFfaAnnouncedAt === 0) {
-          lastFfaAnnouncedAt = Date.now();
+        // Prefer live eligible players
+        const liveNow = await getLiveMembersCached(true);
+        const eligible = (data.players || []).filter(p => 
+          !p.sleepingImmunity && !p.offlineImmunity
+        );
+        const liveEligible = eligible.filter(p => 
+          liveNow.some(m => (m.twitchUsername || '').toLowerCase() === (p.twitchUsername || '').toLowerCase())
+        );
+        const pool = liveEligible.length > 0 ? liveEligible : eligible;
+        
+        if (pool.length > 0) {
+          const chosen = pool[Math.floor(Math.random() * pool.length)];
+          console.log(`[Bot] Random assign to ${chosen.twitchUsername} (${chosen.id})`);
+          
+          const rotateRes = await apiCall('/api/tag', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              action: 'set-it', 
+              userId: chosen.id, 
+              performedBy: 'bot-auto-assign' 
+            })
+          });
+          
+          if (rotateRes?.success || rotateRes?.__ok !== false) {
+            const msg = `🎲 No one was it! System randomly assigned ${crown(chosen.twitchUsername)} as it! Tag someone!`;
+            await broadcastToPlayers(client, msg);
+            lastFfaAnnouncedAt = 0; // reset
+            lastNullFfaAnnouncedAt = 0;
+          } else {
+            console.log(`[Bot] Random assign failed: ${rotateRes?.error}`);
+            // Fall through to FFA
+          }
+        }
+        
+        // FFA fallback or re-announce (with null-state cooldown)
+        const now = Date.now();
+        const nullCooldownElapsed = now - lastNullFfaAnnouncedAt > NULL_STATE_COOLDOWN_MINUTES * 60 * 1000;
+        const ffaCooldownElapsed = lastFfaAnnouncedAt > 0 && now - lastFfaAnnouncedAt > FFA_REANNOUNCE_MINUTES * 60 * 1000;
+        
+        if (nullCooldownElapsed || ffaCooldownElapsed) {
+          console.log('[Bot] Announcing FFA (null cooldown ok or ffa reminder)');
+          await broadcastToPlayers(client, '🔥 FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥 Type "spmt join" to play!');
+          lastFfaAnnouncedAt = now;
+          lastNullFfaAnnouncedAt = now;
+        } else {
+          console.log('[Bot] Skipping FFA announcement (cooldown)');
         }
       }
 
@@ -1366,7 +1573,7 @@ console.log = (...args) => {
 
     // Track chat activity for ALL messages from players (not just commands)
     // Resolve shared chat source so lastSeenChannel reflects the actual streamer
-    if (senderLogin && senderUserId && !BLACKLIST.includes(senderLogin)) {
+    if (senderLogin && senderUserId && !isIgnoredSender(senderLogin, channel)) {
       const rawCh = channel.replace('#', '').toLowerCase();
       const srcRoomId = tags['source-room-id'] || tags['source-id'];
       const roomId = tags['room-id'];
@@ -1425,7 +1632,7 @@ console.log = (...args) => {
       tags?.badges?.broadcaster === '1';
     
     // Blacklist check
-    if (BLACKLIST.includes(user.toLowerCase())) return;
+    if (isIgnoredSender(user, channelName)) return;
 
     const blacklistData = await apiCall('/api/bot/blacklist');
     const channelIsBlacklisted = blacklistData?.blacklisted?.includes(channelName);
@@ -1541,7 +1748,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'tag') {
-      const target = args[1]?.replace('@', '').toLowerCase();
+      const target = normalizeChatHandle(args[1]);
       console.log(`[Bot] Tag command: target="${target}"`);
       if (!target) {
         reply( `@${user} Usage: "spmt tag @username"`);
@@ -1562,18 +1769,20 @@ console.log = (...args) => {
         }
         
         const playersData = await apiCall('/api/tag');
-        const targetPlayer = playersData?.players?.find(p => (p.twitchUsername || p.username)?.toLowerCase() === target);
+        const targetResolution = resolvePlayerTarget(playersData?.players, target);
+        const targetPlayer = targetResolution.player;
         
         if (!targetPlayer) {
-          reply( `@${user} ${target} is not in the game!`);
+          await replyPlayerLookupFailure(reply, user, targetResolution, playersData?.players);
           return;
         }
+        const targetName = getPlayerDisplayName(targetPlayer, target);
         
         // Track pin's personal count
         const pinRes = await apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'pin-tag', userId, targetUserId: targetPlayer.id, targetUsername: target })
+          body: JSON.stringify({ action: 'pin-tag', userId, targetUserId: targetPlayer.id, targetUsername: targetName })
         });
         
         // Check if pin is "it" OR if it's FREE FOR ALL mode
@@ -1588,14 +1797,14 @@ console.log = (...args) => {
           });
           
           if (realTagRes?.error) {
-            await reply( `@${user} ${realTagRes.error}`);
+            await reply( `@${user} ${publicTagError(realTagRes.error)}`);
           } else {
             const msg = realTagRes.doublePoints
-              ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! (Pin has tagged them ${pinRes.count} times total)`
-              : `🎯 ${user} tagged @${target} who is now it! (Pin has tagged them ${pinRes.count} times total)`;
+              ? `🔥 ${user} tagged @${targetName} for DOUBLE POINTS and is now it! (Pin has tagged them ${pinRes.count} times total)`
+              : `🎯 ${user} tagged @${targetName} who is now it! (Pin has tagged them ${pinRes.count} times total)`;
             await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
             if (isMuted) {
-              await queueTagOverlay(channelName, realTagRes.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(target), { doublePoints: Boolean(realTagRes.doublePoints) });
+              await queueTagOverlay(channelName, realTagRes.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(targetName), { doublePoints: Boolean(realTagRes.doublePoints) });
             }
             if (!isMuted) {
               await broadcastToPlayers(client, msg, channelName);
@@ -1603,7 +1812,7 @@ console.log = (...args) => {
           }
         } else {
           // Just pin tag, no real tag
-          await reply( `🎯 ${user} tagged @${target}! (Pin has tagged them ${pinRes.count} times total)`);
+          await reply( `🎯 ${user} tagged @${targetName}! (Pin has tagged them ${pinRes.count} times total)`);
         }
         return;
       }
@@ -1611,14 +1820,15 @@ console.log = (...args) => {
       // Look up target's actual user ID from players
       const playersData = await apiCall('/api/tag');
       console.log(`[Bot] Got ${playersData?.players?.length || 0} players`);
-      const targetPlayer = playersData?.players?.find(p => (p.twitchUsername || p.username)?.toLowerCase() === target);
+      const targetResolution = resolvePlayerTarget(playersData?.players, target);
+      const targetPlayer = targetResolution.player;
       console.log(`[Bot] Target player found: ${!!targetPlayer}`);
       
       if (!targetPlayer) {
-        console.log(`[Bot] ${target} not in game`);
-        reply( `@${user} ${target} is not in the game!`);
+        await replyPlayerLookupFailure(reply, user, targetResolution, playersData?.players);
         return;
       }
+      const targetName = getPlayerDisplayName(targetPlayer, target);
       
       // Check if tagger is in the game and log their state
       const taggerPlayer = playersData?.players?.find(p => p.id === userId);
@@ -1635,16 +1845,16 @@ console.log = (...args) => {
       
       if (res?.error) {
         console.log(`[Bot] Tag error: ${res.error}`);
-        reply( `@${user} ${res.error}`);
+        reply( `@${user} ${publicTagError(res.error)}`);
         return;
       } else {
         const msg = res.doublePoints 
-          ? `🔥 ${user} tagged @${target} for DOUBLE POINTS and is now it! 🔥 Type "spmt join" to play!`
-          : `🎯 ${user} tagged @${target} who is now it! Type "spmt join" to play!`;
+          ? `🔥 ${user} tagged @${targetName} for DOUBLE POINTS and is now it! 🔥 Type "spmt join" to play!`
+          : `🎯 ${user} tagged @${targetName} who is now it! Type "spmt join" to play!`;
         console.log(`[Bot] Sending tag message in current channel`);
         await reply( msg);
         if (isMuted) {
-          await queueTagOverlay(channelName, res.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(target), { doublePoints: Boolean(res.doublePoints) });
+          await queueTagOverlay(channelName, res.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(targetName), { doublePoints: Boolean(res.doublePoints) });
         }
         if (!isMuted) {
           console.log('[Bot] Broadcasting to other players...');
@@ -1656,13 +1866,13 @@ console.log = (...args) => {
         await apiCall('/api/discord/announce', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagger: user, tagged: target, doublePoints: res.doublePoints })
+          body: JSON.stringify({ tagger: user, tagged: targetName, doublePoints: res.doublePoints })
         });
         // Mod log
         await apiCall('/api/tag/mod-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor: user, action: 'tag', target, detail: res.doublePoints ? 'double points' : '', channel: channelName })
+          body: JSON.stringify({ actor: user, action: 'tag', target: targetName, detail: res.doublePoints ? 'double points' : '', channel: channelName })
         }).catch(() => {});
         console.log('[Bot] Tag complete');
       }
@@ -1677,7 +1887,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'away') {
-      const target = args[1]?.replace('@', '').toLowerCase();
+      const target = normalizeChatHandle(args[1]);
       let targetId = userId;
       let targetName = user;
 
@@ -1687,15 +1897,14 @@ console.log = (...args) => {
           return;
         }
         const data = await apiCall('/api/tag');
-        const targetPlayer = data?.players?.find(
-          (p) => (p.twitchUsername || p.username || '').toLowerCase() === target
-        );
+        const targetResolution = resolvePlayerTarget(data?.players, target);
+        const targetPlayer = targetResolution.player;
         if (!targetPlayer) {
-          await reply(`@${user} ${target} is not in the game.`);
+          await replyPlayerLookupFailure(reply, user, targetResolution, data?.players);
           return;
         }
         targetId = targetPlayer.id;
-        targetName = targetPlayer.twitchUsername || targetPlayer.username || target;
+        targetName = getPlayerDisplayName(targetPlayer, target);
       }
 
       // Check current state to toggle
@@ -1752,7 +1961,7 @@ console.log = (...args) => {
       const liveNow = await getLiveMembersCached();
       const liveSet = new Set(liveNow.map(m => (m.twitchUsername || '').toLowerCase()));
       const now = Date.now();
-      const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+      const ACTIVE_THRESHOLD = AUTO_ROTATE_MINUTES * 60 * 1000;
       
       const live = [];
       const chatting = [];
@@ -1813,7 +2022,7 @@ console.log = (...args) => {
         }
         
         const now = Date.now();
-        const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+        const ACTIVE_THRESHOLD = AUTO_ROTATE_MINUTES * 60 * 1000;
         const channelChatters = {};
         for (const p of players) {
           const pName = (p.twitchUsername || p.username || '').toLowerCase();
@@ -1872,7 +2081,7 @@ console.log = (...args) => {
         const liveNow = await getLiveMembersCached();
         const liveSet = new Set(liveNow.map(m => (m.twitchUsername || '').toLowerCase()));
         const now = Date.now();
-        const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+        const ACTIVE_THRESHOLD = AUTO_ROTATE_MINUTES * 60 * 1000;
         
         const live = [];
         const chatting = [];
@@ -1967,7 +2176,7 @@ console.log = (...args) => {
       }
       
       const now = Date.now();
-      const ACTIVE_THRESHOLD = 40 * 60 * 1000;
+      const ACTIVE_THRESHOLD = AUTO_ROTATE_MINUTES * 60 * 1000;
       
       // Group active chatters by lastSeenChannel
       const channelChatters = {};
@@ -2156,12 +2365,73 @@ console.log = (...args) => {
       reply(`🏷️ Chat Tag by MtMan1987 is active! Type "spmt join" to play, "spmt help" for commands. NEW: "spmt mute" for OBS overlay mode!`);
     }
     
+    else if (cmd === 'kick') {
+      const kickName = args[1]?.replace('@', '').toLowerCase();
+      if (!kickName) {
+        reply(`@${user} Usage: "spmt kick <your_kick_username>" — links your Kick account so you can play tag on Kick too!`);
+        return;
+      }
+      const res = await apiCall('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link-platform', userId, platform: 'kick', platformUsername: kickName })
+      });
+      if (res?.error) {
+        reply(`@${user} ${res.error}`);
+      } else {
+        reply(`@${user} ✅ Kick account "${kickName}" linked! You can now play tag in Kick chat.`);
+      }
+    }
+
+    else if (cmd === 'twitch') {
+      const twitchName = args[1]?.replace('@', '').toLowerCase();
+      if (!twitchName) {
+        reply(`@${user} Your Twitch is already linked (you're using it right now!). This command is for linking from other platforms.`);
+        return;
+      }
+      reply(`@${user} Your Twitch is already linked as ${senderLogin}!`);
+    }
+
+    else if (cmd === 'discord') {
+      const discordName = args[1]?.replace('@', '');
+      if (!discordName) {
+        reply(`@${user} Usage: "spmt discord <your_discord_username>" — links your Discord for cross-platform play.`);
+        return;
+      }
+      const res = await apiCall('/api/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link-platform', userId, platform: 'discord', platformUsername: discordName })
+      });
+      if (res?.error) {
+        reply(`@${user} ${res.error}`);
+      } else {
+        reply(`@${user} ✅ Discord account "${discordName}" linked!`);
+      }
+    }
+
+    else if (cmd === 'pack' || cmd === 'quackpack') {
+      const res = await apiCall('/api/quackverse/pack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'open', userId, twitchUsername: senderLogin })
+      });
+      if (res?.error) {
+        reply(`@${user} ${res.error} ${Number(res.packsRemaining || 0)}/3 packs left today.`);
+        return;
+      }
+      const packNames = Array.isArray(res?.pack)
+        ? res.pack.map((card) => card?.name).filter(Boolean).slice(0, 5).join(', ')
+        : 'pack opened';
+      reply(`🦆 @${user} opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`);
+    }
+
     else if (cmd === 'card' || cmd === 'phrases' || cmd === 'claim' || cmd === 'newcard' || cmd === 'share' || cmd === 'export') {
       reply(`@${user} Bingo is currently disabled.`);
     }
     
     else if (cmd === 'pass') {
-      const target = args[1]?.replace('@', '').toLowerCase();
+      const target = normalizeChatHandle(args[1]);
       console.log(`[Bot] Pass command from ${user}, target=${target}`);
       if (!target) {
         reply(`@${user} Usage: "spmt pass @username" — Pass your tag to someone for DOUBLE POINTS! Earned by gifting subs, cheering 100+ bits, or hype train.`);
@@ -2169,25 +2439,27 @@ console.log = (...args) => {
       }
       
       const playersData = await apiCall('/api/tag');
-      const targetPlayer = playersData?.players?.find(p => (p.twitchUsername || p.username)?.toLowerCase() === target);
+      const targetResolution = resolvePlayerTarget(playersData?.players, target);
+      const targetPlayer = targetResolution.player;
       if (!targetPlayer) {
-        reply(`@${user} ${target} is not in the game!`);
+        await replyPlayerLookupFailure(reply, user, targetResolution, playersData?.players);
         return;
       }
+      const targetName = getPlayerDisplayName(targetPlayer, target);
       
       const res = await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'use-pass', userId, targetUserId: targetPlayer.id, streamerId: channelName })
+        body: JSON.stringify({ action: 'use-pass', userId, twitchUsername: senderLogin, targetUserId: targetPlayer.id, streamerId: channelName })
       });
       
       if (res?.error) {
-        reply(`@${user} ${res.error}`);
+        reply(`@${user} ${publicTagError(res.error)}`);
       } else {
-        const msg = `🎟️ ${crown(user)} used their PASS to tag @${crown(target)} for DOUBLE POINTS and is now it! Raid, follow, cheer, or sub to earn yours!`;
+        const msg = `🎟️ ${crown(user)} used their PASS to tag @${crown(targetName)} for DOUBLE POINTS and is now it! Raid, follow, cheer, or sub to earn yours!`;
         await reply(msg);
         if (isMuted) {
-          await queueTagOverlay(channelName, 'pass-card', crown(user), crown(target), { doublePoints: true, passUsed: true });
+          await queueTagOverlay(channelName, 'pass-card', crown(user), crown(targetName), { doublePoints: true, passUsed: true });
         }
         if (!isMuted) {
           await broadcastToPlayers(client, msg, channelName);
@@ -2195,12 +2467,12 @@ console.log = (...args) => {
         await apiCall('/api/discord/announce', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagger: user, tagged: target, doublePoints: true, message: 'Used a Pass' })
+          body: JSON.stringify({ tagger: user, tagged: targetName, doublePoints: true, message: 'Used a Pass' })
         });
         await apiCall('/api/tag/mod-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor: user, action: 'use-pass', target, detail: 'double points pass', channel: channelName })
+          body: JSON.stringify({ actor: user, action: 'use-pass', target: targetName, detail: 'double points pass', channel: channelName })
         }).catch(() => {});
       }
     }
@@ -2210,44 +2482,46 @@ console.log = (...args) => {
         reply(`@${user} Only mods/admins can give passes.`);
         return;
       }
-      const target = args[1]?.replace('@', '').toLowerCase();
+      const target = normalizeChatHandle(args[1]);
       if (!target) {
         reply(`@${user} Usage: "spmt givepass @username"`);
         return;
       }
       const playersData = await apiCall('/api/tag');
-      const targetPlayer = playersData?.players?.find(p => (p.twitchUsername || p.username)?.toLowerCase() === target);
+      const targetResolution = resolvePlayerTarget(playersData?.players, target);
+      const targetPlayer = targetResolution.player;
       if (!targetPlayer) {
-        reply(`@${user} ${target} is not in the game!`);
+        await replyPlayerLookupFailure(reply, user, targetResolution, playersData?.players);
         return;
       }
+      const targetName = getPlayerDisplayName(targetPlayer, target);
       const res = await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: target, reason: `gifted by ${user}` })
+        body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: targetName, reason: `gifted by ${user}` })
       });
       if (res?.granted) {
-        reply(`🎟️ @${target} got an SPMT Pass from ${user}! 🎁 Use "spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
+        reply(`🎟️ @${targetName} got an SPMT Pass from ${user}! 🎁 Use "spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
         if (isMuted) {
-          await sendRichOverlayEvent(channelName, 'pass-card', `${target} got a pass`, {
+          await sendRichOverlayEvent(channelName, 'pass-card', `${targetName} got a pass`, {
             tagger: user,
-            tagged: target,
+            tagged: targetName,
             granted: true,
             passUsed: false,
             doublePoints: true,
           });
         }
       } else if (res?.reason === 'max-passes') {
-        reply(`@${user} ${target} already has the max 3/3 passes!`);
+        reply(`@${user} ${targetName} already has the max 3/3 passes!`);
       } else {
-        reply(`@${user} ${target} already has a pass or isn't in the game.`);
+        reply(`@${user} ${targetName} already has a pass or isn't in the game.`);
       }
     }
 
     else if (cmd === 'help') {
       console.log(`[Bot] Attempting to send help to ${channel}`);
       try {
-        await reply( `@${user} "spmt join" = Join | "spmt tag @user" = Tag | "spmt pass @user" = Pass (earned) | "spmt status" = Who's it | "spmt score" = Stats | "spmt rank" = Top 3 | "spmt players" = List | "spmt live" = Live | "spmt away" = Toggle immunity | "spmt rules" = Rules | Mods: "spmt mod"`);
+        await reply( `@${user} "spmt join" = Join | "spmt tag @user" = Tag | "spmt pass @user" = Pass (earned) | "spmt pack" = Open Quackverse pack | "spmt status" = Who's it | "spmt score" = Stats | "spmt rank" = Top 3 | "spmt players" = List | "spmt live" = Live | "spmt away" = Toggle immunity | "spmt rules" = Rules | Mods: "spmt mod"`);
         console.log(`[Bot] Help message sent successfully`);
       } catch (e) {
         console.error('[Bot] Error sending help:', e.message);

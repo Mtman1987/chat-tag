@@ -13,13 +13,12 @@ import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, MessageSquare, Trash2, Image, Trash, Download } from "lucide-react";
+import { AlertTriangle, Trash2, Image, Trash, Download } from "lucide-react";
 import { useSession } from "@/contexts/session-context";
 import { isAdminUsername } from "@/lib/admin";
 import { getAuthHeaders } from "@/lib/client-auth";
 
 const SettingsSchema = z.object({
-  discordWebhookUrl: z.string().url("Must be a valid webhook URL.").optional().or(z.literal('')),
   tagSuccessPoints: z.coerce.number().min(0),
   tagPenaltyPoints: z.coerce.number().min(0),
   bingoSquarePoints: z.coerce.number().min(0),
@@ -32,7 +31,6 @@ export default function SettingsPage() {
   const { user, isUserLoading } = useSession();
   const isAdmin = isAdminUsername(user?.twitchUsername);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPostingToDiscord, setIsPostingToDiscord] = useState(false);
   const [isClearingAway, setIsClearingAway] = useState(false);
   const [isFixingPlayers, setIsFixingPlayers] = useState(false);
   const [fixResult, setFixResult] = useState<any>(null);
@@ -44,7 +42,6 @@ export default function SettingsPage() {
   const form = useForm<SettingsForm>({
     resolver: zodResolver(SettingsSchema),
     defaultValues: {
-      discordWebhookUrl: "",
       tagSuccessPoints: 100,
       tagPenaltyPoints: 50,
       bingoSquarePoints: 10,
@@ -53,13 +50,20 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
+    if (isUserLoading) return;
+
+    if (!isAdmin) {
+      setIsLoading(false);
+      setLoadingTickets(false);
+      return;
+    }
+
     (async () => {
       try {
         const res = await fetch('/api/settings', { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           form.reset({
-            discordWebhookUrl: data.discordWebhookUrl || "",
             tagSuccessPoints: data.tagSuccessPoints ?? 100,
             tagPenaltyPoints: data.tagPenaltyPoints ?? 50,
             bingoSquarePoints: data.bingoSquarePoints ?? 10,
@@ -73,7 +77,7 @@ export default function SettingsPage() {
       }
     })();
     fetchSupportTickets();
-  }, [form]);
+  }, [form, isAdmin, isUserLoading]);
 
   const fetchSupportTickets = async () => {
     try {
@@ -114,19 +118,6 @@ export default function SettingsPage() {
       toast({ title: "Settings saved!", description: "Your settings have been updated." });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save Failed", description: error.message });
-    }
-  };
-
-  const handlePostToDiscord = async () => {
-    setIsPostingToDiscord(true);
-    try {
-      const res = await fetch('/api/update-discord', { method: 'POST', headers: getAuthHeaders() });
-      if (!res.ok) throw new Error('Backend failed to update Discord.');
-      toast({ title: "Update Signal Sent!", description: "The request to update the Discord leaderboard has been sent." });
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Discord Post Failed', description: error.message });
-    } finally {
-      setIsPostingToDiscord(false);
     }
   };
 
@@ -181,17 +172,6 @@ export default function SettingsPage() {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                <h3 className="text-lg font-medium text-primary">Bot Integrations</h3>
-                <FormField control={form.control} name="discordWebhookUrl" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Discord Webhook URL</FormLabel>
-                    <FormControl><Input type="password" placeholder="Enter your Discord channel webhook URL" {...field} /></FormControl>
-                    <FormDescription>Used to post and update a live leaderboard message in Discord.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-
-                <Separator />
                 <h3 className="text-lg font-medium text-primary">Scoring</h3>
                 <div className="grid md:grid-cols-2 gap-8">
                   <FormField control={form.control} name="tagSuccessPoints" render={({ field }) => (
@@ -241,14 +221,6 @@ export default function SettingsPage() {
             <CardDescription>Tools for managing the game.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">Trigger an update of the Discord leaderboard message.</p>
-              <Button onClick={handlePostToDiscord} disabled={isPostingToDiscord}>
-                <MessageSquare className={`mr-2 h-4 w-4 ${isPostingToDiscord ? 'animate-spin' : ''}`} />
-                {isPostingToDiscord ? 'Updating...' : 'Update Discord'}
-              </Button>
-            </div>
-            <Separator />
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">Clear all players' away/immunity status.</p>
               <Button onClick={handleClearAllAway} disabled={isClearingAway} variant="destructive">

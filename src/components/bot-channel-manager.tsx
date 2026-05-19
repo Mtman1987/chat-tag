@@ -27,6 +27,7 @@ export function BotChannelManager() {
   const [channels, setChannels] = useState<BotChannel[]>([]);
   const [pendingChannels, setPendingChannels] = useState<string[]>([]);
   const [blacklistedChannels, setBlacklistedChannels] = useState<string[]>([]);
+  const [mutedChannels, setMutedChannels] = useState<string[]>([]);
   const [newBlacklistChannel, setNewBlacklistChannel] = useState('');
   const [newChannel, setNewChannel] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -65,6 +66,12 @@ export function BotChannelManager() {
       if (pendingRes.ok) {
         const pendingData = await pendingRes.json();
         setPendingChannels(pendingData.channels || []);
+      }
+
+      const mutedRes = await fetch('/api/bot/muted');
+      if (mutedRes.ok) {
+        const mutedData = await mutedRes.json();
+        setMutedChannels((mutedData.muted || []).map((channel: string) => channel.toLowerCase()));
       }
     } catch (error) {
       console.error('Failed to fetch bot channels:', error);
@@ -469,6 +476,60 @@ export function BotChannelManager() {
     }
   };
 
+  const handleMuteChannel = async (channelName: string) => {
+    const res = await fetch('/api/bot/muted', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: channelName }),
+    });
+    if (res.ok) {
+      setMutedChannels((current) => Array.from(new Set([...current, channelName.toLowerCase()])));
+      toast({ title: 'Muted', description: `#${channelName} will use overlay messages instead of chat messages` });
+    } else {
+      toast({ variant: 'destructive', title: 'Mute Failed' });
+    }
+  };
+
+  const handleUnmuteChannel = async (channelName: string) => {
+    const res = await fetch('/api/bot/unmute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: channelName }),
+    });
+    if (res.ok) {
+      setMutedChannels((current) => current.filter((channel) => channel !== channelName.toLowerCase()));
+      toast({ title: 'Unmuted', description: `#${channelName} can receive bot chat messages again` });
+    } else {
+      toast({ variant: 'destructive', title: 'Unmute Failed' });
+    }
+  };
+
+  const handleMuteAllChannels = async () => {
+    const names = Array.from(new Set(allChannels.map((channel) => channel.name.toLowerCase())));
+    for (const name of names) {
+      await fetch('/api/bot/muted', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: name }),
+      });
+    }
+    setMutedChannels(names);
+    toast({ title: 'All Channels Muted', description: `${names.length} channels are now overlay-only` });
+  };
+
+  const handleUnmuteAllChannels = async () => {
+    const names = Array.from(new Set(allChannels.map((channel) => channel.name.toLowerCase())));
+    for (const name of names) {
+      await fetch('/api/bot/unmute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: name }),
+      });
+    }
+    setMutedChannels([]);
+    toast({ title: 'All Channels Unmuted', description: `${names.length} channels can receive bot chat messages` });
+  };
+
   const allChannels = [
     ...channels,
     ...pendingChannels.map(name => ({ name, joined: false, status: 'pending' as const }))
@@ -506,6 +567,14 @@ export function BotChannelManager() {
               <Button onClick={fetchChannels} disabled={isRefreshing} size="sm" variant="ghost">
                 <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Refresh
+              </Button>
+              <Button onClick={handleMuteAllChannels} disabled={allChannels.length === 0} size="sm" variant="outline">
+                <Pause className="mr-2 h-4 w-4" />
+                Mute All
+              </Button>
+              <Button onClick={handleUnmuteAllChannels} disabled={allChannels.length === 0} size="sm" variant="outline">
+                <Play className="mr-2 h-4 w-4" />
+                Unmute All
               </Button>
             </div>
 
@@ -594,8 +663,34 @@ export function BotChannelManager() {
                          channel.status === 'pending' ? 'Pending' :
                          channel.status === 'joining' ? 'Joining...' : 'Failed'}
                       </span>
+                      {mutedChannels.includes(channel.name.toLowerCase()) && (
+                        <Badge variant="outline" className="text-purple-500 border-purple-500">
+                          Muted
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex gap-2">
+                      {mutedChannels.includes(channel.name.toLowerCase()) ? (
+                        <Button
+                          onClick={() => handleUnmuteChannel(channel.name)}
+                          disabled={isLoading}
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                        >
+                          Unmute
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => handleMuteChannel(channel.name)}
+                          disabled={isLoading}
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                        >
+                          Mute
+                        </Button>
+                      )}
                       {!channel.joined && (
                         <>
                           <Button

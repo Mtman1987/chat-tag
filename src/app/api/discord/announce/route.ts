@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 const DSH_URL = process.env.DSH_URL || 'https://discord-stream-hub-new.fly.dev';
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
 function buildGameStatePayload(state: any) {
+  const scoring = getScoringSettings(state);
   const tagCounts: Record<string, { tags: number; tagged: number }> = {};
   for (const entry of state.tagHistory) {
     if (entry.blocked) continue;
@@ -22,7 +24,7 @@ function buildGameStatePayload(state: any) {
 
   const players = Object.values(state.tagPlayers).map((p: any) => {
     const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
-    const score = counts.tags * 100 - counts.tagged * 50;
+    const score = scoreFromTagCounts(counts, scoring) + (p.bingoPoints || 0);
     return {
       id: p.id,
       twitchUsername: p.twitchUsername || p.username,
