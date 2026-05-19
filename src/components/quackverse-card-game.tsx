@@ -28,6 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
+import { getAuthHeaders } from '@/lib/client-auth';
 import {
   quackverseCards,
   quackverseDucks,
@@ -873,7 +874,10 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
     async function loadSharedState() {
       try {
-        const response = await fetch(quackverseUrl('/api/quackverse/state'), { cache: 'no-store' });
+        const response = await fetch(quackverseUrl('/api/quackverse/state'), {
+          cache: 'no-store',
+          headers: getAuthHeaders(),
+        });
         if (!response.ok) return;
         const data = await response.json();
         const shared = data.state as QuackverseSavedState;
@@ -937,7 +941,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
       fetch(quackverseUrl('/api/quackverse/state'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ state: savedState, baseUpdatedAt: lastSharedUpdatedAtRef.current, force: forceNextSharedWriteRef.current }),
       })
         .then(async (response) => {
@@ -968,7 +972,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     try {
       const response = await fetch(quackverseUrl('/api/quackverse/action'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(action),
       });
       const data = await response.json().catch(() => null);
@@ -995,7 +999,10 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     let cancelled = false;
     async function loadCollection() {
       try {
-        const response = await fetch('/api/quackverse/pack', { cache: 'no-store' });
+        const response = await fetch('/api/quackverse/pack', {
+          cache: 'no-store',
+          headers: getAuthHeaders(),
+        });
         const data = await response.json().catch(() => null);
         if (!response.ok || cancelled || !data) return;
         setPendingPacks(Number(data.packsRemaining || 0));
@@ -1025,7 +1032,10 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
     async function loadPackAudit() {
       try {
-        const response = await fetch('/api/quackverse/pack?audit=1', { cache: 'no-store' });
+        const response = await fetch('/api/quackverse/pack?audit=1', {
+          cache: 'no-store',
+          headers: getAuthHeaders(),
+        });
         const data = await response.json().catch(() => null);
         if (cancelled) return;
         if (!response.ok || !data) {
@@ -1600,7 +1610,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     try {
       const response = await fetch('/api/quackverse/pack', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ action: 'open' }),
       });
       const data = await response.json().catch(() => null);
@@ -1634,7 +1644,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     if (deckCount >= ownedCount) return;
     const response = await fetch('/api/quackverse/pack', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ action: 'addToDeck', cardId }),
     });
     const data = await response.json().catch(() => null);
@@ -1649,7 +1659,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const removeFromDeck = async (cardId: number) => {
     const response = await fetch('/api/quackverse/pack', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ action: 'removeFromDeck', cardId }),
     });
     const data = await response.json().catch(() => null);
