@@ -14,6 +14,7 @@ export type QuackverseCard = {
   flavor: string;
   artUrl?: string;
   artHoverUrl?: string;
+  artHoverDurationMs?: number;
 };
 
 export const quackverseCards = [

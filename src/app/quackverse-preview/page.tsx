@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { quackverseCards } from '@/lib/quackverse-data';
+import { quackverseCards, type QuackverseCard } from '@/lib/quackverse-data';
 import { getQuackverseFamilyGroup } from '@/lib/quackverse-family-map';
 import { cn } from '@/lib/utils';
 
-const card = quackverseCards.find((item) => item.id === 4) || quackverseCards[0];
+const card = (quackverseCards.find((item) => item.id === 4) || quackverseCards[0]) as QuackverseCard;
 const boardSize = 7;
 const startIndex = 24;
 
@@ -25,15 +26,19 @@ function makeBoard(fillIndex: number | null) {
 }
 
 export default function QuackversePreviewPage() {
-  const [hovered, setHovered] = useState(false);
+  const [artVisible, setArtVisible] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(startIndex);
   const [dragging, setDragging] = useState(false);
+  const [animationNonce, setAnimationNonce] = useState(0);
   const family = useMemo(() => getQuackverseFamilyGroup(card.id), []);
   const hoverResetTimer = useRef<number | null>(null);
+  const hoverLoopTimer = useRef<number | null>(null);
+  const hoverStartedAt = useRef<number | null>(null);
 
   const staticUrl = card.artUrl || '';
   const hoverUrl = card.artHoverUrl || staticUrl;
-  const src = hovered || dragging ? hoverUrl : staticUrl;
+  const hoverDurationMs = card.artHoverDurationMs ?? 1200;
+  const src = artVisible || dragging ? `${hoverUrl}${hoverUrl.includes('?') ? '&' : '?'}v=${animationNonce}` : staticUrl;
   const board = makeBoard(selectedIndex);
 
   const clearHoverResetTimer = () => {
@@ -43,22 +48,54 @@ export default function QuackversePreviewPage() {
     }
   };
 
-  const showAnimatedArt = () => {
+  const clearHoverLoopTimer = () => {
+    if (hoverLoopTimer.current !== null) {
+      window.clearInterval(hoverLoopTimer.current);
+      hoverLoopTimer.current = null;
+    }
+  };
+
+  const markAnimationRestart = () => {
+    hoverStartedAt.current = Date.now();
+    setAnimationNonce((value) => value + 1);
+  };
+
+  const startHoverPlayback = () => {
     clearHoverResetTimer();
-    setHovered(true);
+    clearHoverLoopTimer();
+    setArtVisible(true);
+    markAnimationRestart();
+    hoverLoopTimer.current = window.setInterval(() => {
+      markAnimationRestart();
+    }, hoverDurationMs);
+  };
+
+  const stopHoverPlayback = () => {
+    clearHoverLoopTimer();
+    clearHoverResetTimer();
+    const startedAt = hoverStartedAt.current;
+    const elapsed = startedAt ? Date.now() - startedAt : hoverDurationMs;
+    const remainingMs = Math.max(0, hoverDurationMs - elapsed);
+    hoverResetTimer.current = window.setTimeout(() => {
+      setArtVisible(false);
+      hoverResetTimer.current = null;
+    }, remainingMs + 500);
+  };
+
+  const showAnimatedArt = () => {
+    startHoverPlayback();
   };
 
   const hideAnimatedArt = () => {
-    clearHoverResetTimer();
-    hoverResetTimer.current = window.setTimeout(() => {
-      setHovered(false);
-      hoverResetTimer.current = null;
-    }, 1200);
+    stopHoverPlayback();
   };
 
   const moveTo = (index: number) => setSelectedIndex(index);
 
-  useEffect(() => () => clearHoverResetTimer(), []);
+  useEffect(() => () => {
+    clearHoverResetTimer();
+    clearHoverLoopTimer();
+  }, []);
 
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white">
@@ -74,8 +111,16 @@ export default function QuackversePreviewPage() {
             <Badge variant="outline" className="border-cyan-300/50 text-cyan-100">Card #{card.id}</Badge>
             <Badge variant="outline" className="border-white/20 text-slate-200">{family?.label || 'Unsorted'}</Badge>
             <Badge variant="outline" className="border-fuchsia-300/50 text-fuchsia-100">
-              {hovered || dragging ? 'gif finishes then falls back' : 'static image'}
+              {artVisible || dragging ? 'gif loops while highlighted' : 'static image'}
             </Badge>
+            <Badge variant="outline" className="border-emerald-300/50 text-emerald-100">
+              {hoverDurationMs}ms + 500ms fallback
+            </Badge>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/quackverse-guide">Open guide</Link>
+            </Button>
           </div>
         </div>
 
@@ -93,7 +138,7 @@ export default function QuackversePreviewPage() {
                 onDragStart={() => {
                   clearHoverResetTimer();
                   setDragging(true);
-                  setHovered(true);
+                  showAnimatedArt();
                 }}
                 onDragEnd={() => {
                   setDragging(false);
@@ -184,7 +229,7 @@ export default function QuackversePreviewPage() {
                               onDragStart={() => {
                                 clearHoverResetTimer();
                                 setDragging(true);
-                                setHovered(true);
+                                showAnimatedArt();
                               }}
                               onDragEnd={() => {
                                 setDragging(false);
@@ -220,7 +265,8 @@ export default function QuackversePreviewPage() {
                 <div className="mb-2 text-sm font-semibold text-white">How it behaves</div>
                 <div className="space-y-2 text-sm text-slate-300">
                   <div className="rounded-md bg-white/[0.04] p-2">Hover the card art to swap the static image for the GIF.</div>
-                  <div className="rounded-md bg-white/[0.04] p-2">When you stop hovering, the GIF stays up long enough to finish and then falls back to the matching static frame.</div>
+                  <div className="rounded-md bg-white/[0.04] p-2">While highlighted, the GIF restarts every full cycle so it can loop cleanly.</div>
+                  <div className="rounded-md bg-white/[0.04] p-2">When you stop hovering, the current loop finishes and the PNG comes back 500ms later.</div>
                   <div className="rounded-md bg-white/[0.04] p-2">Drag the card, or click a new square to move it across the board.</div>
                   <div className="rounded-md bg-white/[0.04] p-2">The board is public and is meant to be a simple demo, not the full match engine.</div>
                 </div>
