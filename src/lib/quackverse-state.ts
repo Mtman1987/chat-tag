@@ -6,6 +6,7 @@ export type QuackverseSavedPiece = {
   cardId: number;
   currentHp: number;
   maxHp: number;
+  specialCurrent?: number;
   equipmentIds?: number[];
   fatigued?: boolean;
   fatigue?: number;

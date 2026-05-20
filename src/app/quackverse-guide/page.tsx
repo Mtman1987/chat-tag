@@ -391,7 +391,7 @@ export default function QuackverseGuidePage() {
               <div><span className="font-semibold text-white">ATK</span>: damage output.</div>
               <div><span className="font-semibold text-white">DEF</span>: damage reduction and durability.</div>
               <div><span className="font-semibold text-white">SPD</span>: movement, turn tempo, and positioning.</div>
-              <div><span className="font-semibold text-white">SPC</span>: abilities, gear impact, and special potency.</div>
+              <div><span className="font-semibold text-white">SPC</span>: ability charge, gear impact, and special potency.</div>
               <div><span className="font-semibold text-white">Fatigue</span>: reduces SPD first.</div>
             </CardContent>
           </Card>
@@ -405,6 +405,7 @@ export default function QuackverseGuidePage() {
               <div>Player 2 enters from the top row.</div>
               <div>Highlighted squares should be clickable as move targets.</div>
               <div>The squad strip is gone from the live board.</div>
+              <div>Abilities spend Special and only fire when the duck has enough charge.</div>
             </CardContent>
           </Card>
         </section>
@@ -634,6 +635,9 @@ export default function QuackverseGuidePage() {
           </p>
           <p className="mt-2 text-slate-300">
             Uploads persist immediately to the volume, so there is no separate save button in the editor.
+          </p>
+          <p className="mt-2 text-slate-300">
+            Special is a charge pool: the board adds charge on turn start, weighted by SPC and reduced by fatigue. Fatigue now decays when a duck is no longer in formation.
           </p>
         </section>
       </div>

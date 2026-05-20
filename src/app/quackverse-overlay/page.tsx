@@ -28,10 +28,11 @@ function getEffectiveStats(piece: { cardId: number; equipmentIds?: number[]; fat
     .join(' ');
   const fatigue = Number(piece.fatigue || 0);
   const modifiers = piece.statModifiers || {};
+  const damageReduction = numberFromText(effectText, /(?:Reduce damage taken by|Reduce all damage by)\s*(\d+)/i);
 
   return {
-    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + numberFromText(effectText, /\+(\d+)\s*ATK/i) - fatigue),
-    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + numberFromText(effectText, /\+(\d+)\s*DEF/i)),
+    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + numberFromText(effectText, /\+(\d+)\s*ATK/i) - fatigue - damageReduction),
+    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + numberFromText(effectText, /\+(\d+)\s*DEF/i) + damageReduction),
     spd: Math.max(1, (card?.spd || 0) + Number(modifiers.spd || 0) + numberFromText(effectText, /\+(\d+)\s*SPD/i) - fatigue),
   };
 }

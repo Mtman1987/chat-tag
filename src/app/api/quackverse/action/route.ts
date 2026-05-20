@@ -68,6 +68,7 @@ const makePiece = (owner: PlayerId, card: QuackverseCard, instanceId = makeInsta
   cardId: card.id,
   currentHp: card.hp ?? 1,
   maxHp: card.hp ?? 1,
+  specialCurrent: 0,
   equipmentIds: [],
   fatigue: 0,
   statModifiers: { atk: 0, def: 0, spd: 0, spc: 0 },
@@ -75,11 +76,44 @@ const makePiece = (owner: PlayerId, card: QuackverseCard, instanceId = makeInsta
 const numberFromText = (text: string, pattern: RegExp) => Number(text.match(pattern)?.[1] || 0);
 const cardFor = (piece: QuackverseSavedPiece) => quackverseCards.find((card) => card.id === piece.cardId);
 const isRole = (card: QuackverseCard, token: string) => `${card.name} ${card.role || ''}`.toLowerCase().includes(token.toLowerCase());
+const getSpecialMax = (piece: QuackverseSavedPiece) => {
+  const card = cardFor(piece);
+  const base = Number(card?.spc || 0);
+  const modifiers = piece.statModifiers || {};
+  return Math.max(10, 10 + base * 2 + Number(modifiers.spc || 0) * 2);
+};
 const deckForPlayer = (state: QuackverseSavedState, playerId: PlayerId) => {
   const userId = state.claimedPlayers[playerId];
   const collectionDeck = userId ? state.collections?.[userId]?.deck : [];
   return Array.isArray(collectionDeck) ? collectionDeck.filter((cardId) => quackverseCards.some((card) => card.id === cardId)) : [];
 };
+
+function getCurrentSpecial(piece: QuackverseSavedPiece) {
+  return Number(piece.specialCurrent || 0);
+}
+
+function spendSpecial(piece: QuackverseSavedPiece, cost: number) {
+  piece.specialCurrent = Math.max(0, getCurrentSpecial(piece) - cost);
+}
+
+function getAbilityCost(ability: string) {
+  if (/(remove debuff|cleanse|remove debuffs)/i.test(ability)) return 10;
+  if (/(stun|loses next attack|dodge next attack|block next attack|peek|look at|reveal|move twice|attack twice|50%|chance|always goes first|root|draw|discard)/i.test(ability)) {
+    return 8;
+  }
+  if (/(heal|restore|repair|mend|blessing|sprinkle)/i.test(ability)) return 6;
+  if (/(swap SPD|reduce enemy|-\d+\s*(ATK|DEF|SPD|SPC)|\+\d+\s*(ATK|DEF|SPD|SPC)|\+?\d+\s*damage)/i.test(ability)) return 4;
+  return 5;
+}
+
+function removeNegativeModifiers(piece: QuackverseSavedPiece) {
+  piece.statModifiers = {
+    atk: Math.max(0, Number(piece.statModifiers?.atk || 0)),
+    def: Math.max(0, Number(piece.statModifiers?.def || 0)),
+    spd: Math.max(0, Number(piece.statModifiers?.spd || 0)),
+    spc: Math.max(0, Number(piece.statModifiers?.spc || 0)),
+  };
+}
 
 function recordDeckResult(state: QuackverseSavedState, winner: PlayerId) {
   if (state.matchResultRecordedForWinner === winner) return false;
@@ -242,6 +276,28 @@ function scoreNewFormations(state: QuackverseSavedState, owner: PlayerId) {
   );
 }
 
+function refreshTurnResources(state: QuackverseSavedState, owner: PlayerId) {
+  const formed = new Set(
+    detectFormations(state.grid)
+      .filter((formation) => formation.owner === owner)
+      .flatMap((formation) => formation.indices),
+  );
+
+  state.grid = state.grid.map((slot, index) => {
+    if (!slot || slot.owner !== owner) return slot;
+    const nextFatigue = formed.has(index) ? Number(slot.fatigue || 0) : Math.max(0, Number(slot.fatigue || 0) - 1);
+    const card = cardFor(slot);
+    const statBonus = Number(slot.statModifiers?.spc || 0);
+    const gain = Math.max(0, 4 + Number(card?.spc || 0) + statBonus - nextFatigue);
+    const specialCurrent = Math.min(getSpecialMax(slot), Number(slot.specialCurrent || 0) + gain);
+    return {
+      ...slot,
+      fatigue: nextFatigue,
+      specialCurrent,
+    };
+  });
+}
+
 function discardBoardPiece(state: QuackverseSavedState, piece: QuackverseSavedPiece) {
   state.battlePiles[piece.owner].discardPile.push({ instanceId: pieceKey(piece), cardId: piece.cardId });
   for (const cardId of piece.equipmentIds || []) {
@@ -255,9 +311,10 @@ function getEffectiveStats(piece: QuackverseSavedPiece) {
   const effectText = equipment.map((item) => item.effect || '').join(' ');
   const modifiers = piece.statModifiers || {};
   const fatigue = Number(piece.fatigue || 0);
+  const damageReduction = numberFromText(effectText, /(?:Reduce damage taken by|Reduce all damage by)\s*(\d+)/i);
   return {
-    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + numberFromText(effectText, /\+(\d+)\s*ATK/i) - fatigue),
-    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + numberFromText(effectText, /\+(\d+)\s*DEF/i)),
+    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + numberFromText(effectText, /\+(\d+)\s*ATK/i) - fatigue - damageReduction),
+    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + numberFromText(effectText, /\+(\d+)\s*DEF/i) + damageReduction),
     spd: Math.max(1, (card?.spd || 0) + Number(modifiers.spd || 0) + numberFromText(effectText, /\+(\d+)\s*SPD/i) - fatigue),
   };
 }
@@ -294,6 +351,14 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
   const ability = requestedAbility || sourceCard.abilities[0] || '';
   if (!ability || !(sourceCard.abilities as string[]).includes(ability)) return;
   if (state.turnActions[source.owner].usedAbility.includes(pieceKey(source))) return;
+  const abilityCost = getAbilityCost(ability);
+  if (getCurrentSpecial(source) < abilityCost) {
+    addLog(
+      state,
+      `${playerLabels[source.owner].short} tried ${ability.split(':')[0] || 'Ability'} but needed ${abilityCost} Special and only had ${getCurrentSpecial(source)}.`,
+    );
+    return;
+  }
 
   const owner = source.owner;
   const enemyOwner = opponentOf(owner);
@@ -305,9 +370,9 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     .filter((entry): entry is { piece: QuackverseSavedPiece; index: number } => entry.piece?.owner === enemyOwner);
   const adjacentEnemy = enemyPieces.find((entry) => isAdjacent(sourceIndex, entry.index));
   const adjacentAlly = ownPieces.find((entry) => entry.index !== sourceIndex && isAdjacent(sourceIndex, entry.index));
-  const friendlyTargets = /all allies/i.test(ability)
+  const friendlyTargets = /all allies|to allies|allied/i.test(ability)
     ? ownPieces.map((entry) => entry.index)
-    : /to ally/i.test(ability)
+    : /to ally|an ally/i.test(ability)
       ? [adjacentAlly?.index ?? sourceIndex]
       : [sourceIndex];
   const enemyTargets = /all enemies|enemies/i.test(ability)
@@ -317,9 +382,19 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
       : [];
   const abilityName = ability.split(':')[0] || 'Ability';
   const finish = (entry: string) => {
+    spendSpecial(source, abilityCost);
     state.turnActions[owner].usedAbility.push(pieceKey(source));
     addLog(state, entry);
   };
+
+  if (/(remove debuff|cleanse|remove debuffs)/i.test(ability)) {
+    for (const targetIndex of friendlyTargets) {
+      const target = state.grid[targetIndex];
+      if (target) removeNegativeModifiers(target);
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, cleansing ${friendlyTargets.length} target${friendlyTargets.length === 1 ? '' : 's'}.`);
+    return;
+  }
 
   const healAmount = numberFromText(ability, /(?:Heal|Restore|Repair|Mend|Blessing|Sprinkle)\D+(\d+)\s*HP/i);
   if (healAmount > 0) {
@@ -340,6 +415,23 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     finish(
       `${playerLabels[owner].short} used ${abilityName}, dealing ${damage} damage to ${enemyTargets.length} target${enemyTargets.length === 1 ? '' : 's'}${knockedOut ? ` and KO'ing ${knockedOut}` : ''}.`,
     );
+    return;
+  }
+
+  if (/attack twice/i.test(ability) && adjacentEnemy?.piece) {
+    const damageOne = Math.max(1, Math.floor(getEffectiveStats(source).atk / 2) - getEffectiveStats(adjacentEnemy.piece).def);
+    const totalDamage = Math.max(0, damageOne) * 2;
+    adjacentEnemy.piece.currentHp -= totalDamage;
+    state.turnActions[owner].attacked.push(pieceKey(source));
+    if (adjacentEnemy.piece.currentHp <= 0) {
+      state.grid[adjacentEnemy.index] = null;
+      state.battlePiles[adjacentEnemy.piece.owner].discardPile.push({ instanceId: pieceKey(adjacentEnemy.piece), cardId: adjacentEnemy.piece.cardId });
+      for (const cardId of adjacentEnemy.piece.equipmentIds || []) state.battlePiles[adjacentEnemy.piece.owner].discardPile.push(makeCardInstance(adjacentEnemy.piece.owner, cardId));
+      state.koCount[owner] += 1;
+      state.score[owner] += 1;
+      if (state.score[owner] >= victoryTarget) state.winner = owner;
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, striking twice for ${totalDamage} total damage.`);
     return;
   }
 
@@ -369,6 +461,16 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
+  if (/look at|peek|reveal/i.test(ability)) {
+    const revealCount = /top\s*2/i.test(ability) ? 2 : 1;
+    const previewPile = state.battlePiles[enemyOwner].drawPile.slice(0, revealCount);
+    source.specialCurrent = Math.min(getSpecialMax(source), getCurrentSpecial(source) + 2);
+    finish(
+      `${playerLabels[owner].short} used ${abilityName}, peeking at ${previewPile.map((entry) => quackverseCards.find((card) => card.id === entry.cardId)?.name || 'a card').join(', ') || 'the next card'}.`,
+    );
+    return;
+  }
+
   const statDebuff = (['atk', 'def', 'spd', 'spc'] as const)
     .map((stat) => {
       const match = ability.match(new RegExp(`-(\\d+)\\s*${stat}|Reduce enemy ${stat} by\\s*(\\d+)`, 'i'));
@@ -391,6 +493,126 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
+  if (/always goes first|always attacks first/i.test(ability)) {
+    source.statModifiers = {
+      atk: Number(source.statModifiers?.atk || 0),
+      def: Number(source.statModifiers?.def || 0),
+      spd: Number(source.statModifiers?.spd || 0) + (state.turnNumber === 1 ? 6 : 3),
+      spc: Number(source.statModifiers?.spc || 0),
+    };
+    finish(`${playerLabels[owner].short} used ${abilityName}, gaining a burst of speed.`);
+    return;
+  }
+
+  if (/root enemy in place/i.test(ability) && enemyTargets.length > 0) {
+    for (const targetIndex of enemyTargets) {
+      const target = state.grid[targetIndex];
+      if (!target) continue;
+      target.statModifiers = {
+        atk: Number(target.statModifiers?.atk || 0),
+        def: Number(target.statModifiers?.def || 0),
+        spd: Number(target.statModifiers?.spd || 0) - 3,
+        spc: Number(target.statModifiers?.spc || 0),
+      };
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, rooting the enemy in place.`);
+    return;
+  }
+
+  if (/blind enemy/i.test(ability) && enemyTargets.length > 0) {
+    for (const targetIndex of enemyTargets) {
+      const target = state.grid[targetIndex];
+      if (!target) continue;
+      target.statModifiers = {
+        atk: Number(target.statModifiers?.atk || 0) - 2,
+        def: Number(target.statModifiers?.def || 0),
+        spd: Number(target.statModifiers?.spd || 0) - 1,
+        spc: Number(target.statModifiers?.spc || 0),
+      };
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, blinding the enemy.`);
+    return;
+  }
+
+  if (/see opponent.?hand|opponent.?hand/i.test(ability) && /see|peek|reveal/i.test(ability)) {
+    const visibleHand = state.battlePiles[enemyOwner].hand
+      .map((entry) => quackverseCards.find((card) => card.id === entry.cardId)?.name || 'a card')
+      .join(', ');
+    finish(`${playerLabels[owner].short} used ${abilityName}, seeing ${visibleHand || 'the opponent hand'}${visibleHand ? '.' : ''}`);
+    return;
+  }
+
+  if (/random buff|reroll random effects|change any random effect/i.test(ability)) {
+    const statOptions: Array<'atk' | 'def' | 'spd' | 'spc'> = ['atk', 'def', 'spd', 'spc'];
+    const chosenStat = statOptions[Math.floor(Math.random() * statOptions.length)];
+    const amount = /reroll/i.test(ability) ? 3 : 2;
+    source.statModifiers = {
+      atk: Number(source.statModifiers?.atk || 0),
+      def: Number(source.statModifiers?.def || 0),
+      spd: Number(source.statModifiers?.spd || 0),
+      spc: Number(source.statModifiers?.spc || 0),
+      [chosenStat]: Number(source.statModifiers?.[chosenStat] || 0) + amount,
+    };
+    finish(`${playerLabels[owner].short} used ${abilityName}, gaining +${amount} ${chosenStat.toUpperCase()}.`);
+    return;
+  }
+
+  if (/stun all enemies/i.test(ability)) {
+    for (const targetIndex of enemyTargets) {
+      const target = state.grid[targetIndex];
+      if (!target) continue;
+      target.statModifiers = {
+        atk: Number(target.statModifiers?.atk || 0) - 1,
+        def: Number(target.statModifiers?.def || 0),
+        spd: Number(target.statModifiers?.spd || 0) - 2,
+        spc: Number(target.statModifiers?.spc || 0),
+      };
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, stunning the enemy line and slowing them down.`);
+    return;
+  }
+
+  if (/enemy loses next attack/i.test(ability)) {
+    for (const targetIndex of enemyTargets) {
+      const target = state.grid[targetIndex];
+      if (!target) continue;
+      target.statModifiers = {
+        atk: Number(target.statModifiers?.atk || 0) - 3,
+        def: Number(target.statModifiers?.def || 0),
+        spd: Number(target.statModifiers?.spd || 0),
+        spc: Number(target.statModifiers?.spc || 0),
+      };
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, suppressing the next enemy attack.`);
+    return;
+  }
+
+  if (/dodge next attack|block next attack|reduce damage by/i.test(ability)) {
+    for (const targetIndex of friendlyTargets) {
+      const target = state.grid[targetIndex];
+      if (!target) continue;
+      target.statModifiers = {
+        atk: Number(target.statModifiers?.atk || 0),
+        def: Number(target.statModifiers?.def || 0) + 2,
+        spd: Number(target.statModifiers?.spd || 0) + 1,
+        spc: Number(target.statModifiers?.spc || 0),
+      };
+    }
+    finish(`${playerLabels[owner].short} used ${abilityName}, reinforcing ${friendlyTargets.length} target${friendlyTargets.length === 1 ? '' : 's'}.`);
+    return;
+  }
+
+  if (/move twice/i.test(ability)) {
+    source.statModifiers = {
+      atk: Number(source.statModifiers?.atk || 0),
+      def: Number(source.statModifiers?.def || 0),
+      spd: Number(source.statModifiers?.spd || 0) + 3,
+      spc: Number(source.statModifiers?.spc || 0),
+    };
+    finish(`${playerLabels[owner].short} used ${abilityName}, gaining extra movement tempo.`);
+    return;
+  }
+
   if (/swap\s+SPD\s+with\s+enemy/i.test(ability) && adjacentEnemy?.piece) {
     const ownCurrentSpd = getEffectiveStats(source).spd;
     const enemyCurrentSpd = getEffectiveStats(adjacentEnemy.piece).spd;
@@ -407,6 +629,31 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
       spc: Number(adjacentEnemy.piece.statModifiers?.spc || 0),
     };
     finish(`${playerLabels[owner].short} used ${abilityName}, swapping SPD with ${cardFor(adjacentEnemy.piece)?.name || 'an enemy'}.`);
+    return;
+  }
+
+  if (/50%.*double damage or miss/i.test(ability)) {
+    if (Math.random() < 0.5 && enemyTargets.length > 0) {
+      const doubled = applyDamage(state, owner, enemyTargets, Math.max(1, Math.floor(getEffectiveStats(source).atk * 2)));
+      finish(`${playerLabels[owner].short} used ${abilityName}, landing the big hit${doubled ? ` and KO'ing ${doubled}` : ''}.`);
+    } else {
+      finish(`${playerLabels[owner].short} used ${abilityName}, but it missed.`);
+    }
+    return;
+  }
+
+  if (/50% dodge chance/i.test(ability)) {
+    if (Math.random() < 0.5) {
+      source.statModifiers = {
+        atk: Number(source.statModifiers?.atk || 0),
+        def: Number(source.statModifiers?.def || 0) + 3,
+        spd: Number(source.statModifiers?.spd || 0) + 1,
+        spc: Number(source.statModifiers?.spc || 0),
+      };
+      finish(`${playerLabels[owner].short} used ${abilityName}, dodging the danger.`);
+    } else {
+      finish(`${playerLabels[owner].short} used ${abilityName}, but the dodge did not trigger.`);
+    }
     return;
   }
 
@@ -460,6 +707,7 @@ function endTurn(state: QuackverseSavedState, actedOverride?: boolean) {
   state.turnActions[nextPlayer] = { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] };
   drawBattleCards(state, nextPlayer, 1);
   state.turnNumber += 1;
+  refreshTurnResources(state, nextPlayer);
 }
 
 function loadMockGame(state: QuackverseSavedState) {
@@ -485,6 +733,7 @@ function loadMockGame(state: QuackverseSavedState) {
   state.winner = null;
   state.activePlayer = 'playerOne';
   state.turnNumber = 1;
+  refreshTurnResources(state, state.activePlayer);
   state.matchLog = [
     'Mock game loaded: current decks are ready and both entry rows are open.',
     'Player 1 starts. Select a duck from the hand, then place it on the bottom entry row.',

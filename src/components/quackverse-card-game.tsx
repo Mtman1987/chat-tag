@@ -109,6 +109,7 @@ type GridPiece = {
   card: QuackverseCard;
   currentHp: number;
   maxHp: number;
+  specialCurrent: number;
   equipmentIds: number[];
   fatigue: number;
   statModifiers: {
@@ -188,6 +189,7 @@ const makePiece = (owner: PlayerId, card: QuackverseCard, instanceId = makeInsta
   card,
   currentHp: card.hp ?? 1,
   maxHp: card.hp ?? 1,
+  specialCurrent: 0,
   equipmentIds: [],
   fatigue: 0,
   statModifiers: { atk: 0, def: 0, spd: 0, spc: 0 },
@@ -215,13 +217,22 @@ function getEffectiveStats(piece: GridPiece) {
     .map((id) => quackverseCards.find((card) => card.id === id))
     .filter(Boolean) as QuackverseCard[];
   const effectText = equipment.map((card) => card.effect || '').join(' ');
+  const damageReduction = numberFromText(effectText, /(?:Reduce damage taken by|Reduce all damage by)\s*(\d+)/i);
 
   return {
-    atk: Math.max(1, (piece.card.atk || 0) + piece.statModifiers.atk + numberFromText(effectText, /\+(\d+)\s*ATK/i) - piece.fatigue),
-    def: Math.max(0, (piece.card.def || 0) + piece.statModifiers.def + numberFromText(effectText, /\+(\d+)\s*DEF/i)),
+    atk: Math.max(1, (piece.card.atk || 0) + piece.statModifiers.atk + numberFromText(effectText, /\+(\d+)\s*ATK/i) - piece.fatigue - damageReduction),
+    def: Math.max(0, (piece.card.def || 0) + piece.statModifiers.def + numberFromText(effectText, /\+(\d+)\s*DEF/i) + damageReduction),
     spd: Math.max(1, (piece.card.spd || 0) + piece.statModifiers.spd + numberFromText(effectText, /\+(\d+)\s*SPD/i) - piece.fatigue),
     spc: Math.max(0, (piece.card.spc || 0) + piece.statModifiers.spc + numberFromText(effectText, /\+(\d+)\s*SPC/i)),
   };
+}
+
+function getSpecialMax(piece: GridPiece) {
+  return Math.max(10, 10 + (piece.card.spc || 0) * 2 + Number(piece.statModifiers.spc || 0) * 2);
+}
+
+function getSpecialGain(piece: GridPiece) {
+  return Math.max(0, 4 + (piece.card.spc || 0) + Number(piece.statModifiers.spc || 0) - piece.fatigue);
 }
 
 function getMovementBudget(spd: number) {
@@ -527,6 +538,7 @@ function savedPieceToGridPiece(piece: QuackverseSavedState['grid'][number]): Gri
     card,
     currentHp: piece.currentHp,
     maxHp: piece.maxHp,
+    specialCurrent: Number(piece.specialCurrent || 0),
     equipmentIds: piece.equipmentIds || [],
     fatigue: Number(piece.fatigue ?? (piece.fatigued ? 1 : 0)),
     statModifiers: {
@@ -948,6 +960,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
               cardId: piece.card.id,
               currentHp: piece.currentHp,
               maxHp: piece.maxHp,
+              specialCurrent: piece.specialCurrent,
               equipmentIds: piece.equipmentIds,
               fatigue: piece.fatigue,
               statModifiers: piece.statModifiers,
@@ -1947,7 +1960,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
             {displayPlayers[selectedPiece.owner].short} · {selectedPiece.card.name}
           </div>
           <div className="text-xs text-slate-300">
-            {selectedPiece.currentHp}/{selectedPiece.maxHp} HP · {getMovementBudget(getEffectiveStats(selectedPiece).spd)} move points
+            {selectedPiece.currentHp}/{selectedPiece.maxHp} HP · {selectedPiece.specialCurrent}/{getSpecialMax(selectedPiece)} SPC · {getMovementBudget(getEffectiveStats(selectedPiece).spd)} move points
           </div>
           <div className="mt-1 text-[0.68rem] font-semibold uppercase text-cyan-100">Your turn</div>
         </div>
@@ -2677,11 +2690,12 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                 <AccordionContent>
                   <div className="grid gap-2 text-sm text-slate-300 md:grid-cols-2">
                     <div className="rounded-md bg-white/[0.05] p-2">Setup: each player brings 5 ducks. Equipment can be added after the base match loop works.</div>
-                    <div className="rounded-md bg-white/[0.05] p-2">Turn: move, attack, use an ability, or pass. One main action per turn.</div>
+                    <div className="rounded-md bg-white/[0.05] p-2">Turn: move, attack, use an ability, or pass. One main action per turn. Abilities spend Special and fail if the duck does not have enough charge.</div>
                     <div className="rounded-md bg-white/[0.05] p-2">Attack damage = ATK - enemy DEF, minimum 1.</div>
                     <div className="rounded-md bg-white/[0.05] p-2">Movement uses SPD: low speed gets 2 points, average 3, fast 4, boosted 5. Forward costs 1, lateral 2, backward 3.</div>
+                    <div className="rounded-md bg-white/[0.05] p-2">Special uses SPC: ducks gain charge at the start of their turn, modified by SPC and fatigue. Strong utility cards spend more charge.</div>
                     <div className="rounded-md bg-white/[0.05] p-2">Win at 6 VP. KOs give +1 VP. Formations give +1 VP for your first 3 scored formations; later formations only grant perks.</div>
-                    <div className="rounded-md bg-white/[0.05] p-2">Formation perk: involved ducks gain +1 HP and +1 Fatigue, reducing ATK and SPD by the fatigue value. Ducks recover 1 Fatigue when they start a turn outside formation.</div>
+                    <div className="rounded-md bg-white/[0.05] p-2">Formation perk: involved ducks gain +1 HP and +1 Fatigue, reducing ATK and SPD by the fatigue value. Ducks recover 1 Fatigue at the start of a turn if they are no longer in formation.</div>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -3157,7 +3171,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                 <h3 className="font-headline text-lg text-white">Turn Status</h3>
                 <p className="text-sm text-slate-400">
                   {selectedPiece
-                    ? `${displayPlayers[selectedPiece.owner].short} selected ${selectedPiece.card.name} (${selectedPiece.currentHp}/${selectedPiece.maxHp} HP, ${getMovementBudget(getEffectiveStats(selectedPiece).spd)} move points)`
+                    ? `${displayPlayers[selectedPiece.owner].short} selected ${selectedPiece.card.name} (${selectedPiece.currentHp}/${selectedPiece.maxHp} HP, ${selectedPiece.specialCurrent}/${getSpecialMax(selectedPiece)} SPC, ${getMovementBudget(getEffectiveStats(selectedPiece).spd)} move points)`
                     : 'Select a duck on the board to move or attack.'}
                 </p>
               </div>
@@ -3456,11 +3470,12 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
             </div>
             <div className="mt-3 space-y-2 text-sm text-slate-300">
               <div className="rounded-md bg-white/[0.05] p-2">Setup: each player brings 5 ducks. Equipment can be added after the base match loop works.</div>
-              <div className="rounded-md bg-white/[0.05] p-2">Turn: move, attack, use an ability, or pass. One main action per turn.</div>
+              <div className="rounded-md bg-white/[0.05] p-2">Turn: move, attack, use an ability, or pass. One main action per turn. Abilities spend Special and fail if the duck does not have enough charge.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Attack damage = ATK - enemy DEF, minimum 1.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Movement uses SPD: low speed gets 2 points, average 3, fast 4, boosted 5. Forward costs 1, lateral 2, backward 3.</div>
+              <div className="rounded-md bg-white/[0.05] p-2">Special uses SPC: ducks gain charge at the start of their turn, modified by SPC and fatigue. Strong utility cards spend more charge.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Win at 6 VP. KOs give +1 VP. Formations give +1 VP for your first 3 scored formations; later formations only grant perks.</div>
-              <div className="rounded-md bg-white/[0.05] p-2">Formation perk: involved ducks gain +1 HP and +1 Fatigue, reducing ATK and SPD by the fatigue value. Ducks recover 1 Fatigue when they start a turn outside formation.</div>
+              <div className="rounded-md bg-white/[0.05] p-2">Formation perk: involved ducks gain +1 HP and +1 Fatigue, reducing ATK and SPD by the fatigue value. Ducks recover 1 Fatigue at the start of a turn if they are no longer in formation.</div>
               <div className="rounded-md bg-white/[0.05] p-2">NPC mode can pilot Player 2 with simple attack-then-advance behavior.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Session scoring: +3 match win, +2 Legendary KO, +1 ability streak.</div>
             </div>
