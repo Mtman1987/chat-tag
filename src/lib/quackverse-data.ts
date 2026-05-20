@@ -92,7 +92,8 @@ export const quackverseCards = [
     "effect": null,
     "flavor": "“Blink and you’ll miss the quack.”",
     "artUrl": "/quackverse-art/photon-ranger-featherbolt-static.jpg",
-    "artHoverUrl": "/quackverse-art/photon-ranger-featherbolt-hover.gif"
+    "artHoverUrl": "/quackverse-art/photon-ranger-featherbolt-hover.gif",
+    "artHoverDurationMs": 10000
   },
   {
     "id": 5,

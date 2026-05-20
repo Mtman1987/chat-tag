@@ -37,7 +37,7 @@ export default function QuackversePreviewPage() {
 
   const staticUrl = card.artUrl || '';
   const hoverUrl = card.artHoverUrl || staticUrl;
-  const hoverDurationMs = card.artHoverDurationMs ?? 1200;
+  const hoverDurationMs = card.artHoverDurationMs ?? 10000;
   const src = artVisible || dragging ? `${hoverUrl}${hoverUrl.includes('?') ? '&' : '?'}v=${animationNonce}` : staticUrl;
   const board = makeBoard(selectedIndex);
 
