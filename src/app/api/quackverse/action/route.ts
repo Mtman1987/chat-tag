@@ -106,6 +106,12 @@ function getAbilityCost(ability: string) {
   return 5;
 }
 
+function getGearHealPerTurn(piece: QuackverseSavedPiece) {
+  return (piece.equipmentIds || [])
+    .map((id) => quackverseCards.find((item) => item.id === id)?.effect || '')
+    .reduce((sum, effectText) => sum + numberFromText(effectText, /Heal\s+(\d+)\s+HP\s+per\s+turn/i), 0);
+}
+
 function removeNegativeModifiers(piece: QuackverseSavedPiece) {
   piece.statModifiers = {
     atk: Math.max(0, Number(piece.statModifiers?.atk || 0)),
@@ -290,9 +296,11 @@ function refreshTurnResources(state: QuackverseSavedState, owner: PlayerId) {
     const statBonus = Number(slot.statModifiers?.spc || 0);
     const gain = Math.max(0, 4 + Number(card?.spc || 0) + statBonus - nextFatigue);
     const specialCurrent = Math.min(getSpecialMax(slot), Number(slot.specialCurrent || 0) + gain);
+    const healPerTurn = getGearHealPerTurn(slot);
     return {
       ...slot,
       fatigue: nextFatigue,
+      currentHp: Math.min(slot.maxHp, Number(slot.currentHp || 0) + healPerTurn),
       specialCurrent,
     };
   });

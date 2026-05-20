@@ -235,6 +235,12 @@ function getSpecialGain(piece: GridPiece) {
   return Math.max(0, 4 + (piece.card.spc || 0) + Number(piece.statModifiers.spc || 0) - piece.fatigue);
 }
 
+function getGearHealPerTurn(piece: GridPiece) {
+  return piece.equipmentIds
+    .map((id) => quackverseCards.find((card) => card.id === id)?.effect || '')
+    .reduce((sum, effectText) => sum + numberFromText(effectText, /Heal\s+(\d+)\s+HP\s+per\s+turn/i), 0);
+}
+
 function getMovementBudget(spd: number) {
   if (spd >= 11) return 5;
   if (spd >= 8) return 4;
@@ -358,12 +364,14 @@ function CardFace({
   compact = false,
   selected = false,
   record,
+  attachedGear = [],
   onClick,
 }: {
   card: QuackverseCard;
   compact?: boolean;
   selected?: boolean;
   record?: { wins: number; losses: number };
+  attachedGear?: QuackverseCard[];
   onClick?: () => void;
 }) {
   const artManifest = useContext(QuackverseArtContext);
@@ -469,6 +477,18 @@ function CardFace({
             <div>Current deck record: {Number(currentRecord?.wins || 0)} W / {Number(currentRecord?.losses || 0)} L.</div>
             <div>All cards in the active deck inherit this result line.</div>
           </div>
+          {attachedGear.length > 0 && (
+            <div className="rounded-md border border-white/10 bg-white/[0.04] p-2 sm:col-span-2">
+              <div className="mb-1 font-semibold text-white">Attached gear</div>
+              <div className="flex flex-wrap gap-1.5">
+                {attachedGear.map((gear) => (
+                  <span key={gear.id} className="rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-[0.62rem] text-amber-100">
+                    {gear.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1989,6 +2009,9 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           </Button>
         </div>
       </div>
+      <div className="mb-2 rounded-md border border-white/10 bg-white/[0.04] p-2 text-[0.68rem] text-slate-300">
+        Gear heals {getGearHealPerTurn(selectedPiece)} HP per turn.
+      </div>
       <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -2044,8 +2067,27 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
             Undo
           </Button>
       </div>
+      {selectedPiece.equipmentIds.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {selectedPiece.equipmentIds.map((gearId) => {
+            const gear = quackverseCards.find((card) => card.id === gearId);
+            if (!gear) return null;
+            return (
+              <span key={gear.id} className="rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-[0.62rem] text-amber-100">
+                {gear.name}
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   ) : null;
+
+  const inspectedAttachedGear = selectedPiece && inspectedCard && selectedPiece.card.id === inspectedCard.id
+    ? (selectedPiece.equipmentIds
+        .map((gearId) => quackverseCards.find((gear) => gear.id === gearId))
+        .filter(Boolean) as QuackverseCard[])
+    : [];
 
   const cardInspector = inspectedCard ? (
     <div className="fixed right-4 top-4 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-cyan-300/40 bg-slate-950/95 p-3 shadow-2xl shadow-black/60">
@@ -2061,7 +2103,11 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           x
         </Button>
       </div>
-      <CardFace card={inspectedCard} selected />
+      <CardFace
+        card={inspectedCard}
+        selected
+        attachedGear={inspectedAttachedGear}
+      />
     </div>
   ) : null;
 
@@ -2601,7 +2647,9 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   </Button>
                 </div>
                 {packError && <div className="mt-2 rounded-md border border-amber-300/30 bg-amber-300/10 p-2 text-xs text-amber-100">{packError}</div>}
-                <div className="mt-3 text-sm text-slate-300">Owned: {collection.length} cards · Unique: {collectionSummary.length}/100 · Deck: {deck.length}/20</div>
+                <div className="mt-3 text-sm text-slate-300">
+                  Owned: {collection.length} cards · Unique: {collectionSummary.length}/{quackverseCards.length} · Deck: {deck.length}/20
+                </div>
                 <div className="mt-2 rounded-md bg-white/[0.05] p-2 text-xs text-slate-400">
                   Pack slots: utility common/uncommon, utility up to epic, duck common/uncommon, duck uncommon/rare, wild.
                 </div>
@@ -3381,7 +3429,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                 </div>
                 {packError && <div className="mt-2 rounded-md border border-amber-300/30 bg-amber-300/10 p-2 text-xs text-amber-100">{packError}</div>}
             <div className="mt-3 text-sm text-slate-300">
-              Owned: {collection.length} cards · Unique: {collectionSummary.length}/100 · Deck: {deck.length}/20
+              Owned: {collection.length} cards · Unique: {collectionSummary.length}/{quackverseCards.length} · Deck: {deck.length}/20
             </div>
             <div className="mt-2 rounded-md bg-white/[0.05] p-2 text-xs text-slate-400">
               Pack slots: utility common/uncommon, utility up to epic, duck common/uncommon, duck uncommon/rare, wild.

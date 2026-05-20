@@ -1774,6 +1774,21 @@ export const quackverseCards = [
     "abilities": [],
     "effect": "Prevents random effects.",
     "flavor": "“Order in chaos.”"
+  },
+  {
+    "id": 101,
+    "name": "Quill of Healing",
+    "type": "Equipment",
+    "role": null,
+    "rarity": null,
+    "atk": null,
+    "def": null,
+    "spd": null,
+    "spc": null,
+    "hp": null,
+    "abilities": [],
+    "effect": "Heal 2 HP per turn.",
+    "flavor": "“Each line mends what the last battle broke.”"
   }
 ] satisfies QuackverseCard[];
 
