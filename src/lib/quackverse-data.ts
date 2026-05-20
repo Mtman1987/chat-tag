@@ -1,23 +1,13 @@
-export type QuackverseCard = {
-  id: number;
-  name: string;
-  type: 'Duck' | 'Equipment';
-  role: string | null;
-  rarity: string | null;
-  atk: number | null;
-  def: number | null;
-  spd: number | null;
-  spc: number | null;
-  hp: number | null;
-  abilities: string[];
-  effect: string | null;
-  flavor: string;
-  artUrl?: string;
-  artHoverUrl?: string;
-  artHoverDurationMs?: number;
-};
+import {
+  normalizeQuackverseCard,
+  validateQuackverseCards,
+  type QuackverseCard,
+  type QuackverseLegacyCard,
+} from '@/lib/quackverse-schema';
 
-export const quackverseCards = [
+export type { QuackverseCard } from '@/lib/quackverse-schema';
+
+const legacyQuackverseCards = [
   {
     "id": 1,
     "name": "Captain Ranger Starlash",
@@ -1790,7 +1780,10 @@ export const quackverseCards = [
     "effect": "Heal 2 HP per turn.",
     "flavor": "“Each line mends what the last battle broke.”"
   }
-] satisfies QuackverseCard[];
+] satisfies QuackverseLegacyCard[];
+
+export const quackverseCards = legacyQuackverseCards.map(normalizeQuackverseCard);
+validateQuackverseCards(quackverseCards);
 
 export const quackverseDucks = quackverseCards.filter((card) => card.type === 'Duck');
 export const quackverseEquipment = quackverseCards.filter((card) => card.type === 'Equipment');

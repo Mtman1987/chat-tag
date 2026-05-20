@@ -1477,6 +1477,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     setActionMode('select');
     setTurnNumber((current) => current + 1);
   };
+  const passTurn = () => endTurn(`${displayPlayers[activePlayer].short} passed.`);
 
   const removeFromSquad = (owner: PlayerId, cardId: number) => {
     requestSharedSave();
@@ -2121,7 +2122,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
             <Shield className="mr-1.5 h-3.5 w-3.5" />
             Attach Gear
           </Button>
-          <Button type="button" size="sm" variant="secondary" disabled={isActionPending || !!winner} onClick={() => endTurn(`${displayPlayers[activePlayer].short} passed.`)}>
+          <Button type="button" size="sm" variant="secondary" disabled={isActionPending || !!winner} onClick={passTurn}>
             <Hand className="mr-1.5 h-3.5 w-3.5" />
             Pass
           </Button>
@@ -2388,9 +2389,14 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                           : 'Select a duck on the board to move or attack.'}
                       </p>
                     </div>
-                    <div className={cn('rounded-md border px-3 py-2 text-sm font-semibold', displayPlayers[activePlayer].accent)}>
-                      <Hand className="mr-2 inline h-4 w-4" />
-                      {displayPlayers[activePlayer].label}'s turn
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className={cn('rounded-md border px-3 py-2 text-sm font-semibold', displayPlayers[activePlayer].accent)}>
+                        <Hand className="mr-2 inline h-4 w-4" />
+                        {displayPlayers[activePlayer].label}'s turn
+                      </div>
+                      <Button type="button" size="sm" variant="secondary" disabled={isActionPending || !!winner} onClick={passTurn}>
+                        Pass
+                      </Button>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
@@ -2413,7 +2419,10 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {battleHandCards[activePlayer].length === 0 ? (
                       <div className="rounded-md border border-dashed border-white/10 bg-white/[0.03] p-3 text-sm text-slate-500">
-                        No cards in hand.
+                        <div>No cards in hand.</div>
+                        <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={isActionPending || !!winner} onClick={passTurn}>
+                          Pass Turn
+                        </Button>
                       </div>
                     ) : (
                       battleHandCards[activePlayer].map(({ instance, card }) => (
@@ -2885,7 +2894,12 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {activeHandCards.length === 0 ? (
-              <div className="rounded-md border border-dashed border-white/10 bg-white/[0.03] p-3 text-xs text-slate-500">No cards in hand.</div>
+              <div className="rounded-md border border-dashed border-white/10 bg-white/[0.03] p-3 text-xs text-slate-500">
+                <div>No cards in hand.</div>
+                <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={isActionPending || !!winner} onClick={passTurn}>
+                  Pass Turn
+                </Button>
+              </div>
             ) : (
               activeHandCards.map(({ instance, card }) => (
                 <button
@@ -3291,6 +3305,9 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <Hand className="mr-2 inline h-4 w-4" />
                   {displayPlayers[activePlayer].label}'s turn
                 </div>
+                <Button type="button" size="sm" variant="secondary" disabled={isActionPending || !!winner} onClick={passTurn}>
+                  Pass
+                </Button>
               </div>
             </div>
             <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">

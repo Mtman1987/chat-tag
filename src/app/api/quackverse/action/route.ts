@@ -32,6 +32,10 @@ const quickStartSquads: Record<PlayerId, number[]> = {
   playerOne: [1, 4, 24, 32, 52],
   playerTwo: [9, 19, 37, 43, 73],
 };
+const starterBattleDecks: Record<PlayerId, number[]> = {
+  playerOne: [1, 4, 24, 32, 52, 81, 84, 85, 86, 88],
+  playerTwo: [9, 19, 37, 43, 73, 83, 87, 90, 95, 96],
+};
 
 const opponentOf = (playerId: PlayerId): PlayerId => (playerId === 'playerOne' ? 'playerTwo' : 'playerOne');
 const playerIds: PlayerId[] = ['playerOne', 'playerTwo'];
@@ -86,6 +90,10 @@ const deckForPlayer = (state: QuackverseSavedState, playerId: PlayerId) => {
   const userId = state.claimedPlayers[playerId];
   const collectionDeck = userId ? state.collections?.[userId]?.deck : [];
   return Array.isArray(collectionDeck) ? collectionDeck.filter((cardId) => quackverseCards.some((card) => card.id === cardId)) : [];
+};
+const battleDeckForPlayer = (state: QuackverseSavedState, playerId: PlayerId) => {
+  const deck = deckForPlayer(state, playerId);
+  return deck.length > 0 ? deck : starterBattleDecks[playerId];
 };
 
 function getCurrentSpecial(piece: QuackverseSavedPiece) {
@@ -749,6 +757,7 @@ function discardBattleCard(state: QuackverseSavedState, owner: PlayerId) {
   const pile = state.battlePiles[owner];
   const card = pile.hand.shift();
   if (card) pile.discardPile.push(card);
+  return Boolean(card);
 }
 
 function endTurn(state: QuackverseSavedState, actedOverride?: boolean) {
@@ -761,8 +770,13 @@ function endTurn(state: QuackverseSavedState, actedOverride?: boolean) {
       actions.usedAbility.length > 0 ||
       actions.equipped.length > 0);
   if (!acted) {
-    discardBattleCard(state, currentPlayer);
-    addLog(state, `${currentPlayer === 'playerOne' ? 'P1' : 'P2'} ended the turn without acting and discarded a card.`);
+    const discarded = discardBattleCard(state, currentPlayer);
+    addLog(
+      state,
+      discarded
+        ? `${currentPlayer === 'playerOne' ? 'P1' : 'P2'} ended the turn without acting and discarded a card.`
+        : `${currentPlayer === 'playerOne' ? 'P1' : 'P2'} ended the turn without acting and had no card to discard.`,
+    );
   }
   const nextPlayer = opponentOf(currentPlayer);
   state.activePlayer = nextPlayer;
@@ -774,8 +788,8 @@ function endTurn(state: QuackverseSavedState, actedOverride?: boolean) {
 }
 
 function loadMockGame(state: QuackverseSavedState) {
-  const p1Deck = deckForPlayer(state, 'playerOne');
-  const p2Deck = deckForPlayer(state, 'playerTwo');
+  const p1Deck = starterBattleDecks.playerOne;
+  const p2Deck = starterBattleDecks.playerTwo;
   state.gridSize = gridSize;
   state.squadSize = quackverseSquadSize;
   state.squads = { playerOne: [], playerTwo: [] };
@@ -805,15 +819,18 @@ function loadMockGame(state: QuackverseSavedState) {
 }
 
 function resetMatchState(state: QuackverseSavedState, clearSeats = true) {
+  const previousClaimedPlayers = { ...state.claimedPlayers };
+  const previousCollections = { ...(state.collections || {}) };
   const nextState = normalizeQuackverseState({});
   if (!clearSeats) {
-    nextState.claimedPlayers = { ...state.claimedPlayers };
+    nextState.claimedPlayers = previousClaimedPlayers;
   }
+  nextState.collections = previousCollections;
   Object.assign(state, nextState);
   state.npcPlayers = { playerOne: false, playerTwo: false };
   state.battlePiles = {
-    playerOne: buildBattlePile('playerOne', deckForPlayer(state, 'playerOne')),
-    playerTwo: buildBattlePile('playerTwo', deckForPlayer(state, 'playerTwo')),
+    playerOne: buildBattlePile('playerOne', battleDeckForPlayer(state, 'playerOne')),
+    playerTwo: buildBattlePile('playerTwo', battleDeckForPlayer(state, 'playerTwo')),
   };
   state.grid = Array.from({ length: gridSize * gridSize }, () => null) as Array<QuackverseSavedPiece | null>;
   state.matchResultRecordedForWinner = null;
