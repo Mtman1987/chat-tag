@@ -370,6 +370,45 @@ export default function QuackverseGuidePage() {
           </Card>
         </section>
 
+        <section className="grid gap-4 lg:grid-cols-3">
+          <Card className="border-white/10 bg-black/25">
+            <CardHeader>
+              <CardTitle className="text-lg">Deck record</CardTitle>
+              <CardDescription className="text-slate-300">One active deck per player for now. Results attach to the saved deck flag.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-slate-300">
+              <div>Deck wins and losses are stored on the player collection.</div>
+              <div>The current deck is the default match deck when it exists.</div>
+              <div>Cards in that deck inherit the deck result line for display.</div>
+            </CardContent>
+          </Card>
+          <Card className="border-white/10 bg-black/25">
+            <CardHeader>
+              <CardTitle className="text-lg">Stats</CardTitle>
+              <CardDescription className="text-slate-300">Board stats need to read cleanly, so each stat has one job.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-slate-300">
+              <div><span className="font-semibold text-white">ATK</span>: damage output.</div>
+              <div><span className="font-semibold text-white">DEF</span>: damage reduction and durability.</div>
+              <div><span className="font-semibold text-white">SPD</span>: movement, turn tempo, and positioning.</div>
+              <div><span className="font-semibold text-white">SPC</span>: abilities, gear impact, and special potency.</div>
+              <div><span className="font-semibold text-white">Fatigue</span>: reduces SPD first.</div>
+            </CardContent>
+          </Card>
+          <Card className="border-white/10 bg-black/25">
+            <CardHeader>
+              <CardTitle className="text-lg">Board flow</CardTitle>
+              <CardDescription className="text-slate-300">Match setup now starts empty unless a real deck is chosen.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-slate-300">
+              <div>Player 1 enters from the bottom row.</div>
+              <div>Player 2 enters from the top row.</div>
+              <div>Highlighted squares should be clickable as move targets.</div>
+              <div>The squad strip is gone from the live board.</div>
+            </CardContent>
+          </Card>
+        </section>
+
         <section className="grid gap-4 lg:grid-cols-2">
           {trunkMeta.map((trunk) => (
             <Card key={trunk.label} className="border-white/10 bg-black/25">
@@ -589,6 +628,12 @@ export default function QuackverseGuidePage() {
           </p>
           <p className="mt-2 text-slate-300">
             Bridge cards stay flexible for now. They are the place to move cards that do not yet have a clean family home.
+          </p>
+          <p className="mt-2 text-slate-300">
+            The art manager is admin-only. In the current allowlist that means <span className="font-mono text-amber-100">mtman1987</span> and the other configured admin usernames.
+          </p>
+          <p className="mt-2 text-slate-300">
+            Uploads persist immediately to the volume, so there is no separate save button in the editor.
           </p>
         </section>
       </div>
