@@ -48,6 +48,7 @@ export type QuackverseSavedState = {
   koCount: Record<QuackversePlayerId, number>;
   formationVp: Record<QuackversePlayerId, number>;
   scoredFormationKeys: string[];
+  matchResultRecordedForWinner: QuackversePlayerId | null;
   turnActions: Record<QuackversePlayerId, QuackverseTurnActions>;
   npcPlayers: Record<QuackversePlayerId, boolean>;
   winner: QuackversePlayerId | null;
@@ -59,6 +60,8 @@ export type QuackverseSavedState = {
 export type QuackverseCollectionState = {
   cards: number[];
   deck: number[];
+  deckWins: number;
+  deckLosses: number;
   openedAtDay: string;
   openedToday: number;
   lastPack: number[];
@@ -84,6 +87,7 @@ export const defaultQuackverseState = (): QuackverseSavedState => ({
   koCount: { playerOne: 0, playerTwo: 0 },
   formationVp: { playerOne: 0, playerTwo: 0 },
   scoredFormationKeys: [],
+  matchResultRecordedForWinner: null,
   turnActions: {
     playerOne: { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] },
     playerTwo: { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] },
@@ -98,6 +102,8 @@ export const defaultQuackverseState = (): QuackverseSavedState => ({
 export const defaultQuackverseCollection = (): QuackverseCollectionState => ({
   cards: [],
   deck: [],
+  deckWins: 0,
+  deckLosses: 0,
   openedAtDay: '',
   openedToday: 0,
   lastPack: [],
@@ -114,6 +120,8 @@ export function normalizeQuackverseCollection(value: Partial<QuackverseCollectio
   return {
     cards: Array.isArray(value?.cards) ? value.cards.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.cards,
     deck: Array.isArray(value?.deck) ? value.deck.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.deck,
+    deckWins: Number(value?.deckWins || 0),
+    deckLosses: Number(value?.deckLosses || 0),
     openedAtDay,
     openedToday: openedAtDay === today ? Number(value?.openedToday || 0) : 0,
     lastPack: Array.isArray(value?.lastPack) ? value.lastPack.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.lastPack,
@@ -166,6 +174,10 @@ export function normalizeQuackverseState(value: Partial<QuackverseSavedState> | 
       playerTwo: Number(value?.formationVp?.playerTwo || 0),
     },
     scoredFormationKeys: Array.isArray(value?.scoredFormationKeys) ? value.scoredFormationKeys : [],
+    matchResultRecordedForWinner:
+      value?.matchResultRecordedForWinner === 'playerOne' || value?.matchResultRecordedForWinner === 'playerTwo'
+        ? value.matchResultRecordedForWinner
+        : null,
     turnActions: {
       playerOne: {
         deployedOrMoved: Boolean(value?.turnActions?.playerOne?.deployedOrMoved),

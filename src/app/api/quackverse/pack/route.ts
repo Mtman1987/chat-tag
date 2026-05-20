@@ -18,6 +18,8 @@ function publicCollection(collection: ReturnType<typeof getCollectionForUser>) {
   return {
     cards: collection.cards,
     deck: collection.deck,
+    deckWins: Number(collection.deckWins || 0),
+    deckLosses: Number(collection.deckLosses || 0),
     lastPack: collection.lastPack,
     openedToday,
     packsRemaining: Math.max(0, quackverseDailyPackLimit - openedToday),

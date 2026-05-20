@@ -336,6 +336,7 @@ function comparableSavedState(state: QuackverseSavedState) {
 }
 
 const QuackverseArtContext = createContext<QuackverseArtManifest>({});
+const QuackverseDeckRecordContext = createContext<{ wins: number; losses: number }>({ wins: 0, losses: 0 });
 
 function sanitizeRoomId(value: string) {
   return sanitizeQuackverseRoomToken(value, 'default');
@@ -345,14 +346,17 @@ function CardFace({
   card,
   compact = false,
   selected = false,
+  record,
   onClick,
 }: {
   card: QuackverseCard;
   compact?: boolean;
   selected?: boolean;
+  record?: { wins: number; losses: number };
   onClick?: () => void;
 }) {
   const artManifest = useContext(QuackverseArtContext);
+  const deckRecord = useContext(QuackverseDeckRecordContext);
   const [isHovered, setIsHovered] = useState(false);
   const rarityClass = rarityClasses[card.rarity || ''] || 'border-slate-500 text-slate-200';
   const familyGroup = getQuackverseFamilyGroup(card.id);
@@ -361,6 +365,7 @@ function CardFace({
   const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
   const cardArtUrl = isHovered ? hoverUrl : staticUrl;
   const description = card.flavor || card.role || card.effect || 'No description available.';
+  const currentRecord = record || deckRecord;
   return (
     <button
       type="button"
@@ -450,8 +455,8 @@ function CardFace({
           </div>
           <div className="rounded-md border border-white/10 bg-white/[0.04] p-2">
             <div className="mb-1 font-semibold text-white">Record</div>
-            <div>W / L tracking is not stored yet.</div>
-            <div>That should come from per-card match history later.</div>
+            <div>Current deck record: {Number(currentRecord?.wins || 0)} W / {Number(currentRecord?.losses || 0)} L.</div>
+            <div>All cards in the active deck inherit this result line.</div>
           </div>
         </div>
       )}
@@ -690,6 +695,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const [collection, setCollection] = useState<number[]>([]);
   const [lastPack, setLastPack] = useState<QuackverseCard[]>([]);
   const [deck, setDeck] = useState<number[]>([]);
+  const [deckWins, setDeckWins] = useState(0);
+  const [deckLosses, setDeckLosses] = useState(0);
   const [packAuditEvents, setPackAuditEvents] = useState<PackAuditEvent[]>([]);
   const [packAuditSummary, setPackAuditSummary] = useState<PackAuditSummary | null>(null);
   const [canViewPackAudit, setCanViewPackAudit] = useState(false);
@@ -706,6 +713,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const [roomScope, setRoomScope] = useState('');
   const [roomId, setRoomId] = useState('default');
   const [roomInput, setRoomInput] = useState('default');
+  const deckRecord = useMemo(() => ({ wins: deckWins, losses: deckLosses }), [deckLosses, deckWins]);
 
   const refreshArtManifest = useCallback(async () => {
     const response = await fetch('/api/quackverse/art', { cache: 'no-store' });
@@ -714,6 +722,26 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     }
     const data = (await response.json()) as { cards?: QuackverseArtManifest };
     setArtManifest(data.cards || {});
+  }, []);
+
+  const refreshCollection = useCallback(async () => {
+    const response = await fetch('/api/quackverse/pack', {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) return;
+    setPendingPacks(Number(data.packsRemaining || 0));
+    setDailyPackLimit(Number(data.dailyLimit || 3));
+    setCollection(Array.isArray(data.cards) ? data.cards : []);
+    setDeck(Array.isArray(data.deck) ? data.deck : []);
+    setDeckWins(Number(data.deckWins || 0));
+    setDeckLosses(Number(data.deckLosses || 0));
+    setLastPack(
+      Array.isArray(data.lastPack)
+        ? data.lastPack.map((cardId: number) => quackverseCards.find((card) => card.id === cardId)).filter(Boolean)
+        : [],
+    );
   }, []);
 
   useEffect(() => {
@@ -933,6 +961,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       turnActions,
       npcPlayers,
       winner,
+      matchResultRecordedForWinner: winner,
       matchLog,
       collections: {},
       updatedAt: new Date().toISOString(),
@@ -1054,6 +1083,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
         setActionError(String(data?.error || `Action failed (${response.status})`));
       } else {
         setActionError('');
+        void refreshCollection();
       }
     } catch (error) {
       setActionError('Action failed. Try again.');
@@ -1066,36 +1096,14 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   };
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadCollection() {
-      try {
-        const response = await fetch('/api/quackverse/pack', {
-          cache: 'no-store',
-          headers: getAuthHeaders(),
-        });
-        const data = await response.json().catch(() => null);
-        if (!response.ok || cancelled || !data) return;
-        setPendingPacks(Number(data.packsRemaining || 0));
-        setDailyPackLimit(Number(data.dailyLimit || 3));
-        setCollection(Array.isArray(data.cards) ? data.cards : []);
-        setDeck(Array.isArray(data.deck) ? data.deck : []);
-        setLastPack(
-          Array.isArray(data.lastPack)
-            ? data.lastPack.map((cardId: number) => quackverseCards.find((card) => card.id === cardId)).filter(Boolean)
-            : [],
-        );
-      } catch (error) {
+    refreshCollection()
+      .catch((error) => {
         console.warn('[Quackverse] Failed to load collection', error);
-      } finally {
-        if (!cancelled) hasLoadedCollectionLab.current = true;
-      }
-    }
-
-    loadCollection();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      })
+      .finally(() => {
+        hasLoadedCollectionLab.current = true;
+      });
+  }, [refreshCollection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2711,7 +2719,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
   if (isCommandLayout) {
     return (
-      <QuackverseArtContext.Provider value={artManifest}>
+      <QuackverseDeckRecordContext.Provider value={deckRecord}>
+        <QuackverseArtContext.Provider value={artManifest}>
       <div className="space-y-3 text-sm">
         {cardInspector}
         <div className="rounded-lg border border-white/10 bg-slate-950/80 p-3">
@@ -2956,11 +2965,13 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           </TabsContent>
         </Tabs>
       </div>
-      </QuackverseArtContext.Provider>
+        </QuackverseArtContext.Provider>
+      </QuackverseDeckRecordContext.Provider>
     );
   }
 
   return (
+    <QuackverseDeckRecordContext.Provider value={deckRecord}>
     <QuackverseArtContext.Provider value={artManifest}>
     <div className={cn('space-y-5', isCommandLayout && 'space-y-3')}>
       {cardInspector}
@@ -3496,5 +3507,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       </div>
     </div>
     </QuackverseArtContext.Provider>
+    </QuackverseDeckRecordContext.Provider>
   );
 }

@@ -28,10 +28,6 @@ type PlayerId = QuackversePlayerId;
 const gridSize = quackverseGridSize;
 const victoryTarget = 6;
 const formationVpLimit = 3;
-const starterBattleDecks: Record<PlayerId, number[]> = {
-  playerOne: [1, 4, 24, 32, 52, 81, 84, 85, 86, 88],
-  playerTwo: [9, 19, 37, 43, 73, 83, 87, 90, 95, 96],
-};
 const quickStartSquads: Record<PlayerId, number[]> = {
   playerOne: [1, 4, 24, 32, 52],
   playerTwo: [9, 19, 37, 43, 73],
@@ -82,9 +78,31 @@ const isRole = (card: QuackverseCard, token: string) => `${card.name} ${card.rol
 const deckForPlayer = (state: QuackverseSavedState, playerId: PlayerId) => {
   const userId = state.claimedPlayers[playerId];
   const collectionDeck = userId ? state.collections?.[userId]?.deck : [];
-  const preferredDeck = Array.isArray(collectionDeck) && collectionDeck.length > 0 ? collectionDeck : starterBattleDecks[playerId];
-  return preferredDeck.filter((cardId) => quackverseCards.some((card) => card.id === cardId));
+  return Array.isArray(collectionDeck) ? collectionDeck.filter((cardId) => quackverseCards.some((card) => card.id === cardId)) : [];
 };
+
+function recordDeckResult(state: QuackverseSavedState, winner: PlayerId) {
+  if (state.matchResultRecordedForWinner === winner) return false;
+
+  const loser = opponentOf(winner);
+  let recorded = false;
+
+  for (const playerId of [winner, loser] as PlayerId[]) {
+    const userId = state.claimedPlayers[playerId];
+    if (!userId) continue;
+    const collection = state.collections?.[userId];
+    if (!collection || collection.deck.length === 0) continue;
+    if (playerId === winner) {
+      collection.deckWins = Number(collection.deckWins || 0) + 1;
+    } else {
+      collection.deckLosses = Number(collection.deckLosses || 0) + 1;
+    }
+    recorded = true;
+  }
+
+  if (recorded) state.matchResultRecordedForWinner = winner;
+  return recorded;
+}
 
 type DetectedFormation = {
   owner: PlayerId;
@@ -459,6 +477,7 @@ function loadMockGame(state: QuackverseSavedState) {
   state.koCount = { playerOne: 0, playerTwo: 0 };
   state.formationVp = { playerOne: 0, playerTwo: 0 };
   state.scoredFormationKeys = [];
+  state.matchResultRecordedForWinner = null;
   state.turnActions = {
     playerOne: { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] },
     playerTwo: { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] },
@@ -485,6 +504,7 @@ function resetMatchState(state: QuackverseSavedState, clearSeats = true) {
     playerTwo: buildBattlePile('playerTwo', deckForPlayer(state, 'playerTwo')),
   };
   state.grid = Array.from({ length: gridSize * gridSize }, () => null) as Array<QuackverseSavedPiece | null>;
+  state.matchResultRecordedForWinner = null;
   state.matchLog = [
     clearSeats ? 'Match ended. Seats are open for the next players.' : 'Board cleared. Current decks are ready. Place ducks from the entry rows.',
   ];
@@ -497,8 +517,9 @@ export async function POST(req: NextRequest) {
   const botRequest = isBotRequest(req);
   const requestUserId = botRequest ? normalizeQuackverseUserId(body.userId) : quackverseUserIdFromSession(sessionUser);
   const adminRequest = botRequest || isAdminUsername(sessionUser?.twitchUsername);
+  const allowLocalSetup = process.env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1', '::1'].includes(req.nextUrl.hostname);
 
-  if (!requestUserId && !adminRequest) {
+  if (!requestUserId && !adminRequest && !allowLocalSetup) {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   }
 
@@ -508,6 +529,9 @@ export async function POST(req: NextRequest) {
   const result = await updateAppState((appState) => {
     const raw = appState.quackverseRooms?.[roomKey] || (!scopedRoom ? appState.quackverse : {});
     const state = normalizeQuackverseState(raw as Partial<QuackverseSavedState>);
+    if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
+      recordDeckResult(state, state.winner);
+    }
 
     const existingSeat = getClaimedSeat(state, requestUserId);
     const explicitSeatAction = ['claimSeat', 'leaveSeat', 'clearSeat', 'endMatch', 'reset', 'loadMockGame', 'toggleNpc', 'setClaimedPlayer'].includes(actionType);
@@ -556,17 +580,26 @@ export async function POST(req: NextRequest) {
     }
 
     if (actionType === 'endMatch') {
-      if (!adminRequest && !activeSeat) return reject('Only players in this match can end it.');
+      if (!adminRequest && !activeSeat && !allowLocalSetup) return reject('Only players in this match can end it.');
+      if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
+        recordDeckResult(state, state.winner);
+      }
       resetMatchState(state, true);
       activeSeat = null;
     }
 
     if (body.type === 'loadMockGame') {
+      if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
+        recordDeckResult(state, state.winner);
+      }
       loadMockGame(state);
     }
 
     if (body.type === 'reset') {
-      if (!adminRequest && !activeSeat) return reject('Only players in this match can reset it.');
+      if (!adminRequest && !activeSeat && !allowLocalSetup) return reject('Only players in this match can reset it.');
+      if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
+        recordDeckResult(state, state.winner);
+      }
       resetMatchState(state, true);
       activeSeat = null;
     }
@@ -677,6 +710,10 @@ export async function POST(req: NextRequest) {
       if (!controlsActiveSeat) return reject('It is not your turn.');
       addLog(state, `${state.activePlayer === 'playerOne' ? 'P1' : 'P2'} passed.`);
       endTurn(state);
+    }
+
+    if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
+      recordDeckResult(state, state.winner);
     }
 
     state.updatedAt = new Date().toISOString();
