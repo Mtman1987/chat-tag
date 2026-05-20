@@ -34,7 +34,8 @@ export const quackverseCards = [
       "Command Aura: All allied Rangers gain +1 ATK for 2 turns."
     ],
     "effect": null,
-    "flavor": "“To the stars — and don’t spare the splash.”"
+    "flavor": "“To the stars — and don’t spare the splash.”",
+    "artUrl": "/quackverse-art/imported/card-1-light-ranger-armor-4.jpg"
   },
   {
     "id": 2,
@@ -52,7 +53,8 @@ export const quackverseCards = [
       "Cosmic Insight: Peek at opponent’s next card."
     ],
     "effect": null,
-    "flavor": "“Every quack echoes across the galaxy.”"
+    "flavor": "“Every quack echoes across the galaxy.”",
+    "artUrl": "/quackverse-art/imported/card-2-cosmic-armor-1.jpg"
   },
   {
     "id": 3,
@@ -180,7 +182,8 @@ export const quackverseCards = [
       "Shadow Rend: -3 DEF for 2 turns."
     ],
     "effect": null,
-    "flavor": "“Light is overrated.”"
+    "flavor": "“Light is overrated.”",
+    "artUrl": "/quackverse-art/imported/card-9-void-mage-dark-armor-4.jpg"
   },
   {
     "id": 10,
@@ -378,7 +381,8 @@ export const quackverseCards = [
       "Cosmic Judgment: Deal 5 unavoidable damage."
     ],
     "effect": null,
-    "flavor": "“Guardians rise when the cosmos calls.”"
+    "flavor": "“Guardians rise when the cosmos calls.”",
+    "artUrl": "/quackverse-art/imported/card-20-light-ranger-armor-1.jpg"
   },
   {
     "id": 21,
@@ -468,7 +472,8 @@ export const quackverseCards = [
       "Eclipse Veil: -1 SPC to all enemies."
     ],
     "effect": null,
-    "flavor": "“The void whispers.”"
+    "flavor": "“The void whispers.”",
+    "artUrl": "/quackverse-art/imported/card-25-void-mage-dark-armor-3.jpg"
   },
   {
     "id": 26,
@@ -576,7 +581,8 @@ export const quackverseCards = [
       "Starfall: Deal 2 damage to all enemies."
     ],
     "effect": null,
-    "flavor": "“The universe answers my call.”"
+    "flavor": "“The universe answers my call.”",
+    "artUrl": "/quackverse-art/imported/card-31-cosmic-armor.jpg"
   },
   {
     "id": 32,
@@ -594,7 +600,8 @@ export const quackverseCards = [
       "Static Field: -1 SPD to enemies."
     ],
     "effect": null,
-    "flavor": "“Shock and quack.”"
+    "flavor": "“Shock and quack.”",
+    "artUrl": "/quackverse-art/imported/card-32-storm-lightning-armor-2.jpg"
   },
   {
     "id": 33,
@@ -666,7 +673,8 @@ export const quackverseCards = [
       "Heat Wave: -1 DEF to all enemies."
     ],
     "effect": null,
-    "flavor": "“Burn bright.”"
+    "flavor": "“Burn bright.”",
+    "artUrl": "/quackverse-art/imported/card-36-light-ranger-armor.jpg"
   },
   {
     "id": 37,
@@ -684,7 +692,8 @@ export const quackverseCards = [
       "Shadow Step: +2 DEF."
     ],
     "effect": null,
-    "flavor": "“Gone before you blink.”"
+    "flavor": "“Gone before you blink.”",
+    "artUrl": "/quackverse-art/imported/card-37-void-mage-dark-armor-2.jpg"
   },
   {
     "id": 38,
@@ -756,7 +765,8 @@ export const quackverseCards = [
       "Star Sprinkle: Heal 1 HP."
     ],
     "effect": null,
-    "flavor": "“A tiny spark of the universe.”"
+    "flavor": "“A tiny spark of the universe.”",
+    "artUrl": "/quackverse-art/imported/card-41-galaxy-ranger-armor.jpg"
   },
   {
     "id": 42,
@@ -900,7 +910,8 @@ export const quackverseCards = [
       "Starshield: +3 DEF."
     ],
     "effect": null,
-    "flavor": "“Born from the heart of a star.”"
+    "flavor": "“Born from the heart of a star.”",
+    "artUrl": "/quackverse-art/imported/card-49-cosmic-armor-2.jpg"
   },
   {
     "id": 50,
@@ -972,7 +983,8 @@ export const quackverseCards = [
       "Eclipse Barrier: +2 DEF."
     ],
     "effect": null,
-    "flavor": ""
+    "flavor": "",
+    "artUrl": "/quackverse-art/imported/card-53-void-mage-dark-armor-1.jpg"
   },
   {
     "id": 54,
@@ -990,7 +1002,8 @@ export const quackverseCards = [
       "Thundercloud: -1 SPD to all enemies."
     ],
     "effect": null,
-    "flavor": "“The storm follows me.”"
+    "flavor": "“The storm follows me.”",
+    "artUrl": "/quackverse-art/imported/card-4-storm-lightning-armor.jpg"
   },
   {
     "id": 55,
@@ -1080,7 +1093,8 @@ export const quackverseCards = [
       "Dark Pulse: -2 ATK to enemy."
     ],
     "effect": null,
-    "flavor": "“The void burns brighter.”"
+    "flavor": "“The void burns brighter.”",
+    "artUrl": "/quackverse-art/imported/card-59-void-mage-dark-armor.jpg"
   },
   {
     "id": 60,
