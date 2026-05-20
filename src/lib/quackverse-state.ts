@@ -61,11 +61,23 @@ export type QuackverseSavedState = {
 export type QuackverseCollectionState = {
   cards: number[];
   deck: number[];
+  activeDeckId: string;
+  savedDecks: QuackverseSavedDeck[];
   deckWins: number;
   deckLosses: number;
   openedAtDay: string;
   openedToday: number;
   lastPack: number[];
+};
+
+export type QuackverseSavedDeck = {
+  id: string;
+  name: string;
+  cardIds: number[];
+  wins: number;
+  losses: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export const quackverseDailyPackLimit = 3;
@@ -103,6 +115,8 @@ export const defaultQuackverseState = (): QuackverseSavedState => ({
 export const defaultQuackverseCollection = (): QuackverseCollectionState => ({
   cards: [],
   deck: [],
+  activeDeckId: 'default',
+  savedDecks: [],
   deckWins: 0,
   deckLosses: 0,
   openedAtDay: '',
@@ -118,9 +132,24 @@ export function normalizeQuackverseCollection(value: Partial<QuackverseCollectio
   const fallback = defaultQuackverseCollection();
   const today = quackverseDayKey();
   const openedAtDay = typeof value?.openedAtDay === 'string' ? value.openedAtDay : '';
+  const savedDecks = Array.isArray(value?.savedDecks)
+    ? value.savedDecks
+        .map((deck) => ({
+          id: typeof deck?.id === 'string' && deck.id.trim() ? deck.id.trim() : '',
+          name: typeof deck?.name === 'string' && deck.name.trim() ? deck.name.trim().slice(0, 40) : 'Saved Deck',
+          cardIds: Array.isArray(deck?.cardIds) ? deck.cardIds.map(Number).filter((cardId) => Number.isFinite(cardId)).slice(0, 20) : [],
+          wins: Number(deck?.wins || 0),
+          losses: Number(deck?.losses || 0),
+          createdAt: typeof deck?.createdAt === 'string' ? deck.createdAt : '',
+          updatedAt: typeof deck?.updatedAt === 'string' ? deck.updatedAt : '',
+        }))
+        .filter((deck) => deck.id)
+    : [];
   return {
     cards: Array.isArray(value?.cards) ? value.cards.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.cards,
     deck: Array.isArray(value?.deck) ? value.deck.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.deck,
+    activeDeckId: typeof value?.activeDeckId === 'string' && value.activeDeckId.trim() ? value.activeDeckId.trim() : fallback.activeDeckId,
+    savedDecks,
     deckWins: Number(value?.deckWins || 0),
     deckLosses: Number(value?.deckLosses || 0),
     openedAtDay,

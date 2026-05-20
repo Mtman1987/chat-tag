@@ -10,6 +10,7 @@ import {
   viewerPayload,
 } from '@/lib/quackverse-access';
 import { quackverseCards, quackverseDucks, type QuackverseCard } from '@/lib/quackverse-data';
+import { findQuackverseStructuredEffect, getQuackverseAbilityCost, summarizeQuackverseGear } from '@/lib/quackverse-effects';
 import { quackverseRoomKeyFromParams, quackverseScopeFromParams } from '@/lib/quackverse-rooms';
 import { updateAppState } from '@/lib/volume-store';
 import {
@@ -104,20 +105,9 @@ function spendSpecial(piece: QuackverseSavedPiece, cost: number) {
   piece.specialCurrent = Math.max(0, getCurrentSpecial(piece) - cost);
 }
 
-function getAbilityCost(ability: string) {
-  if (/(remove debuff|cleanse|remove debuffs)/i.test(ability)) return 10;
-  if (/(stun|loses next attack|dodge next attack|block next attack|peek|look at|reveal|move twice|attack twice|50%|chance|always goes first|root|draw|discard)/i.test(ability)) {
-    return 8;
-  }
-  if (/(heal|restore|repair|mend|blessing|sprinkle)/i.test(ability)) return 6;
-  if (/(swap SPD|reduce enemy|-\d+\s*(ATK|DEF|SPD|SPC)|\+\d+\s*(ATK|DEF|SPD|SPC)|\+?\d+\s*damage)/i.test(ability)) return 4;
-  return 5;
-}
-
 function getGearHealPerTurn(piece: QuackverseSavedPiece) {
-  return (piece.equipmentIds || [])
-    .map((id) => quackverseCards.find((item) => item.id === id)?.effect || '')
-    .reduce((sum, effectText) => sum + numberFromText(effectText, /Heal\s+(\d+)\s+HP\s+per\s+turn/i), 0);
+  const equipment = (piece.equipmentIds || []).map((id) => quackverseCards.find((item) => item.id === id)).filter(Boolean) as QuackverseCard[];
+  return summarizeQuackverseGear(equipment).healPerTurn;
 }
 
 function removeNegativeModifiers(piece: QuackverseSavedPiece) {
@@ -145,6 +135,15 @@ function recordDeckResult(state: QuackverseSavedState, winner: PlayerId) {
     } else {
       collection.deckLosses = Number(collection.deckLosses || 0) + 1;
     }
+    const activeDeck = collection.savedDecks?.find((deck) => deck.id === collection.activeDeckId);
+    if (activeDeck) {
+      if (playerId === winner) {
+        activeDeck.wins = Number(activeDeck.wins || 0) + 1;
+      } else {
+        activeDeck.losses = Number(activeDeck.losses || 0) + 1;
+      }
+      activeDeck.updatedAt = new Date().toISOString();
+    }
     recorded = true;
   }
 
@@ -161,7 +160,6 @@ type DetectedFormation = {
 };
 
 const formationPriority: Record<string, number> = {
-  'Ranger Wall': 5,
   'Eclipse Cross': 5,
   'Cosmic Diamond': 5,
   'Flying V': 4,
@@ -217,7 +215,6 @@ function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFor
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         col += 1;
       }
@@ -233,7 +230,6 @@ function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFor
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         row += 1;
       }
@@ -307,7 +303,7 @@ function scoreNewFormations(state: QuackverseSavedState, owner: PlayerId) {
   }
   const isCross = fresh.name === 'Eclipse Cross';
   const isFlyingV = fresh.name === 'Flying V';
-  const isBattleLine = fresh.name === 'Battle Line' || fresh.name === 'Ranger Wall';
+  const isBattleLine = fresh.name === 'Battle Line';
   const isCosmicDiamond = fresh.name === 'Cosmic Diamond';
   const isMedicSanctuary = fresh.name === 'Medic Sanctuary';
   const battleLineAtkBonus = isBattleLine ? Math.max(0, fresh.indices.length - 3) : 0;
@@ -379,14 +375,14 @@ function discardBoardPiece(state: QuackverseSavedState, piece: QuackverseSavedPi
 function getEffectiveStats(piece: QuackverseSavedPiece) {
   const card = cardFor(piece);
   const equipment = (piece.equipmentIds || []).map((id) => quackverseCards.find((item) => item.id === id)).filter(Boolean) as QuackverseCard[];
-  const effectText = equipment.map((item) => item.effect || '').join(' ');
+  const gear = summarizeQuackverseGear(equipment);
   const modifiers = piece.statModifiers || {};
   const fatigue = Number(piece.fatigue || 0);
-  const damageReduction = numberFromText(effectText, /(?:Reduce damage taken by|Reduce all damage by)\s*(\d+)/i);
+  const damageReduction = gear.damageReduction;
   return {
-    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + numberFromText(effectText, /\+(\d+)\s*ATK/i) - fatigue - damageReduction),
-    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + numberFromText(effectText, /\+(\d+)\s*DEF/i) + damageReduction),
-    spd: Math.max(1, (card?.spd || 0) + Number(modifiers.spd || 0) + numberFromText(effectText, /\+(\d+)\s*SPD/i) - fatigue),
+    atk: Math.max(1, (card?.atk || 0) + Number(modifiers.atk || 0) + Number(gear.statModifiers.atk || 0) - fatigue - damageReduction),
+    def: Math.max(0, (card?.def || 0) + Number(modifiers.def || 0) + Number(gear.statModifiers.def || 0) + damageReduction),
+    spd: Math.max(1, (card?.spd || 0) + Number(modifiers.spd || 0) + Number(gear.statModifiers.spd || 0) - fatigue),
   };
 }
 
@@ -422,7 +418,9 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
   const ability = requestedAbility || sourceCard.abilities[0] || '';
   if (!ability || !(sourceCard.abilities as string[]).includes(ability)) return;
   if (state.turnActions[source.owner].usedAbility.includes(pieceKey(source))) return;
-  const abilityCost = getAbilityCost(ability);
+  const structuredAbility = findQuackverseStructuredEffect(sourceCard, ability);
+  const abilityTags = new Set(structuredAbility?.tags || []);
+  const abilityCost = getQuackverseAbilityCost(sourceCard, ability);
   if (getCurrentSpecial(source) < abilityCost) {
     addLog(
       state,
@@ -458,7 +456,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     addLog(state, entry);
   };
 
-  if (/(remove debuff|cleanse|remove debuffs)/i.test(ability)) {
+  if (abilityTags.has('cleanse')) {
     for (const targetIndex of friendlyTargets) {
       const target = state.grid[targetIndex];
       if (target) removeNegativeModifiers(target);
@@ -468,7 +466,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
   }
 
   const healAmount = numberFromText(ability, /(?:Heal|Restore|Repair|Mend|Blessing|Sprinkle)\D+(\d+)\s*HP/i);
-  if (healAmount > 0) {
+  if (abilityTags.has('heal') && healAmount > 0) {
     for (const targetIndex of friendlyTargets) {
       const target = state.grid[targetIndex];
       if (target) target.currentHp = Math.min(target.maxHp, target.currentHp + healAmount);
@@ -481,7 +479,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     numberFromText(ability, /Deal\s+(\d+)\s+damage\s+to\s+all\s+enemies/i) ||
     numberFromText(ability, /Deal\s+(\d+)\s+unavoidable\s+damage/i) ||
     numberFromText(ability, /\+(\d+)\s*damage/i);
-  if (damage > 0 && enemyTargets.length > 0) {
+  if (abilityTags.has('damage') && damage > 0 && enemyTargets.length > 0) {
     const knockedOut = applyDamage(state, owner, enemyTargets, damage);
     finish(
       `${playerLabels[owner].short} used ${abilityName}, dealing ${damage} damage to ${enemyTargets.length} target${enemyTargets.length === 1 ? '' : 's'}${knockedOut ? ` and KO'ing ${knockedOut}` : ''}.`,
@@ -489,7 +487,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/attack twice/i.test(ability) && adjacentEnemy?.piece) {
+  if (abilityTags.has('attackTwice') && adjacentEnemy?.piece) {
     const damageOne = Math.max(1, Math.floor(getEffectiveStats(source).atk / 2) - getEffectiveStats(adjacentEnemy.piece).def);
     const totalDamage = Math.max(0, damageOne) * 2;
     adjacentEnemy.piece.currentHp -= totalDamage;
@@ -509,7 +507,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
   const statBuffs = (['atk', 'def', 'spd', 'spc'] as const)
     .map((stat) => ({ stat, amount: numberFromText(ability, new RegExp(`\\+(\\d+)\\s*${stat}`, 'i')) }))
     .filter((entry) => entry.amount > 0);
-  if (statBuffs.length > 0) {
+  if (abilityTags.has('buff') && statBuffs.length > 0) {
     for (const targetIndex of friendlyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -532,7 +530,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/look at|peek|reveal/i.test(ability)) {
+  if (abilityTags.has('peek') || abilityTags.has('reveal')) {
     const revealCount = /top\s*2/i.test(ability) ? 2 : 1;
     const previewPile = state.battlePiles[enemyOwner].drawPile.slice(0, revealCount);
     source.specialCurrent = Math.min(getSpecialMax(source), getCurrentSpecial(source) + 2);
@@ -548,7 +546,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
       return { stat, amount: Number(match?.[1] || match?.[2] || 0) };
     })
     .find((entry) => entry.amount > 0);
-  if (statDebuff && enemyTargets.length > 0) {
+  if (abilityTags.has('debuff') && statDebuff && enemyTargets.length > 0) {
     for (const targetIndex of enemyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -564,7 +562,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/always goes first|always attacks first/i.test(ability)) {
+  if (abilityTags.has('attackFirst')) {
     source.statModifiers = {
       atk: Number(source.statModifiers?.atk || 0),
       def: Number(source.statModifiers?.def || 0),
@@ -575,7 +573,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/root enemy in place/i.test(ability) && enemyTargets.length > 0) {
+  if (abilityTags.has('root') && enemyTargets.length > 0) {
     for (const targetIndex of enemyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -590,7 +588,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/blind enemy/i.test(ability) && enemyTargets.length > 0) {
+  if (abilityTags.has('debuff') && /blind enemy/i.test(ability) && enemyTargets.length > 0) {
     for (const targetIndex of enemyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -605,7 +603,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/see opponent.?hand|opponent.?hand/i.test(ability) && /see|peek|reveal/i.test(ability)) {
+  if ((abilityTags.has('peek') || abilityTags.has('reveal')) && /see opponent.?hand|opponent.?hand/i.test(ability)) {
     const visibleHand = state.battlePiles[enemyOwner].hand
       .map((entry) => quackverseCards.find((card) => card.id === entry.cardId)?.name || 'a card')
       .join(', ');
@@ -613,7 +611,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/random buff|reroll random effects|change any random effect/i.test(ability)) {
+  if (abilityTags.has('random') && /random buff|reroll random effects|change any random effect/i.test(ability)) {
     const statOptions: Array<'atk' | 'def' | 'spd' | 'spc'> = ['atk', 'def', 'spd', 'spc'];
     const chosenStat = statOptions[Math.floor(Math.random() * statOptions.length)];
     const amount = /reroll/i.test(ability) ? 3 : 2;
@@ -628,7 +626,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/stun all enemies/i.test(ability)) {
+  if (abilityTags.has('stun')) {
     for (const targetIndex of enemyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -643,7 +641,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/enemy loses next attack/i.test(ability)) {
+  if (abilityTags.has('debuff') && /enemy loses next attack/i.test(ability)) {
     for (const targetIndex of enemyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -658,7 +656,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/dodge next attack|block next attack|reduce damage by/i.test(ability)) {
+  if (abilityTags.has('dodge') || abilityTags.has('shield')) {
     for (const targetIndex of friendlyTargets) {
       const target = state.grid[targetIndex];
       if (!target) continue;
@@ -673,7 +671,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/move twice/i.test(ability)) {
+  if (abilityTags.has('move')) {
     source.statModifiers = {
       atk: Number(source.statModifiers?.atk || 0),
       def: Number(source.statModifiers?.def || 0),
@@ -684,7 +682,7 @@ function resolveAbility(state: QuackverseSavedState, sourceIndex: number, reques
     return;
   }
 
-  if (/swap\s+SPD\s+with\s+enemy/i.test(ability) && adjacentEnemy?.piece) {
+  if (abilityTags.has('swap') && adjacentEnemy?.piece) {
     const ownCurrentSpd = getEffectiveStats(source).spd;
     const enemyCurrentSpd = getEffectiveStats(adjacentEnemy.piece).spd;
     source.statModifiers = {
@@ -858,6 +856,8 @@ export async function POST(req: NextRequest) {
   const result = await updateAppState((appState) => {
     const raw = appState.quackverseRooms?.[roomKey] || (!scopedRoom ? appState.quackverse : {});
     const state = normalizeQuackverseState(raw as Partial<QuackverseSavedState>);
+    const globalState = normalizeQuackverseState(appState.quackverse as Partial<QuackverseSavedState>);
+    state.collections = { ...state.collections, ...globalState.collections };
     if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
       recordDeckResult(state, state.winner);
     }
@@ -1048,6 +1048,11 @@ export async function POST(req: NextRequest) {
     state.updatedAt = new Date().toISOString();
     if (!appState.quackverseRooms) appState.quackverseRooms = {};
     appState.quackverseRooms[roomKey] = state;
+    appState.quackverse = {
+      ...globalState,
+      collections: state.collections,
+      updatedAt: state.updatedAt,
+    };
     return { state, viewerSeat: activeSeat };
   });
 

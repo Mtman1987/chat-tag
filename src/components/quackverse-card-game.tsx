@@ -34,6 +34,7 @@ import {
   quackverseEquipment,
   type QuackverseCard,
 } from '@/lib/quackverse-data';
+import { summarizeQuackverseGear } from '@/lib/quackverse-effects';
 import { getQuackverseFamilyGroup } from '@/lib/quackverse-family-map';
 import { summarizeCollection } from '@/lib/quackverse-packs';
 import {
@@ -90,6 +91,13 @@ type PackAuditSummary = {
   totalCards: number;
   rarityCounts: Record<string, number>;
   mostPulledCards: Array<{ name: string; count: number }>;
+};
+type SavedDeckSummary = {
+  id: string;
+  name: string;
+  cardIds: number[];
+  wins: number;
+  losses: number;
 };
 type QuackverseArtAsset = {
   fileName: string;
@@ -207,23 +215,18 @@ const isAdjacent = (from: number, to: number) => {
 const victoryTarget = 6;
 const formationVpLimit = 3;
 
-const numberFromText = (text: string, pattern: RegExp) => {
-  const match = text.match(pattern);
-  return match ? Number(match[1]) : 0;
-};
-
 function getEffectiveStats(piece: GridPiece) {
   const equipment = piece.equipmentIds
     .map((id) => quackverseCards.find((card) => card.id === id))
     .filter(Boolean) as QuackverseCard[];
-  const effectText = equipment.map((card) => card.effect || '').join(' ');
-  const damageReduction = numberFromText(effectText, /(?:Reduce damage taken by|Reduce all damage by)\s*(\d+)/i);
+  const gear = summarizeQuackverseGear(equipment);
+  const damageReduction = gear.damageReduction;
 
   return {
-    atk: Math.max(1, (piece.card.atk || 0) + piece.statModifiers.atk + numberFromText(effectText, /\+(\d+)\s*ATK/i) - piece.fatigue - damageReduction),
-    def: Math.max(0, (piece.card.def || 0) + piece.statModifiers.def + numberFromText(effectText, /\+(\d+)\s*DEF/i) + damageReduction),
-    spd: Math.max(1, (piece.card.spd || 0) + piece.statModifiers.spd + numberFromText(effectText, /\+(\d+)\s*SPD/i) - piece.fatigue),
-    spc: Math.max(0, (piece.card.spc || 0) + piece.statModifiers.spc + numberFromText(effectText, /\+(\d+)\s*SPC/i)),
+    atk: Math.max(1, (piece.card.atk || 0) + piece.statModifiers.atk + Number(gear.statModifiers.atk || 0) - piece.fatigue - damageReduction),
+    def: Math.max(0, (piece.card.def || 0) + piece.statModifiers.def + Number(gear.statModifiers.def || 0) + damageReduction),
+    spd: Math.max(1, (piece.card.spd || 0) + piece.statModifiers.spd + Number(gear.statModifiers.spd || 0) - piece.fatigue),
+    spc: Math.max(0, (piece.card.spc || 0) + piece.statModifiers.spc + Number(gear.statModifiers.spc || 0)),
   };
 }
 
@@ -236,9 +239,10 @@ function getSpecialGain(piece: GridPiece) {
 }
 
 function getGearHealPerTurn(piece: GridPiece) {
-  return piece.equipmentIds
-    .map((id) => quackverseCards.find((card) => card.id === id)?.effect || '')
-    .reduce((sum, effectText) => sum + numberFromText(effectText, /Heal\s+(\d+)\s+HP\s+per\s+turn/i), 0);
+  const equipment = piece.equipmentIds
+    .map((id) => quackverseCards.find((card) => card.id === id))
+    .filter(Boolean) as QuackverseCard[];
+  return summarizeQuackverseGear(equipment).healPerTurn;
 }
 
 function getMovementBudget(spd: number) {
@@ -579,7 +583,6 @@ type DetectedFormation = {
 };
 
 const formationPriority: Record<string, number> = {
-  'Ranger Wall': 5,
   'Eclipse Cross': 5,
   'Cosmic Diamond': 5,
   'Flying V': 4,
@@ -635,7 +638,6 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         col += 1;
       }
@@ -651,7 +653,6 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         row += 1;
       }
@@ -759,6 +760,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const [collection, setCollection] = useState<number[]>([]);
   const [lastPack, setLastPack] = useState<QuackverseCard[]>([]);
   const [deck, setDeck] = useState<number[]>([]);
+  const [activeDeckId, setActiveDeckId] = useState('default');
+  const [savedDecks, setSavedDecks] = useState<SavedDeckSummary[]>([]);
   const [deckWins, setDeckWins] = useState(0);
   const [deckLosses, setDeckLosses] = useState(0);
   const [packAuditEvents, setPackAuditEvents] = useState<PackAuditEvent[]>([]);
@@ -799,6 +802,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     setDailyPackLimit(Number(data.dailyLimit || 3));
     setCollection(Array.isArray(data.cards) ? data.cards : []);
     setDeck(Array.isArray(data.deck) ? data.deck : []);
+    setActiveDeckId(typeof data.activeDeckId === 'string' ? data.activeDeckId : 'default');
+    setSavedDecks(Array.isArray(data.savedDecks) ? data.savedDecks : []);
     setDeckWins(Number(data.deckWins || 0));
     setDeckLosses(Number(data.deckLosses || 0));
     setLastPack(
@@ -1504,7 +1509,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     const indexSet = new Set(fresh.indices);
     const isCross = fresh.name === 'Eclipse Cross';
     const isFlyingV = fresh.name === 'Flying V';
-    const isBattleLine = fresh.name === 'Battle Line' || fresh.name === 'Ranger Wall';
+    const isBattleLine = fresh.name === 'Battle Line';
     const isCosmicDiamond = fresh.name === 'Cosmic Diamond';
     const isMedicSanctuary = fresh.name === 'Medic Sanctuary';
     const battleLineAtkBonus = isBattleLine ? Math.max(0, fresh.indices.length - 3) : 0;
@@ -1802,6 +1807,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       setDailyPackLimit(Number(data.dailyLimit || dailyPackLimit));
       setCollection(Array.isArray(data.cards) ? data.cards : []);
       setDeck(Array.isArray(data.deck) ? data.deck : []);
+      setActiveDeckId(typeof data.activeDeckId === 'string' ? data.activeDeckId : 'default');
+      setSavedDecks(Array.isArray(data.savedDecks) ? data.savedDecks : []);
       const packCards = Array.isArray(data.pack) ? data.pack : data.lastPack;
       setLastPack(
         Array.isArray(packCards)
@@ -1830,6 +1837,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     if (response.ok && data) {
       setCollection(Array.isArray(data.cards) ? data.cards : collection);
       setDeck(Array.isArray(data.deck) ? data.deck : deck);
+      setActiveDeckId(typeof data.activeDeckId === 'string' ? data.activeDeckId : 'default');
+      setSavedDecks(Array.isArray(data.savedDecks) ? data.savedDecks : savedDecks);
       setPendingPacks(Number(data.packsRemaining ?? pendingPacks));
       setDailyPackLimit(Number(data.dailyLimit || dailyPackLimit));
     }
@@ -1845,8 +1854,39 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     if (response.ok && data) {
       setCollection(Array.isArray(data.cards) ? data.cards : collection);
       setDeck(Array.isArray(data.deck) ? data.deck : deck);
+      setActiveDeckId(typeof data.activeDeckId === 'string' ? data.activeDeckId : 'default');
+      setSavedDecks(Array.isArray(data.savedDecks) ? data.savedDecks : savedDecks);
       setPendingPacks(Number(data.packsRemaining ?? pendingPacks));
       setDailyPackLimit(Number(data.dailyLimit || dailyPackLimit));
+    }
+  };
+
+  const saveCurrentDeck = async () => {
+    if (deck.length === 0) return;
+    const response = await fetch('/api/quackverse/pack', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action: 'saveDeck', name: `Deck ${savedDecks.length + 1}` }),
+    });
+    const data = await response.json().catch(() => null);
+    if (response.ok && data) {
+      setDeck(Array.isArray(data.deck) ? data.deck : deck);
+      setActiveDeckId(typeof data.activeDeckId === 'string' ? data.activeDeckId : activeDeckId);
+      setSavedDecks(Array.isArray(data.savedDecks) ? data.savedDecks : savedDecks);
+    }
+  };
+
+  const activateSavedDeck = async (deckId: string) => {
+    const response = await fetch('/api/quackverse/pack', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action: 'activateDeck', deckId }),
+    });
+    const data = await response.json().catch(() => null);
+    if (response.ok && data) {
+      setDeck(Array.isArray(data.deck) ? data.deck : deck);
+      setActiveDeckId(typeof data.activeDeckId === 'string' ? data.activeDeckId : activeDeckId);
+      setSavedDecks(Array.isArray(data.savedDecks) ? data.savedDecks : savedDecks);
     }
   };
 
@@ -2762,6 +2802,32 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                 </div>
                 <div className={cn('mt-2 rounded-md p-2 text-xs', isDeckPlayable ? 'bg-emerald-400/10 text-emerald-100' : 'bg-amber-400/10 text-amber-100')}>
                   {isDeckPlayable ? 'Deck is playable for testing.' : 'Deck needs 20 cards, at least 10 ducks, and no more than 8 equipment cards.'}
+                </div>
+                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Saved Decks</div>
+                      <div className="text-xs text-slate-400">Active: {activeDeckId === 'default' ? 'Current Deck' : savedDecks.find((item) => item.id === activeDeckId)?.name || activeDeckId}</div>
+                    </div>
+                    <Button type="button" size="sm" variant="secondary" disabled={deck.length === 0} onClick={saveCurrentDeck}>
+                      Save Deck
+                    </Button>
+                  </div>
+                  {savedDecks.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {savedDecks.map((savedDeck) => (
+                        <Button
+                          key={savedDeck.id}
+                          type="button"
+                          size="sm"
+                          variant={savedDeck.id === activeDeckId ? 'default' : 'secondary'}
+                          onClick={() => activateSavedDeck(savedDeck.id)}
+                        >
+                          {savedDeck.name} {savedDeck.wins}W/{savedDeck.losses}L
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <ScrollArea className="h-80 pr-3">

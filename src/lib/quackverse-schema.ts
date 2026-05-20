@@ -54,6 +54,9 @@ export type QuackverseStructuredEffect = {
   cost: number;
   amount?: number;
   stat?: QuackverseStat;
+  statModifiers?: Partial<Record<QuackverseStat, number>>;
+  damageReduction?: number;
+  healPerTurn?: number;
 };
 
 export type QuackverseLegacyCard = {
@@ -261,6 +264,26 @@ function inferStat(text: string): QuackverseStat | undefined {
   return match === 'atk' || match === 'def' || match === 'spd' || match === 'spc' || match === 'hp' ? match : undefined;
 }
 
+function inferStatModifiers(text: string): Partial<Record<QuackverseStat, number>> {
+  const statModifiers: Partial<Record<QuackverseStat, number>> = {};
+  const statPattern = /([+-])\s*(\d+)\s*(ATK|DEF|SPD|SPC|HP)\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = statPattern.exec(text))) {
+    const stat = match[3].toLowerCase() as QuackverseStat;
+    const amount = Number(match[2]) * (match[1] === '-' ? -1 : 1);
+    statModifiers[stat] = Number(statModifiers[stat] || 0) + amount;
+  }
+  return statModifiers;
+}
+
+function inferDamageReduction(text: string) {
+  return Number(text.match(/(?:Reduce damage taken by|Reduce all damage by|Reduce damage by)\s*(\d+)/i)?.[1] || 0) || undefined;
+}
+
+function inferHealPerTurn(text: string) {
+  return Number(text.match(/Heal\s+(\d+)\s+HP\s+per\s+turn/i)?.[1] || 0) || undefined;
+}
+
 function inferTags(text: string, cardType: QuackverseCardType): QuackverseEffectTag[] {
   const tags: QuackverseEffectTag[] = [];
   if (cardType === 'Equipment') tags.push('gear');
@@ -307,6 +330,9 @@ function toStructuredEffect(card: QuackverseLegacyCard, text: string): Quackvers
     cost: card.type === 'Duck' ? inferAbilityCost(text) : 0,
     amount: inferAmount(text),
     stat: inferStat(text),
+    statModifiers: inferStatModifiers(text),
+    damageReduction: inferDamageReduction(text),
+    healPerTurn: inferHealPerTurn(text),
   };
 }
 

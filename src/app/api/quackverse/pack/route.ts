@@ -18,6 +18,8 @@ function publicCollection(collection: ReturnType<typeof getCollectionForUser>) {
   return {
     cards: collection.cards,
     deck: collection.deck,
+    activeDeckId: collection.activeDeckId,
+    savedDecks: collection.savedDecks,
     deckWins: Number(collection.deckWins || 0),
     deckLosses: Number(collection.deckLosses || 0),
     lastPack: collection.lastPack,
@@ -161,6 +163,7 @@ export async function POST(req: NextRequest) {
       if (!quackverseCards.some((card) => card.id === cardId)) return { error: 'Card not found.', status: 404, collection };
       if (!canAddToDeck(collection.cards, collection.deck, cardId)) return { error: 'No available owned copy for deck.', status: 400, collection };
       collection.deck = [...collection.deck, cardId];
+      collection.activeDeckId = 'default';
       state.updatedAt = new Date().toISOString();
       appState.quackverse = state;
       return { collection };
@@ -170,6 +173,39 @@ export async function POST(req: NextRequest) {
       const cardId = Number(body.cardId);
       const index = collection.deck.indexOf(cardId);
       if (index !== -1) collection.deck = collection.deck.filter((_, itemIndex) => itemIndex !== index);
+      collection.activeDeckId = 'default';
+      state.updatedAt = new Date().toISOString();
+      appState.quackverse = state;
+      return { collection };
+    }
+
+    if (action === 'saveDeck') {
+      const name = String(body.name || 'Saved Deck').trim().slice(0, 40) || 'Saved Deck';
+      const now = new Date().toISOString();
+      const deckId = String(body.deckId || '').trim() || makeId('qdeck');
+      const existing = collection.savedDecks.find((deck) => deck.id === deckId);
+      const savedDeck = {
+        id: deckId,
+        name,
+        cardIds: collection.deck.slice(0, 20),
+        wins: Number(existing?.wins || 0),
+        losses: Number(existing?.losses || 0),
+        createdAt: existing?.createdAt || now,
+        updatedAt: now,
+      };
+      collection.savedDecks = [savedDeck, ...collection.savedDecks.filter((deck) => deck.id !== deckId)].slice(0, 12);
+      collection.activeDeckId = deckId;
+      state.updatedAt = now;
+      appState.quackverse = state;
+      return { collection };
+    }
+
+    if (action === 'activateDeck') {
+      const deckId = String(body.deckId || '').trim();
+      const savedDeck = collection.savedDecks.find((deck) => deck.id === deckId);
+      if (!savedDeck) return { error: 'Saved deck not found.', status: 404, collection };
+      collection.deck = savedDeck.cardIds.slice(0, 20);
+      collection.activeDeckId = savedDeck.id;
       state.updatedAt = new Date().toISOString();
       appState.quackverse = state;
       return { collection };
