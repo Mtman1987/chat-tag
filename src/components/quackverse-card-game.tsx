@@ -575,6 +575,7 @@ type DetectedFormation = {
   name: string;
   key: string;
   indices: number[];
+  healerCount: number;
 };
 
 const formationPriority: Record<string, number> = {
@@ -588,18 +589,39 @@ const formationPriority: Record<string, number> = {
 
 function detectFormations(grid: GridSlot[]): DetectedFormation[] {
   const formations: DetectedFormation[] = [];
+  const medicKeys = new Set<string>();
   const addFormation = (owner: PlayerId, name: string, indices: number[]) => {
     const unique = [...new Set(indices)].sort((a, b) => a - b);
     if (unique.every((index) => rowOf(index) === players[owner].backRow)) return;
-    formations.push({ owner, name, indices: unique, key: `${owner}:${name}:${unique.join('-')}` });
+    const healerCount = unique.filter((index) => {
+      const card = grid[index]?.card;
+      return Boolean(card && (isRole(card, 'support') || isRole(card, 'medic') || isRole(card, 'heal')));
+    }).length;
+    formations.push({ owner, name, indices: unique, healerCount, key: `${owner}:${name}:${unique.join('-')}` });
   };
   const owned = (index: number, owner: PlayerId) => grid[index]?.owner === owner;
-  const roleAt = (index: number, token: string) => {
+  const neighborOffsets = [-gridSize - 1, -gridSize, -gridSize + 1, -1, 1, gridSize - 1, gridSize, gridSize + 1];
+  const isHealer = (index: number) => {
     const card = grid[index]?.card;
-    if (!card) return false;
-    if (token === 'eclipse') return isRole(card, 'eclipse') || isRole(card, 'shadow') || isRole(card, 'void');
-    if (token === 'support') return isRole(card, 'support') || isRole(card, 'medic') || isRole(card, 'heal');
-    return isRole(card, token);
+    return Boolean(card && (isRole(card, 'support') || isRole(card, 'medic') || isRole(card, 'heal')));
+  };
+  const gatherComponent = (startIndex: number, owner: PlayerId) => {
+    const queue = [startIndex];
+    const seen = new Set<number>([startIndex]);
+    while (queue.length) {
+      const index = queue.shift()!;
+      for (const offset of neighborOffsets) {
+        const next = index + offset;
+        if (next < 0 || next >= grid.length) continue;
+        if (seen.has(next) || !owned(next, owner)) continue;
+        const rowDelta = Math.abs(rowOf(next) - rowOf(index));
+        const colDelta = Math.abs(colOf(next) - colOf(index));
+        if (rowDelta > 1 || colDelta > 1) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    return [...seen];
   };
 
   (['playerOne', 'playerTwo'] as PlayerId[]).forEach((owner) => {
@@ -613,7 +635,7 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.every((index) => roleAt(index, 'ranger'))) addFormation(owner, 'Ranger Wall', run);
+          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         col += 1;
       }
@@ -629,7 +651,7 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.every((index) => roleAt(index, 'ranger'))) addFormation(owner, 'Ranger Wall', run);
+          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         row += 1;
       }
@@ -639,10 +661,10 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
       for (let col = 1; col < gridSize - 1; col += 1) {
         const center = row * gridSize + col;
         const cross = [center, center - gridSize, center + gridSize, center - 1, center + 1];
-        if (cross.every((index) => owned(index, owner) && roleAt(index, 'eclipse'))) addFormation(owner, 'Eclipse Cross', cross);
+        if (cross.every((index) => owned(index, owner))) addFormation(owner, 'Eclipse Cross', cross);
 
         const diamond = [center - gridSize - 1, center - gridSize + 1, center + gridSize - 1, center + gridSize + 1];
-        if (diamond.every((index) => owned(index, owner) && roleAt(index, 'cosmic'))) addFormation(owner, 'Cosmic Diamond', diamond);
+        if (diamond.every((index) => owned(index, owner))) addFormation(owner, 'Cosmic Diamond', diamond);
       }
     }
 
@@ -667,11 +689,21 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
     }
 
     grid.forEach((piece, index) => {
-      if (!piece || piece.owner !== owner || !roleAt(index, 'support')) return;
-      const adjacent = [index - gridSize, index + gridSize, index - 1, index + 1].filter(
-        (adjacentIndex) => adjacentIndex >= 0 && adjacentIndex < grid.length && isAdjacent(index, adjacentIndex) && owned(adjacentIndex, owner),
-      );
-      if (adjacent.length >= 2) addFormation(owner, 'Medic Sanctuary', [index, ...adjacent.slice(0, 2)]);
+      if (!piece || piece.owner !== owner || !isHealer(index)) return;
+      const component = gatherComponent(index, owner);
+      const healerCount = component.filter((componentIndex) => isHealer(componentIndex)).length;
+      if (component.length >= 3) {
+        const key = `${owner}:Medic Sanctuary:${[...new Set(component)].sort((a, b) => a - b).join('-')}`;
+        if (medicKeys.has(key)) return;
+        medicKeys.add(key);
+        formations.push({
+          owner,
+          name: 'Medic Sanctuary',
+          indices: [...new Set(component)].sort((a, b) => a - b),
+          healerCount,
+          key,
+        });
+      }
     });
   });
 
@@ -1461,16 +1493,47 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       .sort((a, b) => b.indices.length - a.indices.length || (formationPriority[b.name] || 0) - (formationPriority[a.name] || 0))[0];
     if (!fresh) return;
 
-    const earnsVp = formationVp[owner] < formationVpLimit;
+    const earnsVp =
+      fresh.name === 'Medic Sanctuary'
+        ? formationVp[owner] < formationVpLimit && fresh.healerCount >= 2
+        : formationVp[owner] < formationVpLimit;
     const nextScore = score[owner] + (earnsVp ? 1 : 0);
     setScoredFormationKeys((current) => [...current, fresh.key]);
     setFormationVp((current) => ({ ...current, [owner]: current[owner] + (earnsVp ? 1 : 0) }));
+    const indexSet = new Set(fresh.indices);
+    const isCross = fresh.name === 'Eclipse Cross';
+    const isFlyingV = fresh.name === 'Flying V';
+    const isBattleLine = fresh.name === 'Battle Line' || fresh.name === 'Ranger Wall';
+    const isCosmicDiamond = fresh.name === 'Cosmic Diamond';
+    const isMedicSanctuary = fresh.name === 'Medic Sanctuary';
+    const battleLineAtkBonus = isBattleLine ? Math.max(0, fresh.indices.length - 3) : 0;
+    const battleLineDefBonus = isBattleLine ? 1 : 0;
+    const flyingVAtkBonus = isFlyingV ? (fresh.indices.length >= 5 ? 2 : 1) : 0;
+    const diamondSpcBonus = isCosmicDiamond ? 1 : 0;
+    const medicDefBonus = isMedicSanctuary ? 1 : 0;
+
     setGrid(
-      nextGrid.map((slot, index) =>
-        slot && fresh.indices.includes(index)
-          ? { ...slot, fatigue: slot.fatigue + 1, currentHp: slot.currentHp + 1, maxHp: slot.maxHp + 1 }
-          : slot,
-      ),
+      nextGrid.map((slot, index) => {
+        if (!slot || !indexSet.has(index)) return slot;
+        const nextModifiers = {
+          atk: Number(slot.statModifiers?.atk || 0),
+          def: Number(slot.statModifiers?.def || 0),
+          spd: Number(slot.statModifiers?.spd || 0),
+          spc: Number(slot.statModifiers?.spc || 0),
+        };
+        if (battleLineDefBonus > 0 && isBattleLine) nextModifiers.def += battleLineDefBonus;
+        if (battleLineAtkBonus > 0) nextModifiers.atk += battleLineAtkBonus;
+        if (flyingVAtkBonus > 0 && isFlyingV) nextModifiers.atk += flyingVAtkBonus;
+        if (diamondSpcBonus > 0 && isCosmicDiamond) nextModifiers.spc += diamondSpcBonus;
+        if (medicDefBonus > 0 && isMedicSanctuary) nextModifiers.def += medicDefBonus;
+        return {
+          ...slot,
+          fatigue: slot.fatigue + 1,
+          currentHp: isCross ? Math.min(slot.maxHp, slot.currentHp + 3) : slot.currentHp + 1,
+          maxHp: slot.maxHp + 1,
+          statModifiers: nextModifiers,
+        };
+      }),
     );
 
     if (earnsVp) {
@@ -1479,12 +1542,12 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
     if (earnsVp && nextScore >= victoryTarget) {
       setWinner(owner);
-      addLog(`${displayPlayers[owner].short} formed ${fresh.name} for +1 VP and wins the match. Formation ducks gain +1 HP and +1 Fatigue.`);
+      addLog(`${displayPlayers[owner].short} formed ${fresh.name} for +1 VP and wins the match. Formation ducks gain +1 HP and +1 Fatigue${isCross ? ' and Cross heals 3 HP.' : '.'}`);
       return;
     }
 
     addLog(
-      `${displayPlayers[owner].short} formed ${fresh.name}${earnsVp ? ' for +1 VP' : ' with no VP because the formation cap is reached'}. Formation ducks gain +1 HP and +1 Fatigue.`,
+      `${displayPlayers[owner].short} formed ${fresh.name}${earnsVp ? ' for +1 VP' : ' with no VP because the formation cap is reached'}. Formation ducks gain +1 HP and +1 Fatigue${isCross ? ' and Cross heals 3 HP' : ''}.`,
     );
   };
 
@@ -2742,8 +2805,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                     <div className="rounded-md bg-white/[0.05] p-2">Attack damage = ATK - enemy DEF, minimum 1.</div>
                     <div className="rounded-md bg-white/[0.05] p-2">Movement uses SPD: low speed gets 2 points, average 3, fast 4, boosted 5. Forward costs 1, lateral 2, backward 3.</div>
                     <div className="rounded-md bg-white/[0.05] p-2">Special uses SPC: ducks gain charge at the start of their turn, modified by SPC and fatigue. Strong utility cards spend more charge.</div>
-                    <div className="rounded-md bg-white/[0.05] p-2">Win at 6 VP. KOs give +1 VP. Formations give +1 VP for your first 3 scored formations; later formations only grant perks.</div>
-                    <div className="rounded-md bg-white/[0.05] p-2">Formation perk: involved ducks gain +1 HP and +1 Fatigue, reducing ATK and SPD by the fatigue value. Ducks recover 1 Fatigue at the start of a turn if they are no longer in formation.</div>
+                    <div className="rounded-md bg-white/[0.05] p-2">Win at 6 VP. KOs give +1 VP. Formations can be scored by any deck and still give +1 VP for the first 3 unique formations; later formations only grant perks.</div>
+                    <div className="rounded-md bg-white/[0.05] p-2">Formation baseline: all members gain +1 HP and +1 Fatigue. Battle Line adds DEF and extra ATK for long lines, Flying V adds ATK, Cross heals 3, Cosmic Diamond adds SPC, and Medic Sanctuary buffs connected healer chains. Ducks recover 1 Fatigue at the start of a turn if they are no longer in formation.</div>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -3522,8 +3585,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
               <div className="rounded-md bg-white/[0.05] p-2">Attack damage = ATK - enemy DEF, minimum 1.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Movement uses SPD: low speed gets 2 points, average 3, fast 4, boosted 5. Forward costs 1, lateral 2, backward 3.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Special uses SPC: ducks gain charge at the start of their turn, modified by SPC and fatigue. Strong utility cards spend more charge.</div>
-              <div className="rounded-md bg-white/[0.05] p-2">Win at 6 VP. KOs give +1 VP. Formations give +1 VP for your first 3 scored formations; later formations only grant perks.</div>
-              <div className="rounded-md bg-white/[0.05] p-2">Formation perk: involved ducks gain +1 HP and +1 Fatigue, reducing ATK and SPD by the fatigue value. Ducks recover 1 Fatigue at the start of a turn if they are no longer in formation.</div>
+              <div className="rounded-md bg-white/[0.05] p-2">Win at 6 VP. KOs give +1 VP. Formations can be scored by any deck and still give +1 VP for the first 3 unique formations; later formations only grant perks.</div>
+              <div className="rounded-md bg-white/[0.05] p-2">Formation baseline: all members gain +1 HP and +1 Fatigue. Battle Line adds DEF and extra ATK for long lines, Flying V adds ATK, Cross heals 3, Cosmic Diamond adds SPC, and Medic Sanctuary buffs connected healer chains. Ducks recover 1 Fatigue at the start of a turn if they are no longer in formation.</div>
               <div className="rounded-md bg-white/[0.05] p-2">NPC mode can pilot Player 2 with simple attack-then-advance behavior.</div>
               <div className="rounded-md bg-white/[0.05] p-2">Session scoring: +3 match win, +2 Legendary KO, +1 ability streak.</div>
             </div>

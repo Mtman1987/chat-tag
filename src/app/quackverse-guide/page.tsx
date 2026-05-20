@@ -639,6 +639,9 @@ export default function QuackverseGuidePage() {
           <p className="mt-2 text-slate-300">
             Special is a charge pool: the board adds charge on turn start, weighted by SPC and reduced by fatigue. Fatigue now decays when a duck is no longer in formation.
           </p>
+          <p className="mt-2 text-slate-300">
+            Formations are now generic shapes any deck can use. Every formation grants the baseline +1 HP and +1 Fatigue, with shape-specific bonuses on top: Battle Line adds DEF and extra ATK on longer lines, Flying V adds ATK, Cross heals 3, Cosmic Diamond adds SPC, and Medic Sanctuary buffs connected healer chains.
+          </p>
         </section>
       </div>
     </main>

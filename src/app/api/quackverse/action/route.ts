@@ -149,6 +149,7 @@ type DetectedFormation = {
   name: string;
   key: string;
   indices: number[];
+  healerCount: number;
 };
 
 const formationPriority: Record<string, number> = {
@@ -162,19 +163,39 @@ const formationPriority: Record<string, number> = {
 
 function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFormation[] {
   const formations: DetectedFormation[] = [];
+  const medicKeys = new Set<string>();
   const addFormation = (owner: PlayerId, name: string, indices: number[]) => {
     const unique = [...new Set(indices)].sort((a, b) => a - b);
     if (unique.every((index) => rowOf(index) === playerLabels[owner].backRow)) return;
-    formations.push({ owner, name, indices: unique, key: `${owner}:${name}:${unique.join('-')}` });
+    const healerCount = unique.filter((index) => {
+      const card = grid[index] ? cardFor(grid[index]!) : null;
+      return Boolean(card && (isRole(card, 'support') || isRole(card, 'medic') || isRole(card, 'heal')));
+    }).length;
+    formations.push({ owner, name, indices: unique, healerCount, key: `${owner}:${name}:${unique.join('-')}` });
   };
   const owned = (index: number, owner: PlayerId) => grid[index]?.owner === owner;
-  const roleAt = (index: number, token: string) => {
-    const piece = grid[index];
-    const card = piece ? cardFor(piece) : undefined;
-    if (!card) return false;
-    if (token === 'eclipse') return isRole(card, 'eclipse') || isRole(card, 'shadow') || isRole(card, 'void');
-    if (token === 'support') return isRole(card, 'support') || isRole(card, 'medic') || isRole(card, 'heal');
-    return isRole(card, token);
+  const neighborOffsets = [-gridSize - 1, -gridSize, -gridSize + 1, -1, 1, gridSize - 1, gridSize, gridSize + 1];
+  const isHealer = (index: number) => {
+    const card = grid[index] ? cardFor(grid[index]!) : null;
+    return Boolean(card && (isRole(card, 'support') || isRole(card, 'medic') || isRole(card, 'heal')));
+  };
+  const gatherComponent = (startIndex: number, owner: PlayerId) => {
+    const queue = [startIndex];
+    const seen = new Set<number>([startIndex]);
+    while (queue.length) {
+      const index = queue.shift()!;
+      for (const offset of neighborOffsets) {
+        const next = index + offset;
+        if (next < 0 || next >= grid.length) continue;
+        if (seen.has(next) || !owned(next, owner)) continue;
+        const rowDelta = Math.abs(rowOf(next) - rowOf(index));
+        const colDelta = Math.abs(colOf(next) - colOf(index));
+        if (rowDelta > 1 || colDelta > 1) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    return [...seen];
   };
 
   (['playerOne', 'playerTwo'] as PlayerId[]).forEach((owner) => {
@@ -188,7 +209,7 @@ function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFor
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.every((index) => roleAt(index, 'ranger'))) addFormation(owner, 'Ranger Wall', run);
+          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         col += 1;
       }
@@ -204,7 +225,7 @@ function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFor
         }
         if (run.length >= 3) {
           addFormation(owner, 'Battle Line', run);
-          if (run.every((index) => roleAt(index, 'ranger'))) addFormation(owner, 'Ranger Wall', run);
+          if (run.length >= 4) addFormation(owner, 'Ranger Wall', run);
         }
         row += 1;
       }
@@ -214,10 +235,10 @@ function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFor
       for (let col = 1; col < gridSize - 1; col += 1) {
         const center = row * gridSize + col;
         const cross = [center, center - gridSize, center + gridSize, center - 1, center + 1];
-        if (cross.every((index) => owned(index, owner) && roleAt(index, 'eclipse'))) addFormation(owner, 'Eclipse Cross', cross);
+        if (cross.every((index) => owned(index, owner))) addFormation(owner, 'Eclipse Cross', cross);
 
         const diamond = [center - gridSize - 1, center - gridSize + 1, center + gridSize - 1, center + gridSize + 1];
-        if (diamond.every((index) => owned(index, owner) && roleAt(index, 'cosmic'))) addFormation(owner, 'Cosmic Diamond', diamond);
+        if (diamond.every((index) => owned(index, owner))) addFormation(owner, 'Cosmic Diamond', diamond);
       }
     }
 
@@ -242,11 +263,21 @@ function detectFormations(grid: Array<QuackverseSavedPiece | null>): DetectedFor
     }
 
     grid.forEach((piece, index) => {
-      if (!piece || piece.owner !== owner || !roleAt(index, 'support')) return;
-      const adjacent = [index - gridSize, index + gridSize, index - 1, index + 1].filter(
-        (adjacentIndex) => adjacentIndex >= 0 && adjacentIndex < grid.length && isAdjacent(index, adjacentIndex) && owned(adjacentIndex, owner),
-      );
-      if (adjacent.length >= 2) addFormation(owner, 'Medic Sanctuary', [index, ...adjacent.slice(0, 2)]);
+      if (!piece || piece.owner !== owner || !isHealer(index)) return;
+      const component = gatherComponent(index, owner);
+      const healerCount = component.filter((componentIndex) => isHealer(componentIndex)).length;
+      if (component.length >= 3) {
+        const key = `${owner}:Medic Sanctuary:${[...new Set(component)].sort((a, b) => a - b).join('-')}`;
+        if (medicKeys.has(key)) return;
+        medicKeys.add(key);
+        formations.push({
+          owner,
+          name: 'Medic Sanctuary',
+          indices: [...new Set(component)].sort((a, b) => a - b),
+          healerCount,
+          key,
+        });
+      }
     });
   });
 
@@ -260,25 +291,49 @@ function scoreNewFormations(state: QuackverseSavedState, owner: PlayerId) {
   if (!fresh) return;
 
   const earnsVp = state.formationVp[owner] < formationVpLimit;
+  const baseIndices = new Set(fresh.indices);
   state.scoredFormationKeys.push(fresh.key);
   if (earnsVp) {
     state.formationVp[owner] += 1;
     state.score[owner] += 1;
   }
-  state.grid = state.grid.map((slot, index) =>
-    slot && fresh.indices.includes(index)
-      ? {
-          ...slot,
-          fatigue: Number(slot.fatigue || 0) + 1,
-          currentHp: Number(slot.currentHp || 0) + 1,
-          maxHp: Number(slot.maxHp || 0) + 1,
-        }
-      : slot,
-  );
+  const isCross = fresh.name === 'Eclipse Cross';
+  const isFlyingV = fresh.name === 'Flying V';
+  const isBattleLine = fresh.name === 'Battle Line' || fresh.name === 'Ranger Wall';
+  const isCosmicDiamond = fresh.name === 'Cosmic Diamond';
+  const isMedicSanctuary = fresh.name === 'Medic Sanctuary';
+  const battleLineAtkBonus = isBattleLine ? Math.max(0, fresh.indices.length - 3) : 0;
+  const battleLineDefBonus = isBattleLine ? 1 : 0;
+  const flyingVAtkBonus = isFlyingV ? (fresh.indices.length >= 5 ? 2 : 1) : 0;
+  const diamondSpcBonus = isCosmicDiamond ? 1 : 0;
+  const medicDefBonus = isMedicSanctuary ? 1 : 0;
+
+  state.grid = state.grid.map((slot, index) => {
+    if (!slot || !baseIndices.has(index)) return slot;
+    const nextModifiers = {
+      atk: Number(slot.statModifiers?.atk || 0),
+      def: Number(slot.statModifiers?.def || 0),
+      spd: Number(slot.statModifiers?.spd || 0),
+      spc: Number(slot.statModifiers?.spc || 0),
+    };
+    if (isBattleLine) nextModifiers.def += battleLineDefBonus;
+    if (battleLineAtkBonus > 0) nextModifiers.atk += battleLineAtkBonus;
+    if (isFlyingV && flyingVAtkBonus > 0) nextModifiers.atk += flyingVAtkBonus;
+    if (isCosmicDiamond) nextModifiers.spc += diamondSpcBonus;
+    if (isMedicSanctuary) nextModifiers.def += medicDefBonus;
+
+    return {
+      ...slot,
+      fatigue: Number(slot.fatigue || 0) + 1,
+      currentHp: isCross ? Math.min(slot.maxHp, Number(slot.currentHp || 0) + 3) : Number(slot.currentHp || 0) + 1,
+      maxHp: Number(slot.maxHp || 0) + 1,
+      statModifiers: nextModifiers,
+    };
+  });
   if (earnsVp && state.score[owner] >= victoryTarget) state.winner = owner;
   addLog(
     state,
-    `${playerLabels[owner].short} formed ${fresh.name}${earnsVp ? ' for +1 VP' : ' with no VP because the formation cap is reached'}. Formation ducks gain +1 HP and +1 Fatigue.`,
+    `${playerLabels[owner].short} formed ${fresh.name}${earnsVp ? ' for +1 VP' : ' with no VP because the formation cap is reached'}. Formation ducks gain +1 HP and +1 Fatigue${isCross ? ' and Cross heals 3 HP' : ''}.`,
   );
 }
 
@@ -857,7 +912,7 @@ export async function POST(req: NextRequest) {
       if (state.winner && state.matchResultRecordedForWinner !== state.winner) {
         recordDeckResult(state, state.winner);
       }
-      resetMatchState(state, true);
+      resetMatchState(state, false);
       activeSeat = null;
     }
 
