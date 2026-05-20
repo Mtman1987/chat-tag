@@ -90,6 +90,31 @@ export default function QuackverseOverlayPage() {
           </div>
         </header>
 
+        <section className="shrink-0 rounded-lg border border-white/10 bg-black/20 p-[min(1vw,0.75rem)] backdrop-blur-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-white">Active Hand</div>
+            <div className="text-xs text-slate-400">
+              Draw {state.battlePiles[state.activePlayer].drawPile.length} · Discard {state.battlePiles[state.activePlayer].discardPile.length} · Hand {state.battlePiles[state.activePlayer].hand.length}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {state.battlePiles[state.activePlayer].hand.length === 0 ? (
+              <div className="rounded-md border border-dashed border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-500">No cards in hand.</div>
+            ) : (
+              state.battlePiles[state.activePlayer].hand.map((instance) => {
+                const card = quackverseCards.find((item) => item.id === instance.cardId);
+                if (!card) return null;
+                return (
+                  <div key={instance.instanceId} className="min-w-[8rem] rounded-md border border-white/10 bg-white/[0.04] px-3 py-2">
+                    <div className="text-[0.65rem] uppercase text-slate-400">{card.type}</div>
+                    <div className="font-semibold text-white">{card.name}</div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+
         <div className="grid min-h-0 flex-1 gap-[min(1vw,0.75rem)] xl:grid-cols-[minmax(0,1fr)_minmax(240px,22vw)]">
           <section className="flex min-h-0 items-center justify-center rounded-lg border border-white/5 bg-transparent p-[min(1vw,0.75rem)]">
             <div className="grid aspect-square h-full max-h-full max-w-full grid-cols-7 gap-[min(0.55vw,0.5rem)]">
@@ -112,28 +137,38 @@ export default function QuackverseOverlayPage() {
                     )}
                   >
                     {piece && card ? (
-                      <div className="flex h-full flex-col justify-between">
-                        <div className="flex justify-between text-[clamp(0.5rem,0.75vw,0.7rem)]">
-                          <span className="rounded bg-black/40 px-1.5 py-0.5">{players[piece.owner].short}</span>
-                          <span>#{index + 1}</span>
-                        </div>
-                        <div className="px-1 text-[clamp(0.52rem,0.85vw,0.82rem)] font-semibold leading-tight">{card.name}</div>
-                        <div>
-                          <div className="grid grid-cols-4 gap-1 text-[clamp(0.45rem,0.65vw,0.65rem)] text-slate-200">
-                            <span>ATK {stats?.atk}</span>
-                            <span>DEF {stats?.def}</span>
-                            <span>SPD {stats?.spd}</span>
-                            <span>HP {piece.currentHp}</span>
+                      <div className="flex h-full flex-col overflow-hidden rounded-lg">
+                        <div className="relative flex-1 overflow-hidden rounded-lg">
+                          <img
+                            src={card.artUrl || ''}
+                            alt={card.name}
+                            className="h-full w-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                          <div className="absolute inset-x-0 top-0 flex justify-between gap-1 p-2 text-[clamp(0.5rem,0.75vw,0.7rem)]">
+                            <span className="rounded bg-black/45 px-1.5 py-0.5">{players[piece.owner].short}</span>
+                            <span>#{index + 1}</span>
                           </div>
-                          {!!piece.equipmentIds?.length && (
-                            <div className="mt-1 text-[clamp(0.45rem,0.65vw,0.62rem)] text-cyan-100">Gear x{piece.equipmentIds.length}</div>
-                          )}
-                          {piece.fatigued && <div className="text-[clamp(0.45rem,0.65vw,0.62rem)] text-amber-100">Fatigued</div>}
-                          <div className="mt-1 h-1.5 rounded-full bg-black/50">
-                            <div
-                              className="h-full rounded-full bg-emerald-300"
-                              style={{ width: `${Math.max(4, (piece.currentHp / piece.maxHp) * 100)}%` }}
-                            />
+                          <div className="absolute inset-x-0 bottom-0 p-2">
+                            <div className="px-1 text-[clamp(0.52rem,0.85vw,0.82rem)] font-semibold leading-tight">{card.name}</div>
+                            <div>
+                              <div className="grid grid-cols-4 gap-1 text-[clamp(0.45rem,0.65vw,0.65rem)] text-slate-200">
+                                <span>ATK {stats?.atk}</span>
+                                <span>DEF {stats?.def}</span>
+                                <span>SPD {stats?.spd}</span>
+                                <span>HP {piece.currentHp}</span>
+                              </div>
+                              {!!piece.equipmentIds?.length && (
+                                <div className="mt-1 text-[clamp(0.45rem,0.65vw,0.62rem)] text-cyan-100">Gear x{piece.equipmentIds.length}</div>
+                              )}
+                              {piece.fatigued && <div className="text-[clamp(0.45rem,0.65vw,0.62rem)] text-amber-100">Fatigued</div>}
+                              <div className="mt-1 h-1.5 rounded-full bg-black/50">
+                                <div
+                                  className="h-full rounded-full bg-emerald-300"
+                                  style={{ width: `${Math.max(4, (piece.currentHp / piece.maxHp) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

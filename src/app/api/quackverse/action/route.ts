@@ -79,6 +79,12 @@ const makePiece = (owner: PlayerId, card: QuackverseCard, instanceId = makeInsta
 const numberFromText = (text: string, pattern: RegExp) => Number(text.match(pattern)?.[1] || 0);
 const cardFor = (piece: QuackverseSavedPiece) => quackverseCards.find((card) => card.id === piece.cardId);
 const isRole = (card: QuackverseCard, token: string) => `${card.name} ${card.role || ''}`.toLowerCase().includes(token.toLowerCase());
+const deckForPlayer = (state: QuackverseSavedState, playerId: PlayerId) => {
+  const userId = state.claimedPlayers[playerId];
+  const collectionDeck = userId ? state.collections?.[userId]?.deck : [];
+  const preferredDeck = Array.isArray(collectionDeck) && collectionDeck.length > 0 ? collectionDeck : starterBattleDecks[playerId];
+  return preferredDeck.filter((cardId) => quackverseCards.some((card) => card.id === cardId));
+};
 
 type DetectedFormation = {
   owner: PlayerId;
@@ -439,20 +445,15 @@ function endTurn(state: QuackverseSavedState, actedOverride?: boolean) {
 }
 
 function loadMockGame(state: QuackverseSavedState) {
-  const p1 = quickStartSquads.playerOne.map((id) => quackverseDucks.find((card) => card.id === id)).filter(Boolean) as QuackverseCard[];
-  const p2 = quickStartSquads.playerTwo.map((id) => quackverseDucks.find((card) => card.id === id)).filter(Boolean) as QuackverseCard[];
-  const grid = Array.from({ length: gridSize * gridSize }, () => null) as Array<QuackverseSavedPiece | null>;
-  [1, 2, 3, 4, 5].forEach((col, index) => {
-    grid[gridSize * (gridSize - 1) + col] = makePiece('playerOne', p1[index]);
-    grid[col] = makePiece('playerTwo', p2[index]);
-  });
+  const p1Deck = deckForPlayer(state, 'playerOne');
+  const p2Deck = deckForPlayer(state, 'playerTwo');
   state.gridSize = gridSize;
   state.squadSize = quackverseSquadSize;
-  state.squads = { playerOne: quickStartSquads.playerOne, playerTwo: quickStartSquads.playerTwo };
-  state.grid = grid;
+  state.squads = { playerOne: [], playerTwo: [] };
+  state.grid = Array.from({ length: gridSize * gridSize }, () => null) as Array<QuackverseSavedPiece | null>;
   state.battlePiles = {
-    playerOne: buildBattlePile('playerOne', [...quickStartSquads.playerOne, 81, 84, 85, 86, 88]),
-    playerTwo: buildBattlePile('playerTwo', [...quickStartSquads.playerTwo, 83, 87, 90, 95, 96]),
+    playerOne: buildBattlePile('playerOne', p1Deck),
+    playerTwo: buildBattlePile('playerTwo', p2Deck),
   };
   state.score = { playerOne: 0, playerTwo: 0 };
   state.koCount = { playerOne: 0, playerTwo: 0 };
@@ -466,20 +467,27 @@ function loadMockGame(state: QuackverseSavedState) {
   state.activePlayer = 'playerOne';
   state.turnNumber = 1;
   state.matchLog = [
-    'Mock game loaded: Ranger Strike enters from the bottom, Eclipse Ambush enters from the top.',
-    'Player 1 starts. Select a duck, then Move or Attack from the action panel.',
+    'Mock game loaded: current decks are ready and both entry rows are open.',
+    'Player 1 starts. Select a duck from the hand, then place it on the bottom entry row.',
   ];
+  state.npcPlayers = { playerOne: false, playerTwo: true };
 }
 
 function resetMatchState(state: QuackverseSavedState, clearSeats = true) {
   const nextState = normalizeQuackverseState({});
   if (!clearSeats) {
     nextState.claimedPlayers = { ...state.claimedPlayers };
-    nextState.npcPlayers = { ...state.npcPlayers };
   }
   Object.assign(state, nextState);
-  state.battlePiles = { playerOne: buildBattlePile('playerOne', starterBattleDecks.playerOne), playerTwo: buildBattlePile('playerTwo', starterBattleDecks.playerTwo) };
-  state.matchLog = [clearSeats ? 'Match ended. Seats are open for the next players.' : 'Board cleared. Build squads, place ducks, then start taking turns.'];
+  state.npcPlayers = { playerOne: false, playerTwo: false };
+  state.battlePiles = {
+    playerOne: buildBattlePile('playerOne', deckForPlayer(state, 'playerOne')),
+    playerTwo: buildBattlePile('playerTwo', deckForPlayer(state, 'playerTwo')),
+  };
+  state.grid = Array.from({ length: gridSize * gridSize }, () => null) as Array<QuackverseSavedPiece | null>;
+  state.matchLog = [
+    clearSeats ? 'Match ended. Seats are open for the next players.' : 'Board cleared. Current decks are ready. Place ducks from the entry rows.',
+  ];
 }
 
 export async function POST(req: NextRequest) {
@@ -532,8 +540,8 @@ export async function POST(req: NextRequest) {
     if (actionType === 'leaveSeat') {
       if (!requestUserId || !activeSeat) return reject('You do not have a claimed seat.');
       state.claimedPlayers[activeSeat] = '';
-      state.npcPlayers[activeSeat] = true;
-      addLog(state, `${playerLabels[activeSeat].short} left. NPC control is enabled until someone else claims the seat.`);
+      state.npcPlayers[activeSeat] = false;
+      addLog(state, `${playerLabels[activeSeat].short} left. The seat is open.`);
       activeSeat = null;
     }
 
@@ -542,8 +550,8 @@ export async function POST(req: NextRequest) {
       const playerId = body.playerId as PlayerId;
       if (!adminRequest && playerId !== activeSeat) return reject('Only admins can clear another player.');
       state.claimedPlayers[playerId] = '';
-      state.npcPlayers[playerId] = true;
-      addLog(state, `${playerLabels[playerId].short} seat cleared. NPC control is enabled.`);
+      state.npcPlayers[playerId] = false;
+      addLog(state, `${playerLabels[playerId].short} seat cleared.`);
       if (playerId === activeSeat) activeSeat = null;
     }
 

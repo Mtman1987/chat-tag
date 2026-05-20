@@ -88,7 +88,7 @@ export const defaultQuackverseState = (): QuackverseSavedState => ({
     playerOne: { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] },
     playerTwo: { deployedOrMoved: false, attacked: [], usedAbility: [], equipped: [] },
   },
-  npcPlayers: { playerOne: false, playerTwo: true },
+  npcPlayers: { playerOne: false, playerTwo: false },
   winner: null,
   matchLog: ['No match loaded yet.'],
   collections: {},
@@ -182,7 +182,7 @@ export function normalizeQuackverseState(value: Partial<QuackverseSavedState> | 
     },
     npcPlayers: {
       playerOne: Boolean(value?.npcPlayers?.playerOne),
-      playerTwo: value?.npcPlayers?.playerTwo === undefined ? true : Boolean(value.npcPlayers.playerTwo),
+      playerTwo: Boolean(value?.npcPlayers?.playerTwo),
     },
     collections: Object.fromEntries(
       Object.entries(value?.collections || {}).map(([userId, collection]) => [

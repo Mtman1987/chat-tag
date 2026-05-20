@@ -31,6 +31,7 @@ export default function QuackversePreviewPage() {
   const [dragging, setDragging] = useState(false);
   const [animationNonce, setAnimationNonce] = useState(0);
   const family = useMemo(() => getQuackverseFamilyGroup(card.id), []);
+  const showBoardStats = artVisible || dragging;
   const hoverResetTimer = useRef<number | null>(null);
   const hoverLoopTimer = useRef<number | null>(null);
   const hoverStartedAt = useRef<number | null>(null);
@@ -241,11 +242,17 @@ export default function QuackversePreviewPage() {
                               onMouseEnter={showAnimatedArt}
                               onMouseLeave={hideAnimatedArt}
                             />
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent p-2">
-                              <div className="text-[0.65rem] font-semibold leading-tight text-white">{card.name}</div>
-                              <div className="text-[0.58rem] text-slate-200">
-                                ATK {card.atk} · DEF {card.def} · SPD {card.spd} · HP {card.hp}
-                              </div>
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent p-2">
+                              {showBoardStats ? (
+                                <div className="text-[0.58rem] text-slate-200">
+                                  ATK {card.atk} · DEF {card.def} · SPD {card.spd} · SPC {card.spc} · HP {card.hp}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="text-[0.65rem] font-semibold leading-tight text-white">{card.name}</div>
+                                  <div className="text-[0.58rem] text-slate-200">{family?.label || 'Unsorted schema'}</div>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

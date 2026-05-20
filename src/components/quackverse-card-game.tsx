@@ -4,8 +4,6 @@ import { createContext, useCallback, useEffect, useMemo, useRef, useState, useCo
 import {
   BadgePlus,
   BookOpen,
-  Bot,
-  Crosshair,
   Flag,
   Hand,
   HeartPulse,
@@ -36,6 +34,7 @@ import {
   quackverseEquipment,
   type QuackverseCard,
 } from '@/lib/quackverse-data';
+import { getQuackverseFamilyGroup } from '@/lib/quackverse-family-map';
 import { summarizeCollection } from '@/lib/quackverse-packs';
 import {
   quackverseRoomIdFromParams,
@@ -356,10 +355,12 @@ function CardFace({
   const artManifest = useContext(QuackverseArtContext);
   const [isHovered, setIsHovered] = useState(false);
   const rarityClass = rarityClasses[card.rarity || ''] || 'border-slate-500 text-slate-200';
+  const familyGroup = getQuackverseFamilyGroup(card.id);
   const artEntry = artManifest[String(card.id)];
   const staticUrl = artEntry?.static?.url || card.artUrl || '';
   const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
   const cardArtUrl = isHovered ? hoverUrl : staticUrl;
+  const description = card.flavor || card.role || card.effect || 'No description available.';
   return (
     <button
       type="button"
@@ -374,7 +375,7 @@ function CardFace({
         selected ? 'border-cyan-300 ring-2 ring-cyan-300/40' : 'border-white/10',
       )}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className={cn('flex items-start justify-between gap-2', selected && 'flex-wrap')}>
         <div className="min-w-0">
           <div className="text-[0.68rem] font-semibold uppercase tracking-normal text-slate-400">
             #{card.id} {card.type}
@@ -391,9 +392,28 @@ function CardFace({
         </div>
       </div>
 
-      <div className="mt-2 text-xs text-slate-300">{card.role || card.effect}</div>
+      {selected ? (
+        <div className="mt-2 space-y-2 text-xs text-slate-300">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="border-white/20 text-slate-200">
+              {familyGroup?.label || 'Unsorted'}
+            </Badge>
+            <Badge variant="outline" className="border-cyan-300/50 text-cyan-100">
+              {card.role || card.type}
+            </Badge>
+            <Badge variant="outline" className="border-amber-300/50 text-amber-100">
+              Card #{card.id}
+            </Badge>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[0.72rem] text-slate-200">
+            {description}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 text-xs text-slate-300">{card.role || card.effect}</div>
+      )}
 
-      <div className="mt-3 flex aspect-[5/3] items-center justify-center rounded-md border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 text-center">
+      <div className={cn('mt-3 flex items-center justify-center rounded-md border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 text-center', selected ? 'aspect-[4/3]' : 'aspect-[5/3]')}>
         {cardArtUrl ? (
           <img src={cardArtUrl} alt="" className="h-full w-full rounded-md object-cover" />
         ) : (
@@ -417,6 +437,22 @@ function CardFace({
       ) : (
         <div className="mt-3 rounded-md border border-white/10 bg-white/[0.04] p-2 text-xs text-slate-200">
           {card.effect}
+        </div>
+      )}
+
+      {selected && (
+        <div className="mt-3 grid gap-2 text-[0.68rem] text-slate-300 sm:grid-cols-2">
+          <div className="rounded-md border border-white/10 bg-white/[0.04] p-2">
+            <div className="mb-1 font-semibold text-white">Card details</div>
+            <div>Type: {card.type}</div>
+            <div>Rarity: {card.rarity || 'Gear'}</div>
+            <div>Role: {card.role || 'None'}</div>
+          </div>
+          <div className="rounded-md border border-white/10 bg-white/[0.04] p-2">
+            <div className="mb-1 font-semibold text-white">Record</div>
+            <div>W / L tracking is not stored yet.</div>
+            <div>That should come from per-card match history later.</div>
+          </div>
         </div>
       )}
 
@@ -741,10 +777,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const inspectedCard = inspectedCardId ? quackverseCards.find((card) => card.id === inspectedCardId) || null : null;
   const mySeat = viewer?.seat || null;
   const canControlActivePlayer = !!mySeat && mySeat === activePlayer && !winner;
-  const selectedGridCard =
-    selectedSquadCard &&
-    squads[selectedSquadCard.owner].find((card) => card.id === selectedSquadCard.cardId);
   const selectedPiece = selectedBoardIndex === null ? null : grid[selectedBoardIndex];
+  const selectedGridCard = !!selectedBattleCard || selectedPiece !== null;
   const canActWithSelected = !!selectedPiece && selectedPiece.owner === activePlayer && canControlActivePlayer;
   const activeTurnActions = turnActions[activePlayer];
   const selectedPieceKey = selectedPiece ? pieceKey(selectedPiece) : '';
@@ -780,6 +814,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       ),
     [battlePiles],
   );
+  const activeHandCards = battleHandCards[activePlayer];
   const reachableMoveTargets = useMemo(() => {
     if (!selectedPiece || selectedBoardIndex === null || selectedPiece.owner !== activePlayer || winner) return new Set<number>();
     const budget = getMovementBudget(getEffectiveStats(selectedPiece).spd);
@@ -811,6 +846,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     () => deck.map((cardId) => quackverseCards.find((card) => card.id === cardId)).filter(Boolean) as QuackverseCard[],
     [deck],
   );
+  const currentDeckReady = deckCards.length > 0;
   const deckDuckCount = deckCards.filter((card) => card.type === 'Duck').length;
   const deckEquipmentCount = deckCards.filter((card) => card.type === 'Equipment').length;
   const isDeckPlayable = deck.length === 20 && deckDuckCount >= 10 && deckEquipmentCount <= 8;
@@ -848,14 +884,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     isApplyingSharedState.current = true;
     setActivePlayer(shared.activePlayer);
     setTurnNumber(shared.turnNumber);
-    setSquads({
-      playerOne: shared.squads.playerOne
-        .map((cardId) => quackverseCards.find((card) => card.id === cardId))
-        .filter(Boolean) as QuackverseCard[],
-      playerTwo: shared.squads.playerTwo
-        .map((cardId) => quackverseCards.find((card) => card.id === cardId))
-        .filter(Boolean) as QuackverseCard[],
-    });
+    setSquads({ playerOne: [], playerTwo: [] });
+    setSelectedSquadCard(null);
     setGrid(shared.grid.map(savedPieceToGridPiece));
     setBattlePiles(shared.battlePiles);
     setScore(shared.score);
@@ -879,10 +909,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       squadSize,
       activePlayer,
       turnNumber,
-      squads: {
-        playerOne: squads.playerOne.map((card) => card.id),
-        playerTwo: squads.playerTwo.map((card) => card.id),
-      },
+      squads: { playerOne: [], playerTwo: [] },
       claimedPlayers,
       battlePiles,
       grid: grid.map((piece) =>
@@ -910,7 +937,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       collections: {},
       updatedAt: new Date().toISOString(),
     }),
-    [activePlayer, battlePiles, claimedPlayers, formationVp, grid, koCount, matchLog, npcPlayers, score, scoredFormationKeys, squads, turnActions, turnNumber, winner],
+    [activePlayer, battlePiles, claimedPlayers, formationVp, grid, koCount, matchLog, npcPlayers, score, scoredFormationKeys, turnActions, turnNumber, winner],
   );
   useEffect(() => {
     let cancelled = false;
@@ -1566,6 +1593,11 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const handleBoardSquareClick = (index: number) => {
     const slot = grid[index];
 
+    if (!slot && selectedBoardIndex !== null && selectedPiece && selectedPiece.owner === activePlayer && reachableMoveTargets.has(index)) {
+      movePiece(index);
+      return;
+    }
+
     if (actionMode === 'move' && !slot) {
       if (isLegalMoveTarget(index)) {
         movePiece(index);
@@ -1588,7 +1620,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       setSelectedBoardIndex(index);
       setSelectedCardId(slot.card.id);
       setInspectedCardId(slot.card.id);
-      setSelectedSquadCard({ owner: slot.owner, cardId: slot.card.id });
       setActionMode('select');
       return;
     }
@@ -2076,7 +2107,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           <div>
             <h2 className="font-headline text-2xl text-white">Quackverse Space-Force</h2>
             <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-300">
-              <span className="rounded-md bg-white/[0.06] px-2 py-1">5-duck squads</span>
+              <span className="rounded-md bg-white/[0.06] px-2 py-1">Current deck</span>
               <span className="rounded-md bg-white/[0.06] px-2 py-1">7x7 tactical board</span>
               <span className="rounded-md bg-white/[0.06] px-2 py-1">6 VP wins</span>
               <span className="rounded-md bg-white/[0.06] px-2 py-1">Room {displayRoom}</span>
@@ -2159,31 +2190,62 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
               <section className="space-y-4">
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {(Object.keys(displayPlayers) as PlayerId[]).map((playerId) => (
-                    <div key={playerId} className={cn('rounded-lg border p-3', displayPlayers[playerId].accent)}>
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="font-headline text-lg text-white">{displayPlayers[playerId].label} Squad</h3>
-                        <div className="rounded-md bg-black/25 px-2 py-1 text-sm">{score[playerId]}/6 VP</div>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="font-headline text-lg text-white">Current Deck</h3>
+                        <p className="text-sm text-slate-400">
+                          {currentDeckReady
+                            ? `${deck.length} cards ready. Start a match with this deck, or use the mock game for NPC testing.`
+                            : 'Build a deck in Collection first. This deck becomes the default match deck.'}
+                        </p>
                       </div>
-                      <div className="grid grid-cols-5 gap-2">
-                        {Array.from({ length: squadSize }, (_, slotIndex) => {
-                          const card = squads[playerId][slotIndex];
-                          return (
-                            <SquadSlot
-                              key={slotIndex}
-                              card={card}
-                              owner={playerId}
-                              index={slotIndex}
-                              selected={selectedSquadCard?.owner === playerId && selectedSquadCard.cardId === card?.id}
-                              onSelect={() => card && setSelectedSquadCard({ owner: playerId, cardId: card.id })}
-                              onRemove={() => card && removeFromSquad(playerId, card.id)}
-                            />
-                          );
-                        })}
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" onClick={resetTable} disabled={isActionPending}>
+                          Start Game
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={loadMockGame} disabled={isActionPending}>
+                          Start Mock Game
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
+                      <div className="rounded-md bg-white/[0.05] p-2">Cards {deck.length}/20</div>
+                      <div className="rounded-md bg-white/[0.05] p-2">Ducks {deckDuckCount}/10+</div>
+                      <div className="rounded-md bg-white/[0.05] p-2">Gear {deckEquipmentCount}/8 max</div>
+                    </div>
+                    <div className={cn('mt-2 rounded-md p-2 text-xs', isDeckPlayable ? 'bg-emerald-400/10 text-emerald-100' : 'bg-amber-400/10 text-amber-100')}>
+                      {isDeckPlayable ? 'Deck is playable for testing.' : 'Deck needs 20 cards, at least 10 ducks, and no more than 8 equipment cards.'}
+                    </div>
+                    {deckCards.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {deckCards.slice(0, 20).map((card) => (
+                          <button
+                            key={card.id}
+                            type="button"
+                            className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-slate-200 hover:border-cyan-300/60"
+                            onClick={() => setSelectedCardId(card.id)}
+                          >
+                            {card.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <div className="text-sm font-semibold text-white">Match Summary</div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-slate-300">
+                      <div className="rounded-md bg-white/[0.05] p-2">P1: {score.playerOne}/6 VP</div>
+                      <div className="rounded-md bg-white/[0.05] p-2">P2: {score.playerTwo}/6 VP</div>
+                      <div className="rounded-md bg-white/[0.05] p-2">P1 KOs: {koCount.playerOne}</div>
+                      <div className="rounded-md bg-white/[0.05] p-2">P2 KOs: {koCount.playerTwo}</div>
+                    </div>
+                    <div className="mt-2 rounded-md bg-white/[0.05] p-2 text-xs text-slate-400">
+                      Each player enters from their back row. P1 deploys on the bottom row and P2 deploys on the top row.
+                    </div>
+                  </div>
                 </div>
 
                 <div className="rounded-lg border border-white/10 bg-black/20 p-4">
@@ -2204,7 +2266,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
                     <div className="rounded-md bg-white/[0.05] p-2">P1: {score.playerOne}/6 VP · KOs {koCount.playerOne}</div>
                     <div className="rounded-md bg-white/[0.05] p-2">P2: {score.playerTwo}/6 VP · KOs {koCount.playerTwo}</div>
-                    <div className="rounded-md bg-white/[0.05] p-2">{npcControlButtons}</div>
+                    <div className="rounded-md bg-white/[0.05] p-2">Deck: {currentDeckReady ? 'ready' : 'empty'}</div>
                   </div>
                 </div>
 
@@ -2256,7 +2318,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="font-headline text-lg text-white">Tactical Card Board</h3>
-                      <p className="text-sm text-slate-400">Select a squad duck, then place it onto any open board square.</p>
+                      <p className="text-sm text-slate-400">Select a duck from the hand, then place it on an entry row or move it by clicking a highlighted square.</p>
                     </div>
                     <Button type="button" variant="secondary" onClick={resetTable}>
                       <RotateCcw className="mr-2 h-4 w-4" />
@@ -2264,7 +2326,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                     </Button>
                   </div>
 
-                  <div className="mx-auto max-w-[58rem] rounded-lg border border-white/5 bg-transparent p-3">
+                  <div className="mx-auto max-w-[64rem] rounded-lg border border-white/5 bg-transparent p-3">
                     <div className="grid grid-cols-7 gap-2">
                       {grid.map((slot, index) => {
                         const row = Math.floor(index / gridSize);
@@ -2294,37 +2356,59 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                               slot?.owner && displayPlayers[slot.owner].accent,
                             )}
                           >
-                            {slot ? (
-                              <div className="flex h-full flex-col justify-between p-2">
-                                <div className="flex items-start justify-between gap-1">
-                                  <span className="rounded bg-black/35 px-1.5 py-0.5 text-[0.6rem] font-semibold text-white">
-                                    {displayPlayers[slot.owner].short}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="rounded bg-black/40 px-1.5 py-0.5 text-[0.6rem] text-slate-200 hover:bg-black/70"
-                                    onClick={() => clearSquare(index)}
-                                    aria-label={`Clear square ${index + 1}`}
-                                  >
-                                    Clear
-                                  </button>
+                      {slot ? (
+                        <button
+                          type="button"
+                          className="flex h-full w-full flex-col overflow-hidden rounded-lg text-left"
+                          onClick={() => handleBoardSquareClick(index)}
+                        >
+                          <div className="relative flex-1 overflow-hidden">
+                            <img
+                              src={artManifest[String(slot.card.id)]?.static?.url || slot.card.artUrl || ''}
+                              alt={slot.card.name}
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                            <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-2 text-[0.6rem]">
+                              <span className="rounded bg-black/45 px-1.5 py-0.5 font-semibold text-white">{displayPlayers[slot.owner].short}</span>
+                              <button
+                                type="button"
+                                className="rounded bg-black/45 px-1.5 py-0.5 text-slate-200 hover:bg-black/70"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  clearSquare(index);
+                                }}
+                                aria-label={`Clear square ${index + 1}`}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="absolute inset-x-0 bottom-0 p-2 text-left text-white">
+                              {isSelectedSquare ? (
+                                <div className="space-y-1 text-[0.58rem] text-slate-200">
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">ATK {effectiveStats?.atk}</span>
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">DEF {effectiveStats?.def}</span>
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">SPD {effectiveStats?.spd}</span>
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">HP {slot.currentHp}</span>
+                                  </div>
+                                  <div className="line-clamp-2 text-xs font-semibold">{slot.card.name}</div>
                                 </div>
-                                <button type="button" className="min-h-0 flex-1 py-1" onClick={() => handleBoardSquareClick(index)}>
-                                  <span className="line-clamp-3 text-[0.65rem] font-semibold leading-tight text-white sm:text-xs">{slot.card.name}</span>
-                                </button>
-                                <div className="grid grid-cols-4 gap-1 text-[0.58rem] text-slate-200">
-                                  <span>ATK {effectiveStats?.atk}</span>
-                                  <span>DEF {effectiveStats?.def}</span>
-                                  <span>SPD {effectiveStats?.spd}</span>
-                                  <span>HP {slot.currentHp}</span>
-                                </div>
-                                {slot.equipmentIds.length > 0 && <div className="text-[0.55rem] text-cyan-100">Gear x{slot.equipmentIds.length}</div>}
-                                {slot.fatigue > 0 && <div className="text-[0.55rem] text-amber-100">Fatigue {slot.fatigue}</div>}
-                                <div className="mt-1 h-1 rounded-full bg-black/40">
-                                  <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
-                                </div>
-                              </div>
-                            ) : (
+                              ) : (
+                                <>
+                                  <div className="line-clamp-2 text-[0.72rem] font-semibold">{slot.card.name}</div>
+                                  <div className="text-[0.58rem] text-slate-200">
+                                    {getQuackverseFamilyGroup(slot.card.id)?.label || slot.card.role || slot.card.type}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-black/50">
+                            <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
+                          </div>
+                        </button>
+                      ) : (
                               <button
                                 type="button"
                                 onClick={() => handleBoardSquareClick(index)}
@@ -2352,27 +2436,38 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
               <aside className="space-y-4">
                 <Accordion type="multiple" defaultValue={['quick-start', 'log']} className="space-y-3">
                   <AccordionItem value="quick-start" className="rounded-lg border border-white/10 bg-black/20 px-4">
-                    <AccordionTrigger className="font-headline text-lg text-white hover:no-underline">Quick Start</AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-3">
-                        {(Object.keys(quickStartSquads) as PlayerId[]).map((playerId) => (
-                          <div key={playerId}>
-                            <div className="mb-2 text-xs font-semibold uppercase text-slate-400">{displayPlayers[playerId].label}</div>
-                            <div className="grid gap-2">
-                              {quickStartSquads[playerId].map((squad) => (
-                                <Button key={`${playerId}-${squad.name}`} type="button" variant="secondary" className="justify-start" onClick={() => loadQuickStart(playerId, squad.cardIds)}>
-                                  {squad.name}
-                                </Button>
-                              ))}
-                            </div>
+                  <AccordionTrigger className="font-headline text-lg text-white hover:no-underline">Match Start</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3">
+                      <div className="rounded-md bg-white/[0.05] p-3 text-sm text-slate-300">
+                        <div className="font-semibold text-white">Current deck</div>
+                        <div className="mt-1 text-slate-400">
+                          {currentDeckReady ? `${deck.length} cards are ready to deploy.` : 'No deck available yet.'}
+                        </div>
+                        {deckCards.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {deckCards.slice(0, 12).map((card) => (
+                              <button
+                                key={card.id}
+                                type="button"
+                                className="rounded-md bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100"
+                                onClick={() => setSelectedCardId(card.id)}
+                              >
+                                {card.name}
+                              </button>
+                            ))}
                           </div>
-                        ))}
-                        <Button type="button" className="w-full" onClick={loadMockGame}>
-                          Load Mock Game
-                        </Button>
+                        )}
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                      <Button type="button" size="sm" className="w-full" onClick={resetTable}>
+                        Start Game
+                      </Button>
+                      <Button type="button" size="sm" variant="secondary" className="w-full" onClick={loadMockGame}>
+                        Start Mock Game
+                      </Button>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
                   <AccordionItem value="score" className="rounded-lg border border-white/10 bg-black/20 px-4">
                     <AccordionTrigger className="font-headline text-lg text-white hover:no-underline">Manual Score</AccordionTrigger>
@@ -2454,9 +2549,9 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                       <div key={card.id} className="space-y-2">
                         <CardFace card={card} compact selected={selectedCardId === card.id} onClick={() => setSelectedCardId(card.id)} />
                         {card.type === 'Duck' && (
-                          <Button type="button" size="sm" className="w-full" onClick={() => addToSquad(card)}>
+                          <Button type="button" size="sm" className="w-full" onClick={() => addToDeck(card.id)}>
                             <BadgePlus className="mr-2 h-4 w-4" />
-                            Add to {displayPlayers[activePlayer].short}
+                            Add to Deck
                           </Button>
                         )}
                       </div>
@@ -2647,6 +2742,45 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           </div>
         </div>
 
+        <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-white">Active Hand</div>
+            <div className="text-xs text-slate-400">
+              Draw {battlePiles[activePlayer].drawPile.length} · Discard {battlePiles[activePlayer].discardPile.length} · Hand {battlePiles[activePlayer].hand.length}
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {activeHandCards.length === 0 ? (
+              <div className="rounded-md border border-dashed border-white/10 bg-white/[0.03] p-3 text-xs text-slate-500">No cards in hand.</div>
+            ) : (
+              activeHandCards.map(({ instance, card }) => (
+                <button
+                  key={instance.instanceId}
+                  type="button"
+                  className={cn(
+                    'rounded-md border bg-white/[0.04] p-3 text-left transition hover:border-cyan-300/70 hover:bg-white/[0.07]',
+                    selectedBattleCard?.instanceId === instance.instanceId ? 'border-cyan-300 ring-2 ring-cyan-300/30' : 'border-white/10',
+                  )}
+                  onClick={() => {
+                    setSelectedBattleCard({ owner: activePlayer, instanceId: instance.instanceId });
+                    setSelectedCardId(card.id);
+                    setInspectedCardId(card.id);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs uppercase text-slate-400">{card.type}</div>
+                      <div className="font-headline text-sm text-white">{card.name}</div>
+                    </div>
+                    <FamilyAvatar card={card} />
+                  </div>
+                  <div className="mt-2 text-xs text-slate-300">{card.type === 'Duck' ? card.role : card.effect}</div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
         <Tabs defaultValue="controls" className="space-y-3">
           <TabsList className="grid h-auto w-full grid-cols-4 bg-secondary/50 p-1">
             <TabsTrigger value="controls">Controls</TabsTrigger>
@@ -2682,11 +2816,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <Hand className="mr-1.5 inline h-3.5 w-3.5" />
                   {displayPlayers[activePlayer].short} turn
                 </div>
-                <Button type="button" size="sm" variant="secondary" disabled={!npcPlayers[activePlayer] || !!winner} onClick={() => runNpcTurn(activePlayer)}>
-                  <Bot className="mr-1.5 h-3.5 w-3.5" />
-                  NPC Turn
-                </Button>
-                <div className="rounded-md bg-white/[0.05] p-2">{npcControlButtons}</div>
+                <div className="rounded-md bg-white/[0.05] p-2">Deck: {currentDeckReady ? 'ready' : 'empty'}</div>
               </div>
               <div className="mt-3 rounded-md bg-white/[0.05] p-2 text-xs text-slate-300">
                 Hand {battlePiles[activePlayer].hand.length} · Draw {battlePiles[activePlayer].drawPile.length} · Discard {battlePiles[activePlayer].discardPile.length}
@@ -2776,23 +2906,34 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
               </AccordionItem>
 
               <AccordionItem value="quick-start" className="rounded-lg border border-white/10 bg-black/20 px-3">
-                <AccordionTrigger className="py-3 text-sm text-white hover:no-underline">Quick Start</AccordionTrigger>
+                <AccordionTrigger className="py-3 text-sm text-white hover:no-underline">Match Start</AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3">
-                    {(Object.keys(quickStartSquads) as PlayerId[]).map((playerId) => (
-                      <div key={playerId}>
-                        <div className="mb-1 text-xs font-semibold uppercase text-slate-400">{displayPlayers[playerId].label}</div>
-                        <div className="grid gap-2">
-                          {quickStartSquads[playerId].map((squad) => (
-                            <Button key={`${playerId}-${squad.name}`} type="button" size="sm" variant="secondary" className="justify-start" onClick={() => loadQuickStart(playerId, squad.cardIds)}>
-                              {squad.name}
-                            </Button>
+                    <div className="rounded-md bg-white/[0.05] p-3 text-sm text-slate-300">
+                      <div className="font-semibold text-white">Current deck</div>
+                      <div className="mt-1 text-slate-400">
+                        {currentDeckReady ? `${deck.length} cards are ready to deploy.` : 'No deck available yet.'}
+                      </div>
+                      {deckCards.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {deckCards.slice(0, 12).map((card) => (
+                            <button
+                              key={card.id}
+                              type="button"
+                              className="rounded-md bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100"
+                              onClick={() => setSelectedCardId(card.id)}
+                            >
+                              {card.name}
+                            </button>
                           ))}
                         </div>
-                      </div>
-                    ))}
-                    <Button type="button" size="sm" className="w-full" onClick={loadMockGame}>
-                      Load Mock Game
+                      )}
+                    </div>
+                    <Button type="button" size="sm" className="w-full" onClick={resetTable}>
+                      Start Game
+                    </Button>
+                    <Button type="button" size="sm" variant="secondary" className="w-full" onClick={loadMockGame}>
+                      Start Mock Game
                     </Button>
                   </div>
                 </AccordionContent>
@@ -2827,7 +2968,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
         <div>
           <h2 className={cn('font-headline text-2xl text-white', isCommandLayout && 'text-xl')}>Quackverse Space-Force</h2>
           <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-300">
-            <span className="rounded-md bg-white/[0.06] px-2 py-1">5-duck squads</span>
+            <span className="rounded-md bg-white/[0.06] px-2 py-1">Current deck</span>
             <span className="rounded-md bg-white/[0.06] px-2 py-1">7x7 tactical board</span>
             <span className="rounded-md bg-white/[0.06] px-2 py-1">6 VP wins</span>
             <span className="rounded-md bg-white/[0.06] px-2 py-1">Turn {turnNumber}: {displayPlayers[activePlayer].label}</span>
@@ -2952,9 +3093,9 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                     onClick={() => setSelectedCardId(card.id)}
                   />
                   {card.type === 'Duck' && (
-                    <Button type="button" size="sm" className="w-full" onClick={() => addToSquad(card)}>
+                    <Button type="button" size="sm" className="w-full" onClick={() => addToDeck(card.id)}>
                       <BadgePlus className="mr-2 h-4 w-4" />
-                      Add to {displayPlayers[activePlayer].short}
+                      Add to Deck
                     </Button>
                   )}
                 </div>
@@ -2964,34 +3105,39 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
         </section>
 
         <section className={cn('space-y-4', isCommandLayout && 'space-y-3')}>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {(Object.keys(displayPlayers) as PlayerId[]).map((playerId) => (
-              <div key={playerId} className={cn('rounded-lg border p-3', displayPlayers[playerId].accent)}>
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="font-headline text-lg text-white">{displayPlayers[playerId].label} Squad</h3>
-                  <div className="flex items-center gap-1 rounded-md bg-black/25 px-2 py-1 text-sm">
-                    <Crosshair className="h-4 w-4" />
-                    {score[playerId]}
-                  </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="font-headline text-lg text-white">Current Deck</h3>
+                  <p className="text-sm text-slate-400">
+                    {currentDeckReady ? `${deck.length} cards ready for match start.` : 'Build a deck in Collection first.'}
+                  </p>
                 </div>
-                <div className="grid grid-cols-5 gap-2">
-                  {Array.from({ length: squadSize }, (_, slotIndex) => {
-                    const card = squads[playerId][slotIndex];
-                    return (
-                      <SquadSlot
-                        key={slotIndex}
-                        card={card}
-                        owner={playerId}
-                        index={slotIndex}
-                        selected={selectedSquadCard?.owner === playerId && selectedSquadCard.cardId === card?.id}
-                        onSelect={() => card && setSelectedSquadCard({ owner: playerId, cardId: card.id })}
-                        onRemove={() => card && removeFromSquad(playerId, card.id)}
-                      />
-                    );
-                  })}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={resetTable} disabled={isActionPending}>
+                    Start Game
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={loadMockGame} disabled={isActionPending}>
+                    Start Mock Game
+                  </Button>
                 </div>
               </div>
-            ))}
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
+                <div className="rounded-md bg-white/[0.05] p-2">Cards {deck.length}/20</div>
+                <div className="rounded-md bg-white/[0.05] p-2">Ducks {deckDuckCount}/10+</div>
+                <div className="rounded-md bg-white/[0.05] p-2">Gear {deckEquipmentCount}/8 max</div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+              <div className="text-sm font-semibold text-white">Match Summary</div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-slate-300">
+                <div className="rounded-md bg-white/[0.05] p-2">P1: {score.playerOne}/6 VP</div>
+                <div className="rounded-md bg-white/[0.05] p-2">P2: {score.playerTwo}/6 VP</div>
+                <div className="rounded-md bg-white/[0.05] p-2">P1 KOs: {koCount.playerOne}</div>
+                <div className="rounded-md bg-white/[0.05] p-2">P2 KOs: {koCount.playerTwo}</div>
+              </div>
+            </div>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-black/20 p-4">
@@ -3009,34 +3155,30 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <Hand className="mr-2 inline h-4 w-4" />
                   {displayPlayers[activePlayer].label}'s turn
                 </div>
-                <Button type="button" variant="secondary" disabled={!npcPlayers[activePlayer] || !!winner} onClick={() => runNpcTurn(activePlayer)}>
-                  <Bot className="mr-2 h-4 w-4" />
-                  NPC Turn
-                </Button>
               </div>
             </div>
             <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
               <div className="rounded-md bg-white/[0.05] p-2">P1: {score.playerOne}/6 VP · KOs {koCount.playerOne}</div>
               <div className="rounded-md bg-white/[0.05] p-2">P2: {score.playerTwo}/6 VP · KOs {koCount.playerTwo}</div>
-              <div className="rounded-md bg-white/[0.05] p-2">{npcControlButtons}</div>
+              <div className="rounded-md bg-white/[0.05] p-2">Deck: {currentDeckReady ? 'ready' : 'empty'}</div>
             </div>
           </div>
 
           <div className={cn('rounded-lg border border-white/10 bg-slate-950/70 p-4', isCommandLayout && 'p-3')}>
-            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="font-headline text-lg text-white">Tactical Card Board</h3>
-                <p className="text-sm text-slate-400">
-                  Select a squad duck, then place it onto any open board square.
-                </p>
-              </div>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="font-headline text-lg text-white">Tactical Card Board</h3>
+                  <p className="text-sm text-slate-400">
+                    Select a duck from the hand, then place it on an entry row or move it by clicking a highlighted square.
+                  </p>
+                </div>
               <Button type="button" variant="secondary" onClick={resetTable}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Clear Board
               </Button>
             </div>
 
-            <div className={cn('mx-auto max-w-[52rem] rounded-lg border border-white/5 bg-transparent p-3', isCommandLayout && 'max-w-none p-2')}>
+            <div className={cn('mx-auto max-w-[60rem] rounded-lg border border-white/5 bg-transparent p-3', isCommandLayout && 'max-w-none p-2')}>
               <div className={cn('grid grid-cols-7 gap-2', isCommandLayout && 'gap-1.5')}>
                 {grid.map((slot, index) => {
                   const row = Math.floor(index / gridSize);
@@ -3067,46 +3209,57 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                       )}
                     >
                       {slot ? (
-                        <div className="flex h-full flex-col justify-between p-2">
-                          <div className="flex items-start justify-between gap-1">
-                            <span className="rounded bg-black/35 px-1.5 py-0.5 text-[0.6rem] font-semibold text-white">
-                              {displayPlayers[slot.owner].short}
-                            </span>
-                            <button
-                              type="button"
-                              className="rounded bg-black/40 px-1.5 py-0.5 text-[0.6rem] text-slate-200 hover:bg-black/70"
-                              onClick={() => clearSquare(index)}
-                              aria-label={`Clear square ${index + 1}`}
-                            >
-                              Clear
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            className="min-h-0 flex-1 py-1"
-                            onClick={() => handleBoardSquareClick(index)}
-                          >
-                            <span className="line-clamp-3 text-[0.65rem] font-semibold leading-tight text-white sm:text-xs">
-                              {slot.card.name}
-                            </span>
-                          </button>
-                          <div className="grid grid-cols-4 gap-1 text-[0.58rem] text-slate-200">
-                            <span>ATK {effectiveStats?.atk}</span>
-                            <span>DEF {effectiveStats?.def}</span>
-                            <span>SPD {effectiveStats?.spd}</span>
-                            <span>HP {slot.currentHp}</span>
-                          </div>
-                          {slot.equipmentIds.length > 0 && (
-                            <div className="text-[0.55rem] text-cyan-100">Gear x{slot.equipmentIds.length}</div>
-                          )}
-                          {slot.fatigue > 0 && <div className="text-[0.55rem] text-amber-100">Fatigue {slot.fatigue}</div>}
-                          <div className="mt-1 h-1 rounded-full bg-black/40">
-                            <div
-                              className="h-full rounded-full bg-emerald-300"
-                              style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }}
+                        <button
+                          type="button"
+                          className="flex h-full w-full flex-col overflow-hidden rounded-lg text-left"
+                          onClick={() => handleBoardSquareClick(index)}
+                        >
+                          <div className="relative flex-1 overflow-hidden">
+                            <img
+                              src={artManifest[String(slot.card.id)]?.static?.url || slot.card.artUrl || ''}
+                              alt={slot.card.name}
+                              className="h-full w-full object-cover"
                             />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                            <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-2 text-[0.6rem]">
+                              <span className="rounded bg-black/45 px-1.5 py-0.5 font-semibold text-white">{displayPlayers[slot.owner].short}</span>
+                              <button
+                                type="button"
+                                className="rounded bg-black/45 px-1.5 py-0.5 text-slate-200 hover:bg-black/70"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  clearSquare(index);
+                                }}
+                                aria-label={`Clear square ${index + 1}`}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="absolute inset-x-0 bottom-0 p-2 text-left text-white">
+                              {isSelectedSquare ? (
+                                <div className="space-y-1 text-[0.58rem] text-slate-200">
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">ATK {effectiveStats?.atk}</span>
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">DEF {effectiveStats?.def}</span>
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">SPD {effectiveStats?.spd}</span>
+                                    <span className="rounded bg-black/45 px-1.5 py-0.5">HP {slot.currentHp}</span>
+                                  </div>
+                                  <div className="line-clamp-2 text-xs font-semibold">{slot.card.name}</div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="line-clamp-2 text-[0.72rem] font-semibold">{slot.card.name}</div>
+                                  <div className="text-[0.58rem] text-slate-200">
+                                    {getQuackverseFamilyGroup(slot.card.id)?.label || slot.card.role || slot.card.type}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                          <div className="h-1.5 bg-black/50">
+                            <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
+                          </div>
+                        </button>
                       ) : (
                         <button
                           type="button"
@@ -3162,29 +3315,34 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           <div className="rounded-lg border border-white/10 bg-black/20 p-4">
             <div className="mb-3 flex items-center gap-2">
               <BadgePlus className="h-4 w-4 text-cyan-200" />
-              <h3 className="font-headline text-lg text-white">Quick Start</h3>
+              <h3 className="font-headline text-lg text-white">Match Start</h3>
             </div>
             <div className="space-y-3">
-              {(Object.keys(quickStartSquads) as PlayerId[]).map((playerId) => (
-                <div key={playerId}>
-                  <div className="mb-2 text-xs font-semibold uppercase text-slate-400">{displayPlayers[playerId].label}</div>
-                  <div className="grid gap-2">
-                    {quickStartSquads[playerId].map((squad) => (
-                      <Button
-                        key={`${playerId}-${squad.name}`}
+              <div className="rounded-md bg-white/[0.05] p-3 text-sm text-slate-300">
+                <div className="font-semibold text-white">Current deck</div>
+                <div className="mt-1 text-slate-400">
+                  {currentDeckReady ? `${deck.length} cards are ready to deploy.` : 'No deck available yet.'}
+                </div>
+                {deckCards.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {deckCards.slice(0, 12).map((card) => (
+                      <button
+                        key={card.id}
                         type="button"
-                        variant="secondary"
-                        className="justify-start"
-                        onClick={() => loadQuickStart(playerId, squad.cardIds)}
+                        className="rounded-md bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100"
+                        onClick={() => setSelectedCardId(card.id)}
                       >
-                        {squad.name}
-                      </Button>
+                        {card.name}
+                      </button>
                     ))}
                   </div>
-                </div>
-              ))}
-              <Button type="button" className="w-full" onClick={loadMockGame}>
-                Load Mock Game
+                )}
+              </div>
+              <Button type="button" className="w-full" onClick={resetTable}>
+                Start Game
+              </Button>
+              <Button type="button" variant="secondary" className="w-full" onClick={loadMockGame}>
+                Start Mock Game
               </Button>
             </div>
           </div>
