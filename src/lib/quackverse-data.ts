@@ -13,6 +13,7 @@ export type QuackverseCard = {
   effect: string | null;
   flavor: string;
   artUrl?: string;
+  artHoverUrl?: string;
 };
 
 export const quackverseCards = [
@@ -86,7 +87,9 @@ export const quackverseCards = [
       "Lightning Plume: +2 ATK this turn."
     ],
     "effect": null,
-    "flavor": "“Blink and you’ll miss the quack.”"
+    "flavor": "“Blink and you’ll miss the quack.”",
+    "artUrl": "/quackverse-art/photon-ranger-featherbolt-static.jpg",
+    "artHoverUrl": "/quackverse-art/photon-ranger-featherbolt-hover.gif"
   },
   {
     "id": 5,

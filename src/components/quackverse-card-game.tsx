@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, useContext } from 'react';
 import {
   BadgePlus,
   BookOpen,
@@ -28,6 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
+import { isAdminUsername } from '@/lib/admin';
 import { getAuthHeaders } from '@/lib/client-auth';
 import {
   quackverseCards,
@@ -50,6 +51,8 @@ import {
   type QuackverseSavedState,
   type QuackverseTurnActions,
 } from '@/lib/quackverse-state';
+import { useSession } from '@/contexts/session-context';
+import { QuackverseArtManager } from '@/components/quackverse-art-manager';
 
 type PlayerId = 'playerOne' | 'playerTwo';
 type ActionMode = 'select' | 'move' | 'attack';
@@ -89,6 +92,18 @@ type PackAuditSummary = {
   rarityCounts: Record<string, number>;
   mostPulledCards: Array<{ name: string; count: number }>;
 };
+type QuackverseArtAsset = {
+  fileName: string;
+  mimeType: string;
+  originalName: string;
+  updatedAt: string;
+  url: string;
+};
+type QuackverseArtEntry = {
+  static?: QuackverseArtAsset | null;
+  hover?: QuackverseArtAsset | null;
+};
+type QuackverseArtManifest = Record<string, QuackverseArtEntry>;
 type GridPiece = {
   instanceId: string;
   owner: PlayerId;
@@ -321,6 +336,8 @@ function comparableSavedState(state: QuackverseSavedState) {
   return JSON.stringify({ ...state, updatedAt: '' });
 }
 
+const QuackverseArtContext = createContext<QuackverseArtManifest>({});
+
 function sanitizeRoomId(value: string) {
   return sanitizeQuackverseRoomToken(value, 'default');
 }
@@ -336,11 +353,21 @@ function CardFace({
   selected?: boolean;
   onClick?: () => void;
 }) {
+  const artManifest = useContext(QuackverseArtContext);
+  const [isHovered, setIsHovered] = useState(false);
   const rarityClass = rarityClasses[card.rarity || ''] || 'border-slate-500 text-slate-200';
+  const artEntry = artManifest[String(card.id)];
+  const staticUrl = artEntry?.static?.url || card.artUrl || '';
+  const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
+  const cardArtUrl = isHovered ? hoverUrl : staticUrl;
   return (
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
       className={cn(
         'group flex h-full w-full flex-col rounded-lg border bg-slate-950/70 p-3 text-left shadow-sm transition',
         'hover:-translate-y-0.5 hover:border-cyan-300/80 hover:bg-slate-900',
@@ -367,8 +394,8 @@ function CardFace({
       <div className="mt-2 text-xs text-slate-300">{card.role || card.effect}</div>
 
       <div className="mt-3 flex aspect-[5/3] items-center justify-center rounded-md border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 text-center">
-        {card.artUrl ? (
-          <img src={card.artUrl} alt="" className="h-full w-full rounded-md object-cover" />
+        {cardArtUrl ? (
+          <img src={cardArtUrl} alt="" className="h-full w-full rounded-md object-cover" />
         ) : (
           <div className="px-2">
             <Sparkles className="mx-auto mb-1 h-5 w-5 text-cyan-200/70" />
@@ -580,6 +607,9 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
 
 export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'command' } = {}) {
   const isCommandLayout = layout === 'command';
+  const { user } = useSession();
+  const isAdmin = isAdminUsername(user?.twitchUsername);
+  const [artManifest, setArtManifest] = useState<QuackverseArtManifest>({});
   const hasLoadedSharedState = useRef(false);
   const hasLoadedCollectionLab = useRef(false);
   const isApplyingSharedState = useRef(false);
@@ -641,6 +671,15 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const [roomId, setRoomId] = useState('default');
   const [roomInput, setRoomInput] = useState('default');
 
+  const refreshArtManifest = useCallback(async () => {
+    const response = await fetch('/api/quackverse/art', { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Failed to load Quackverse art (${response.status})`);
+    }
+    const data = (await response.json()) as { cards?: QuackverseArtManifest };
+    setArtManifest(data.cards || {});
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const nextScope = quackverseScopeFromParams(params);
@@ -649,6 +688,10 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     setRoomId(nextRoomId);
     setRoomInput(nextRoomId);
   }, []);
+
+  useEffect(() => {
+    refreshArtManifest().catch((error) => console.error('[QuackverseCardGame] art refresh failed:', error));
+  }, [refreshArtManifest]);
 
   const roomQuery = useMemo(() => {
     const params = new URLSearchParams({ roomId });
@@ -2373,6 +2416,11 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           </TabsContent>
 
           <TabsContent value="cards">
+            {isAdmin && (
+              <div className="mb-4">
+                <QuackverseArtManager />
+              </div>
+            )}
             <div className="grid gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
               <section className="space-y-3 rounded-lg border border-white/10 bg-black/20 p-4">
                 <div className="flex items-center justify-between">
@@ -2568,6 +2616,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
   if (isCommandLayout) {
     return (
+      <QuackverseArtContext.Provider value={artManifest}>
       <div className="space-y-3 text-sm">
         {cardInspector}
         <div className="rounded-lg border border-white/10 bg-slate-950/80 p-3">
@@ -2766,10 +2815,12 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           </TabsContent>
         </Tabs>
       </div>
+      </QuackverseArtContext.Provider>
     );
   }
 
   return (
+    <QuackverseArtContext.Provider value={artManifest}>
     <div className={cn('space-y-5', isCommandLayout && 'space-y-3')}>
       {cardInspector}
       <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-slate-950/70 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -3286,5 +3337,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
         </section>
       </div>
     </div>
+    </QuackverseArtContext.Provider>
   );
 }
