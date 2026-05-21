@@ -363,6 +363,43 @@ function sanitizeRoomId(value: string) {
   return sanitizeQuackverseRoomToken(value, 'default');
 }
 
+function cacheBustAnimatedArt(url: string, nonce: number) {
+  if (!url) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}v=${nonce}`;
+}
+
+function useAnimatedCardArt(card: QuackverseCard, forceAnimated = false) {
+  const artManifest = useContext(QuackverseArtContext);
+  const [isHovered, setIsHovered] = useState(false);
+  const [animationNonce, setAnimationNonce] = useState(0);
+  const artEntry = artManifest[String(card.id)];
+  const staticUrl = artEntry?.static?.url || card.artUrl || '';
+  const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
+  const useAnimated = Boolean((forceAnimated || isHovered) && hoverUrl);
+  const src = useAnimated ? cacheBustAnimatedArt(hoverUrl, animationNonce) : staticUrl;
+
+  useEffect(() => {
+    if (!useAnimated) return;
+    setAnimationNonce((value) => value + 1);
+    const duration = Math.max(1000, Number(card.artHoverDurationMs || 10000));
+    const timer = window.setInterval(() => {
+      setAnimationNonce((value) => value + 1);
+    }, duration);
+    return () => window.clearInterval(timer);
+  }, [card.artHoverDurationMs, useAnimated]);
+
+  return {
+    src,
+    isAnimated: useAnimated,
+    bindHover: {
+      onMouseEnter: () => setIsHovered(true),
+      onMouseLeave: () => setIsHovered(false),
+      onFocus: () => setIsHovered(true),
+      onBlur: () => setIsHovered(false),
+    },
+  };
+}
+
 function CardFace({
   card,
   compact = false,
@@ -378,25 +415,17 @@ function CardFace({
   attachedGear?: QuackverseCard[];
   onClick?: () => void;
 }) {
-  const artManifest = useContext(QuackverseArtContext);
   const deckRecord = useContext(QuackverseDeckRecordContext);
-  const [isHovered, setIsHovered] = useState(false);
   const rarityClass = rarityClasses[card.rarity || ''] || 'border-slate-500 text-slate-200';
   const familyGroup = getQuackverseFamilyGroup(card.id);
-  const artEntry = artManifest[String(card.id)];
-  const staticUrl = artEntry?.static?.url || card.artUrl || '';
-  const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
-  const cardArtUrl = isHovered ? hoverUrl : staticUrl;
+  const cardArt = useAnimatedCardArt(card, selected);
   const description = card.flavor || card.role || card.effect || 'No description available.';
   const currentRecord = record || deckRecord;
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocus={() => setIsHovered(true)}
-      onBlur={() => setIsHovered(false)}
+      {...cardArt.bindHover}
       className={cn(
         'group flex h-full w-full flex-col rounded-lg border bg-slate-950/70 p-3 text-left shadow-sm transition',
         'hover:-translate-y-0.5 hover:border-cyan-300/80 hover:bg-slate-900',
@@ -442,8 +471,8 @@ function CardFace({
       )}
 
       <div className={cn('mt-3 flex items-center justify-center rounded-md border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 text-center', selected ? 'aspect-[4/3]' : 'aspect-[5/3]')}>
-        {cardArtUrl ? (
-          <img src={cardArtUrl} alt="" className="h-full w-full rounded-md object-cover" />
+        {cardArt.src ? (
+          <img src={cardArt.src} alt="" className="h-full w-full rounded-md object-cover" />
         ) : (
           <div className="px-2">
             <Sparkles className="mx-auto mb-1 h-5 w-5 text-cyan-200/70" />
@@ -547,6 +576,94 @@ function SquadSlot({
       <div className={cn('absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[0.63rem]', players[owner].accent)}>
         {players[owner].short}
       </div>
+    </div>
+  );
+}
+
+function BoardPieceCard({
+  slot,
+  index,
+  selected,
+  effectiveStats,
+  onSelect,
+  onClear,
+}: {
+  slot: GridPiece;
+  index: number;
+  selected: boolean;
+  effectiveStats: ReturnType<typeof getEffectiveStats>;
+  onSelect: () => void;
+  onClear: () => void;
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+  const cardArt = useAnimatedCardArt(slot.card, selected || showDetails);
+  const familyLabel = getQuackverseFamilyGroup(slot.card.id)?.label || slot.card.role || slot.card.type;
+  const stats = [
+    ['ATK', effectiveStats.atk],
+    ['DEF', effectiveStats.def],
+    ['SPD', effectiveStats.spd],
+    ['SPC', effectiveStats.spc],
+    ['HP', slot.currentHp],
+  ] as const;
+
+  return (
+    <div
+      className="relative h-full w-full overflow-hidden rounded-lg"
+      onMouseEnter={() => setShowDetails(true)}
+      onMouseLeave={() => setShowDetails(false)}
+      onFocus={() => setShowDetails(true)}
+      onBlur={() => setShowDetails(false)}
+    >
+      <button
+        type="button"
+        className="flex h-full w-full flex-col overflow-hidden rounded-lg text-left"
+        onClick={onSelect}
+        {...cardArt.bindHover}
+      >
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          {cardArt.src ? (
+            <img src={cardArt.src} alt={slot.card.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-slate-900 text-[0.6rem] text-slate-500">No art</div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-black/35" />
+          <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-1.5 text-[0.56rem]">
+            <span className="rounded bg-black/55 px-1.5 py-0.5 font-semibold text-white">{players[slot.owner].short}</span>
+            <span className="rounded bg-black/55 px-1.5 py-0.5 text-cyan-100">#{slot.card.id}</span>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 p-1.5 text-white">
+            {selected || showDetails ? (
+              <div className="grid grid-cols-5 gap-0.5">
+                {stats.map(([label, value]) => (
+                  <span key={label} className="rounded bg-black/60 px-0.5 py-0.5 text-center">
+                    <span className="block text-[0.46rem] text-slate-300">{label}</span>
+                    <span className="block text-[0.62rem] font-bold leading-none">{value}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="line-clamp-2 text-[0.7rem] font-semibold leading-tight">{slot.card.name}</div>
+                <div className="mt-0.5 truncate text-[0.54rem] text-slate-200">{familyLabel}</div>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="h-1.5 bg-black/60">
+          <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
+        </div>
+      </button>
+      <button
+        type="button"
+        className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[0.56rem] text-slate-200 hover:bg-black/80"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClear();
+        }}
+        aria-label={`Clear square ${index + 1}`}
+      >
+        Clear
+      </button>
     </div>
   );
 }
@@ -2467,57 +2584,14 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                             )}
                           >
                       {slot ? (
-                        <button
-                          type="button"
-                          className="flex h-full w-full flex-col overflow-hidden rounded-lg text-left"
-                          onClick={() => handleBoardSquareClick(index)}
-                        >
-                          <div className="relative flex-1 overflow-hidden">
-                            <img
-                              src={artManifest[String(slot.card.id)]?.static?.url || slot.card.artUrl || ''}
-                              alt={slot.card.name}
-                              className="h-full w-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                            <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-2 text-[0.6rem]">
-                              <span className="rounded bg-black/45 px-1.5 py-0.5 font-semibold text-white">{displayPlayers[slot.owner].short}</span>
-                              <button
-                                type="button"
-                                className="rounded bg-black/45 px-1.5 py-0.5 text-slate-200 hover:bg-black/70"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  clearSquare(index);
-                                }}
-                                aria-label={`Clear square ${index + 1}`}
-                              >
-                                Clear
-                              </button>
-                            </div>
-                            <div className="absolute inset-x-0 bottom-0 p-2 text-left text-white">
-                              {isSelectedSquare ? (
-                                <div className="space-y-1 text-[0.58rem] text-slate-200">
-                                  <div className="flex flex-wrap gap-1">
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">ATK {effectiveStats?.atk}</span>
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">DEF {effectiveStats?.def}</span>
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">SPD {effectiveStats?.spd}</span>
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">HP {slot.currentHp}</span>
-                                  </div>
-                                  <div className="line-clamp-2 text-xs font-semibold">{slot.card.name}</div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="line-clamp-2 text-[0.72rem] font-semibold">{slot.card.name}</div>
-                                  <div className="text-[0.58rem] text-slate-200">
-                                    {getQuackverseFamilyGroup(slot.card.id)?.label || slot.card.role || slot.card.type}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="h-1.5 bg-black/50">
-                            <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
-                          </div>
-                        </button>
+                        <BoardPieceCard
+                          slot={slot}
+                          index={index}
+                          selected={isSelectedSquare}
+                          effectiveStats={effectiveStats || getEffectiveStats(slot)}
+                          onSelect={() => handleBoardSquareClick(index)}
+                          onClear={() => clearSquare(index)}
+                        />
                       ) : (
                               <button
                                 type="button"
