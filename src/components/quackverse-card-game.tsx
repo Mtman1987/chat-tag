@@ -366,28 +366,76 @@ function sanitizeRoomId(value: string) {
 function useAnimatedCardArt(card: QuackverseCard, forceAnimated = false) {
   const artManifest = useContext(QuackverseArtContext);
   const [isHovered, setIsHovered] = useState(false);
+  const [isPlayingAnimation, setIsPlayingAnimation] = useState(false);
   const [animationKey, setAnimationKey] = useState(0);
+  const resetTimerRef = useRef<number | null>(null);
+  const loopTimerRef = useRef<number | null>(null);
+  const animationStartedAtRef = useRef<number | null>(null);
   const artEntry = artManifest[String(card.id)];
   const staticUrl = artEntry?.static?.url || card.artUrl || '';
   const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
-  const useAnimated = Boolean((forceAnimated || isHovered) && hoverUrl && hoverUrl !== staticUrl);
+  const hasHoverArt = Boolean(hoverUrl && hoverUrl !== staticUrl);
+  const wantsAnimation = Boolean((forceAnimated || isHovered) && hasHoverArt);
+  const hoverDurationMs = Math.max(1000, Number(card.artHoverDurationMs || 10000));
 
   useEffect(() => {
-    if (!useAnimated) return;
-    setAnimationKey((value) => value + 1);
-    const duration = Math.max(1000, Number(card.artHoverDurationMs || 10000));
-    const timer = window.setInterval(() => {
+    const clearResetTimer = () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+    };
+
+    const clearLoopTimer = () => {
+      if (loopTimerRef.current !== null) {
+        window.clearInterval(loopTimerRef.current);
+        loopTimerRef.current = null;
+      }
+    };
+
+    const restartAnimation = () => {
+      animationStartedAtRef.current = Date.now();
       setAnimationKey((value) => value + 1);
-    }, duration);
-    return () => window.clearInterval(timer);
-  }, [card.artHoverDurationMs, useAnimated]);
+    };
+
+    if (wantsAnimation) {
+      clearResetTimer();
+      clearLoopTimer();
+      setIsPlayingAnimation(true);
+      restartAnimation();
+      loopTimerRef.current = window.setInterval(restartAnimation, hoverDurationMs);
+      return () => {
+        clearLoopTimer();
+      };
+    }
+
+    clearLoopTimer();
+    clearResetTimer();
+    const elapsed = animationStartedAtRef.current ? Date.now() - animationStartedAtRef.current : hoverDurationMs;
+    const remainingMs = Math.max(0, hoverDurationMs - elapsed);
+    resetTimerRef.current = window.setTimeout(() => {
+      setIsPlayingAnimation(false);
+      resetTimerRef.current = null;
+    }, remainingMs + 500);
+
+    return () => {
+      clearResetTimer();
+    };
+  }, [hoverDurationMs, wantsAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+      if (loopTimerRef.current !== null) window.clearInterval(loopTimerRef.current);
+    };
+  }, []);
 
   return {
     staticUrl,
     hoverUrl,
     animationKey,
-    hasHoverArt: Boolean(hoverUrl && hoverUrl !== staticUrl),
-    isAnimated: useAnimated,
+    hasHoverArt,
+    isAnimated: isPlayingAnimation,
     bindHover: {
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),
