@@ -867,6 +867,7 @@ export async function POST(req: NextRequest) {
     const requestSeat = requestUserId && !explicitSeatAction ? ensureClaimedSeat(state, requestUserId) : existingSeat;
     let activeSeat = requestSeat || existingSeat;
     const controlsActiveSeat = activeSeat && state.activePlayer === activeSeat;
+    const controlsActiveNpc = Boolean(state.npcPlayers[state.activePlayer] && (activeSeat || adminRequest || allowLocalSetup));
     const reject = (error: string, status = 403) => ({ state, error, status });
 
     if (['loadMockGame', 'setClaimedPlayer'].includes(actionType) && !adminRequest) {
@@ -1036,7 +1037,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.type === 'pass') {
-      if (!controlsActiveSeat) return reject('It is not your turn.');
+      if (!controlsActiveSeat && !controlsActiveNpc) return reject('It is not your turn.');
       addLog(state, `${state.activePlayer === 'playerOne' ? 'P1' : 'P2'} passed.`);
       endTurn(state);
     }

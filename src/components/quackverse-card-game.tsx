@@ -1892,76 +1892,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
   const runNpcTurn = (playerId: PlayerId = activePlayer) => {
     if (!npcPlayersRef.current[playerId] || activePlayer !== playerId || winner) return;
-    pushUndoSnapshot();
-    const opponent = opponentOf(playerId);
-    const npcPieces = grid
-      .map((piece, index) => ({ piece, index }))
-      .filter((entry): entry is { piece: GridPiece; index: number } => entry.piece?.owner === playerId);
-    const playerPieces = grid
-      .map((piece, index) => ({ piece, index }))
-      .filter((entry): entry is { piece: GridPiece; index: number } => entry.piece?.owner === opponent);
-
-    for (const npc of npcPieces) {
-      const target = playerPieces.find((playerPiece) => isAdjacent(npc.index, playerPiece.index));
-      if (target) {
-        setSelectedBoardIndex(npc.index);
-        setSelectedCardId(npc.piece.card.id);
-        setSelectedSquadCard({ owner: playerId, cardId: npc.piece.card.id });
-        const damage = Math.max(1, getEffectiveStats(npc.piece).atk - getEffectiveStats(target.piece).def);
-        const nextHp = target.piece.currentHp - damage;
-        const isKo = nextHp <= 0;
-        setGrid((current) =>
-          current.map((slot, index) => (index === target.index && slot ? (isKo ? null : { ...slot, currentHp: nextHp }) : slot)),
-        );
-        markTurnAction(playerId, 'attacked', pieceKey(npc.piece));
-        if (isKo) {
-          discardBoardPiece(target.piece);
-          const nextKoCount = koCount[playerId] + 1;
-          const nextScore = score[playerId] + 1;
-          setKoCount((current) => ({ ...current, [playerId]: nextKoCount }));
-          setScore((current) => ({ ...current, [playerId]: current[playerId] + 1 }));
-          if (nextScore >= victoryTarget) {
-            setWinner(playerId);
-            addLog(`${displayPlayers[playerId].short} NPC attacked for ${damage}. ${target.piece.card.name} was KO'd for +1 VP. ${displayPlayers[playerId].label} wins the match.`);
-            return;
-          }
-          endTurn(`${displayPlayers[playerId].short} NPC attacked for ${damage}. ${target.piece.card.name} was KO'd for +1 VP.`, true, true);
-          return;
-        }
-        endTurn(`${displayPlayers[playerId].short} NPC attacked ${target.piece.card.name} for ${damage}. ${target.piece.card.name} has ${nextHp} HP left.`, true, true);
-        return;
-      }
-    }
-
-    const movable = npcPieces
-      .map((npc) => {
-        const nearest = playerPieces
-          .map((playerPiece) => ({
-            index: playerPiece.index,
-            distance: Math.abs(rowOf(npc.index) - rowOf(playerPiece.index)) + Math.abs(colOf(npc.index) - colOf(playerPiece.index)),
-          }))
-          .sort((a, b) => a.distance - b.distance)[0];
-        const options = [npc.index + gridSize, npc.index - gridSize, npc.index + 1, npc.index - 1].filter(
-          (index) =>
-            index >= 0 &&
-            index < grid.length &&
-            !grid[index] &&
-            isAdjacent(npc.index, index) &&
-            (!nearest ||
-              Math.abs(rowOf(index) - rowOf(nearest.index)) + Math.abs(colOf(index) - colOf(nearest.index)) < nearest.distance),
-        );
-        return { ...npc, to: options[0] };
-      })
-      .find((entry) => entry.to !== undefined);
-
-    if (movable?.to !== undefined) {
-      setGrid((current) => current.map((slot, index) => (index === movable.index ? null : index === movable.to ? movable.piece : slot)));
-      markTurnAction(playerId, 'deployedOrMoved');
-      endTurn(`${displayPlayers[playerId].short} NPC moved ${movable.piece.card.name} to square ${movable.to + 1}.`, true, true);
-      return;
-    }
-
-    endTurn(`${displayPlayers[playerId].short} NPC passed.`, undefined, true);
+    void sendQuackverseAction({ type: 'pass' });
   };
 
   const useAbility = (ability = selectedPiece?.card.abilities[0]) => {
