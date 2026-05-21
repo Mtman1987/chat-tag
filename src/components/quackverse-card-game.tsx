@@ -3083,11 +3083,14 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                       )}
                     >
                       {slot ? (
-                        <button type="button" className="flex h-full w-full flex-col justify-between p-1" onClick={() => handleBoardSquareClick(index)}>
-                          <span className="self-start rounded bg-black/35 px-1 text-[0.55rem] text-white">{displayPlayers[slot.owner].short}</span>
-                          <span className="line-clamp-2 text-[0.55rem] font-semibold leading-tight text-white">{slot.card.name}</span>
-                          <span className="text-[0.5rem] text-slate-200">A{effectiveStats?.atk} D{effectiveStats?.def} S{effectiveStats?.spd} H{slot.currentHp}</span>
-                        </button>
+                        <BoardPieceCard
+                          slot={slot}
+                          index={index}
+                          selected={isSelectedSquare}
+                          effectiveStats={effectiveStats || getEffectiveStats(slot)}
+                          onSelect={() => handleBoardSquareClick(index)}
+                          onClear={() => clearSquare(index)}
+                        />
                       ) : (
                         <button type="button" onClick={() => handleBoardSquareClick(index)} className="flex h-full w-full items-center justify-center text-[0.55rem] text-slate-700">
                           {index + 1}
@@ -3433,57 +3436,14 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                       )}
                     >
                       {slot ? (
-                        <button
-                          type="button"
-                          className="flex h-full w-full flex-col overflow-hidden rounded-lg text-left"
-                          onClick={() => handleBoardSquareClick(index)}
-                        >
-                          <div className="relative flex-1 overflow-hidden">
-                            <img
-                              src={artManifest[String(slot.card.id)]?.static?.url || slot.card.artUrl || ''}
-                              alt={slot.card.name}
-                              className="h-full w-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                            <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-2 text-[0.6rem]">
-                              <span className="rounded bg-black/45 px-1.5 py-0.5 font-semibold text-white">{displayPlayers[slot.owner].short}</span>
-                              <button
-                                type="button"
-                                className="rounded bg-black/45 px-1.5 py-0.5 text-slate-200 hover:bg-black/70"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  clearSquare(index);
-                                }}
-                                aria-label={`Clear square ${index + 1}`}
-                              >
-                                Clear
-                              </button>
-                            </div>
-                            <div className="absolute inset-x-0 bottom-0 p-2 text-left text-white">
-                              {isSelectedSquare ? (
-                                <div className="space-y-1 text-[0.58rem] text-slate-200">
-                                  <div className="flex flex-wrap gap-1">
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">ATK {effectiveStats?.atk}</span>
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">DEF {effectiveStats?.def}</span>
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">SPD {effectiveStats?.spd}</span>
-                                    <span className="rounded bg-black/45 px-1.5 py-0.5">HP {slot.currentHp}</span>
-                                  </div>
-                                  <div className="line-clamp-2 text-xs font-semibold">{slot.card.name}</div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="line-clamp-2 text-[0.72rem] font-semibold">{slot.card.name}</div>
-                                  <div className="text-[0.58rem] text-slate-200">
-                                    {getQuackverseFamilyGroup(slot.card.id)?.label || slot.card.role || slot.card.type}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="h-1.5 bg-black/50">
-                            <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
-                          </div>
-                        </button>
+                        <BoardPieceCard
+                          slot={slot}
+                          index={index}
+                          selected={isSelectedSquare}
+                          effectiveStats={effectiveStats || getEffectiveStats(slot)}
+                          onSelect={() => handleBoardSquareClick(index)}
+                          onClear={() => clearSquare(index)}
+                        />
                       ) : (
                         <button
                           type="button"
