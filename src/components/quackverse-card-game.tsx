@@ -363,33 +363,30 @@ function sanitizeRoomId(value: string) {
   return sanitizeQuackverseRoomToken(value, 'default');
 }
 
-function cacheBustAnimatedArt(url: string, nonce: number) {
-  if (!url) return url;
-  return `${url}${url.includes('?') ? '&' : '?'}v=${nonce}`;
-}
-
 function useAnimatedCardArt(card: QuackverseCard, forceAnimated = false) {
   const artManifest = useContext(QuackverseArtContext);
   const [isHovered, setIsHovered] = useState(false);
-  const [animationNonce, setAnimationNonce] = useState(0);
+  const [animationKey, setAnimationKey] = useState(0);
   const artEntry = artManifest[String(card.id)];
   const staticUrl = artEntry?.static?.url || card.artUrl || '';
   const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
-  const useAnimated = Boolean((forceAnimated || isHovered) && hoverUrl);
-  const src = useAnimated ? cacheBustAnimatedArt(hoverUrl, animationNonce) : staticUrl;
+  const useAnimated = Boolean((forceAnimated || isHovered) && hoverUrl && hoverUrl !== staticUrl);
 
   useEffect(() => {
     if (!useAnimated) return;
-    setAnimationNonce((value) => value + 1);
+    setAnimationKey((value) => value + 1);
     const duration = Math.max(1000, Number(card.artHoverDurationMs || 10000));
     const timer = window.setInterval(() => {
-      setAnimationNonce((value) => value + 1);
+      setAnimationKey((value) => value + 1);
     }, duration);
     return () => window.clearInterval(timer);
   }, [card.artHoverDurationMs, useAnimated]);
 
   return {
-    src,
+    staticUrl,
+    hoverUrl,
+    animationKey,
+    hasHoverArt: Boolean(hoverUrl && hoverUrl !== staticUrl),
     isAnimated: useAnimated,
     bindHover: {
       onMouseEnter: () => setIsHovered(true),
@@ -398,6 +395,44 @@ function useAnimatedCardArt(card: QuackverseCard, forceAnimated = false) {
       onBlur: () => setIsHovered(false),
     },
   };
+}
+
+function AnimatedCardArt({
+  card,
+  art,
+  className,
+  fallbackClassName,
+}: {
+  card: QuackverseCard;
+  art: ReturnType<typeof useAnimatedCardArt>;
+  className: string;
+  fallbackClassName?: string;
+}) {
+  if (!art.staticUrl && !art.hoverUrl) {
+    return (
+      <div className={fallbackClassName || 'flex h-full w-full items-center justify-center text-[0.6rem] text-slate-500'}>
+        <Sparkles className="mx-auto mb-1 h-5 w-5 text-cyan-200/70" />
+        <div className="text-[0.62rem] uppercase text-slate-400">Art slot</div>
+      </div>
+    );
+  }
+
+  if (!art.hasHoverArt) {
+    return <img src={art.staticUrl || art.hoverUrl} alt={card.name} className={className} />;
+  }
+
+  return (
+    <div className="relative h-full w-full">
+      <img src={art.staticUrl} alt={card.name} className={cn(className, 'absolute inset-0')} />
+      <img
+        key={`${art.hoverUrl}-${art.animationKey}`}
+        src={art.hoverUrl}
+        alt=""
+        aria-hidden="true"
+        className={cn(className, 'absolute inset-0 transition-opacity duration-150', art.isAnimated ? 'opacity-100' : 'opacity-0')}
+      />
+    </div>
+  );
 }
 
 function CardFace({
@@ -470,15 +505,8 @@ function CardFace({
         <div className="mt-2 text-xs text-slate-300">{card.role || card.effect}</div>
       )}
 
-      <div className={cn('mt-3 flex items-center justify-center rounded-md border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 text-center', selected ? 'aspect-[4/3]' : 'aspect-[5/3]')}>
-        {cardArt.src ? (
-          <img src={cardArt.src} alt="" className="h-full w-full rounded-md object-cover" />
-        ) : (
-          <div className="px-2">
-            <Sparkles className="mx-auto mb-1 h-5 w-5 text-cyan-200/70" />
-            <div className="text-[0.62rem] uppercase text-slate-400">Art slot</div>
-          </div>
-        )}
+      <div className={cn('mt-3 flex items-center justify-center overflow-hidden rounded-md border border-white/10 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 text-center', selected ? 'aspect-[4/3]' : 'aspect-[5/3]')}>
+        <AnimatedCardArt card={card} art={cardArt} className="h-full w-full rounded-md object-cover" fallbackClassName="px-2" />
       </div>
 
       {card.type === 'Duck' ? (
@@ -621,11 +649,12 @@ function BoardPieceCard({
         {...cardArt.bindHover}
       >
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          {cardArt.src ? (
-            <img src={cardArt.src} alt={slot.card.name} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-slate-900 text-[0.6rem] text-slate-500">No art</div>
-          )}
+          <AnimatedCardArt
+            card={slot.card}
+            art={cardArt}
+            className="h-full w-full object-cover"
+            fallbackClassName="flex h-full w-full items-center justify-center bg-slate-900 text-[0.6rem] text-slate-500"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-black/35" />
           <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-1.5 text-[0.56rem]">
             <span className="rounded bg-black/55 px-1.5 py-0.5 font-semibold text-white">{players[slot.owner].short}</span>
