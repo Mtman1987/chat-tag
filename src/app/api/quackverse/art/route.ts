@@ -84,6 +84,9 @@ export async function POST(req: NextRequest) {
   if (!ALLOWED_MIME_TYPES[file.type]) {
     return NextResponse.json({ error: 'Unsupported file type.' }, { status: 400 });
   }
+  if (file.size <= 0) {
+    return NextResponse.json({ error: 'File is empty. Please upload the image again.' }, { status: 400 });
+  }
   if (file.size > 20 * 1024 * 1024) {
     return NextResponse.json({ error: 'File too large. Max 20MB.' }, { status: 413 });
   }

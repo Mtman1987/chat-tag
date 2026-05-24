@@ -359,6 +359,11 @@ function comparableSavedState(state: QuackverseSavedState) {
 const QuackverseArtContext = createContext<QuackverseArtManifest>({});
 const QuackverseDeckRecordContext = createContext<{ wins: number; losses: number }>({ wins: 0, losses: 0 });
 
+function withCacheBuster(url: string, key: number) {
+  if (!url) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}v=${key}`;
+}
+
 function sanitizeRoomId(value: string) {
   return sanitizeQuackverseRoomToken(value, 'default');
 }
@@ -375,6 +380,7 @@ function useAnimatedCardArt(card: QuackverseCard, forceAnimated = false) {
   const staticUrl = artEntry?.static?.url || card.artUrl || '';
   const hoverUrl = artEntry?.hover?.url || card.artHoverUrl || staticUrl;
   const hasHoverArt = Boolean(hoverUrl && hoverUrl !== staticUrl);
+  const animatedHoverUrl = hasHoverArt && isPlayingAnimation ? withCacheBuster(hoverUrl, animationKey) : hoverUrl;
   const wantsAnimation = Boolean((forceAnimated || isHovered) && hasHoverArt);
   const hoverDurationMs = Math.max(1000, Number(card.artHoverDurationMs || 10000));
 
@@ -432,7 +438,7 @@ function useAnimatedCardArt(card: QuackverseCard, forceAnimated = false) {
 
   return {
     staticUrl,
-    hoverUrl,
+    hoverUrl: animatedHoverUrl,
     animationKey,
     hasHoverArt,
     isAnimated: isPlayingAnimation,
