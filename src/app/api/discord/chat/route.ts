@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
+import { isBotRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,10 @@ async function sendDiscordReply(channelId: string, content: string, replyToMessa
 }
 
 export async function POST(req: NextRequest) {
+  if (!isBotRequest(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const { userId: discordUserId, guildId, message, userName, channelId, messageId, userAvatar } = body;
