@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { userId: discordUserId, guildId, message, userName, channelId, messageId, userAvatar } = body;
+    const { userId: discordUserId, guildId, message, userName: rawUserName, channelId, messageId, userAvatar } = body;
+    const userName = rawUserName || 'Unknown';
 
     if (!message || !channelId) {
       return NextResponse.json({ error: 'message and channelId required' }, { status: 400 });
