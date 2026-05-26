@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readAppState, updateAppState, isTimedImmune } from '@/lib/volume-store';
+import { readAppState, updateAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,14 +84,17 @@ export async function POST(req: NextRequest) {
     // Helper to reply
     const reply = (text: string) => sendDiscordReply(channelId, text, messageId);
 
-    // Track chat activity
+    // Capture away state before any mutations (needed for away toggle)
+    const wasAway = player ? (player.sleepingImmunity || player.offlineImmunity) : false;
+
+    // Track chat activity (skip immunity clearing for 'away' command)
     if (player) {
       await updateAppState((s) => {
         const p = s.tagPlayers[player.id];
         if (p) {
           p.lastChatAt = Date.now();
           p.lastSeenChannel = 'discord';
-          if (p.sleepingImmunity || p.offlineImmunity) {
+          if (cmd !== 'away' && (p.sleepingImmunity || p.offlineImmunity)) {
             p.sleepingImmunity = false;
             p.offlineImmunity = false;
           }
@@ -141,7 +144,7 @@ export async function POST(req: NextRequest) {
       // Call the tag API internally via fetch to self
       const tagRes = await fetch(new URL('/api/tag', req.url).toString(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_API_SECRET || '' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
         body: JSON.stringify({ action: 'tag', userId: gameUserId, twitchUsername: player.twitchUsername, targetUserId: targetPlayer.id, streamerId: 'discord' }),
       });
       const tagData = await tagRes.json();
@@ -180,7 +183,7 @@ export async function POST(req: NextRequest) {
       }
       const passRes = await fetch(new URL('/api/tag', req.url).toString(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_API_SECRET || '' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
         body: JSON.stringify({ action: 'use-pass', userId: gameUserId, twitchUsername: player.twitchUsername, targetUserId: targetPlayer.id, streamerId: 'discord' }),
       });
       const passData = await passRes.json();
@@ -234,17 +237,16 @@ export async function POST(req: NextRequest) {
       await updateAppState((s) => {
         const p = s.tagPlayers[gameUserId];
         if (!p) return;
-        if (p.sleepingImmunity || p.offlineImmunity) {
+        if (wasAway) {
           p.sleepingImmunity = false;
           p.offlineImmunity = false;
+          p.timedImmunityUntil = null;
+          p.noTagbackFrom = null;
         } else {
-          p.offlineImmunity = true;
+          p.sleepingImmunity = true;
         }
       });
-      const updated = await readAppState();
-      const updatedPlayer = updated.tagPlayers[gameUserId];
-      const isAway = updatedPlayer?.sleepingImmunity || updatedPlayer?.offlineImmunity;
-      await reply(`@${userName} ${isAway ? '💤 Away mode ON — you are immune.' : '☀️ Away mode OFF — you can be tagged.'}`);
+      await reply(`@${userName} ${wasAway ? '☀️ Away mode OFF — you can be tagged.' : '💤 Away mode ON — you are immune.'}`);
       return NextResponse.json({ success: true });
     }
 
