@@ -48,8 +48,8 @@ export async function POST(req: NextRequest) {
       // Look up player by discord ID or username
       const state = await readAppState();
       const player = Object.values(state.tagPlayers || {}).find(
-        (p: any) => p.discordUsername?.toLowerCase() === userName?.toLowerCase() ||
-                    p.discordId === discordUserId
+        (p: any) => (userName && p.discordUsername?.toLowerCase() === userName.toLowerCase()) ||
+                    (discordUserId && p.discordId === discordUserId)
       ) as any;
       
       if (player) {
@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
     // Look up the player by discordUsername or discordId
     const state = await readAppState();
     const player = Object.values(state.tagPlayers || {}).find(
-      (p: any) => p.discordUsername?.toLowerCase() === userName?.toLowerCase() ||
-                  p.discordId === discordUserId
+      (p: any) => (userName && p.discordUsername?.toLowerCase() === userName.toLowerCase()) ||
+                  (discordUserId && p.discordId === discordUserId)
     ) as any;
 
     const gameUserId = player?.id; // e.g. "user_12345"
@@ -237,7 +237,8 @@ export async function POST(req: NextRequest) {
         const myScore = allPlayers.find(p => p.id === gameUserId);
         await reply(`@${userName} Rank: #${rank}/${allPlayers.length} | Score: ${myScore?.score || 0} pts | Tags: ${myScore?.tags || 0} | Tagged: ${myScore?.tagged || 0} | 🎟️ Pass: ${player.passCount || 0}/3`);
       } else {
-        const top5 = allPlayers.slice(0, 5);
+        const filtered = allPlayers.filter((p: any) => (p.twitchUsername || '').toLowerCase() !== 'mtman1987');
+        const top5 = filtered.slice(0, 5);
         const lines = top5.map((p, i) => `#${i + 1} ${p.twitchUsername || 'unknown'} (${p.score || 0}pts)`).join(' | ');
         await reply(`🏆 Top 5: ${lines}`);
       }
