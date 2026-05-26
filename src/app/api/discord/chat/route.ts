@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
       // Look up player by discord ID or username
       const state = await readAppState();
       const player = Object.values(state.tagPlayers || {}).find(
-        (p: any) => (userName && p.discordUsername?.toLowerCase() === userName.toLowerCase()) ||
-                    (discordUserId && p.discordId === discordUserId)
+        (p: any) => (discordUserId && p.discordId === discordUserId) ||
+                    (userName && userName !== 'Unknown' && p.discordUsername?.toLowerCase() === userName.toLowerCase())
       ) as any;
       
       if (player) {
@@ -81,8 +81,8 @@ export async function POST(req: NextRequest) {
     // Look up the player by discordUsername or discordId
     const state = await readAppState();
     const player = Object.values(state.tagPlayers || {}).find(
-      (p: any) => (userName && p.discordUsername?.toLowerCase() === userName.toLowerCase()) ||
-                  (discordUserId && p.discordId === discordUserId)
+      (p: any) => (discordUserId && p.discordId === discordUserId) ||
+                  (userName && userName !== 'Unknown' && p.discordUsername?.toLowerCase() === userName.toLowerCase())
     ) as any;
 
     const gameUserId = player?.id; // e.g. "user_12345"
@@ -223,8 +223,8 @@ export async function POST(req: NextRequest) {
       const scoring = getScoringSettings(state);
       for (const entry of state.tagHistory || []) {
         if ((entry as any).blocked) continue;
-        const from = (entry as any).taggerId;
-        const to = (entry as any).taggedId;
+        const from = (entry as any).taggerId || (entry as any).from;
+        const to = (entry as any).taggedId || (entry as any).to;
         if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 }; tagCounts[from].tags += 1; }
         if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 }; tagCounts[to].tagged += 1; }
       }
