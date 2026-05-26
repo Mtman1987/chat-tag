@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { isBotRequest } from '@/lib/auth';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -216,19 +217,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    if (cmd === 'score') {
-      const players = Object.values(state.tagPlayers || {}) as any[];
-      const sorted = players.sort((a, b) => (b.score || 0) - (a.score || 0));
-      const rank = sorted.findIndex(p => p.id === gameUserId) + 1;
-      await reply(`@${userName} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || 0}/3`);
-      return NextResponse.json({ success: true });
-    }
+    if (cmd === 'score' || cmd === 'rank') {
+      const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+      const scoring = getScoringSettings(state);
+      for (const entry of state.tagHistory || []) {
+        if ((entry as any).blocked) continue;
+        const from = (entry as any).taggerId;
+        const to = (entry as any).taggedId;
+        if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 }; tagCounts[from].tags += 1; }
+        if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 }; tagCounts[to].tagged += 1; }
+      }
+      const allPlayers = Object.values(state.tagPlayers || {}).map((p: any) => {
+        const c = tagCounts[p.id] || { tags: 0, tagged: 0 };
+        return { ...p, score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0), tags: c.tags, tagged: c.tagged };
+      }).sort((a, b) => b.score - a.score);
 
-    if (cmd === 'rank') {
-      const players = Object.values(state.tagPlayers || {}) as any[];
-      const sorted = players.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
-      const lines = sorted.map((p, i) => `#${i + 1} ${p.twitchUsername || 'unknown'} (${p.score || 0}pts)`).join(' | ');
-      await reply(`🏆 Top 5: ${lines}`);
+      if (cmd === 'score') {
+        const rank = allPlayers.findIndex(p => p.id === gameUserId) + 1;
+        const myScore = allPlayers.find(p => p.id === gameUserId);
+        await reply(`@${userName} Rank: #${rank}/${allPlayers.length} | Score: ${myScore?.score || 0} pts | Tags: ${myScore?.tags || 0} | Tagged: ${myScore?.tagged || 0} | 🎟️ Pass: ${player.passCount || 0}/3`);
+      } else {
+        const top5 = allPlayers.slice(0, 5);
+        const lines = top5.map((p, i) => `#${i + 1} ${p.twitchUsername || 'unknown'} (${p.score || 0}pts)`).join(' | ');
+        await reply(`🏆 Top 5: ${lines}`);
+      }
       return NextResponse.json({ success: true });
     }
 
