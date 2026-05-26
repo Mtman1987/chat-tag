@@ -258,6 +258,8 @@ export async function POST(req: NextRequest) {
         if (wasAway) {
           p.sleepingImmunity = false;
           p.offlineImmunity = false;
+          p.timedImmunityUntil = null;
+          p.noTagbackFrom = null;
         } else {
           p.sleepingImmunity = true;
         }
