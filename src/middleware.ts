@@ -22,7 +22,10 @@ export function middleware(request: NextRequest) {
   const tunnelOnlyMode = process.env.QUACKVERSE_TUNNEL_ONLY === '1';
   const isTunnelHost = tunnelOnlyMode || /ngrok|trycloudflare|loca\.lt|localtunnel/i.test(hostSignals);
 
-  if (pathname === '/quackverse' || pathname.startsWith('/api/quackverse/') || pathname === '/favicon.ico') {
+  if (
+    process.env.QUACKVERSE_REQUEST_LOGS === '1' &&
+    (pathname === '/quackverse' || pathname.startsWith('/api/quackverse/') || pathname === '/favicon.ico')
+  ) {
     console.log('[quackverse:request]', {
       path: pathname + search,
       host: requestHost,
