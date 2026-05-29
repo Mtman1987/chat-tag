@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,7 +27,11 @@ jobs:
             exit 1
           fi
       - name: Deploy chat-tag-new
-        run: flyctl deploy --remote-only --config fly.toml
+        run: flyctl deploy --remote-only --config fly.toml --ha=false
+      - name: Scale chat-tag-new to one machine
+        run: |
+          flyctl scale count 1 --app chat-tag-new --yes
+          flyctl machines list --app chat-tag-new
 
   deploy-bot:
     name: Deploy bot app
@@ -45,4 +50,8 @@ jobs:
             exit 1
           fi
       - name: Deploy chat-tag-bot-new
-        run: flyctl deploy --remote-only --config fly-bot.toml
+        run: flyctl deploy --remote-only --config fly-bot.toml --ha=false
+      - name: Scale chat-tag-bot-new to one machine
+        run: |
+          flyctl scale count 1 --app chat-tag-bot-new --yes
+          flyctl machines list --app chat-tag-bot-new

@@ -1,6 +1,25 @@
 # Chat Tag Game - Firebase Deployment Guide
 
+## Fly.io machine count
+
+Chat Tag should run as a single Fly machine for each Chat Tag app:
+
+- `chat-tag-new`: one web machine, because runtime state is stored on a single Fly volume.
+- `chat-tag-bot-new`: one bot machine, because two running bot machines will both connect to chat and can send duplicate messages.
+
+The deploy scripts use `fly deploy --ha=false` and then `fly scale count 1` for the Chat Tag web and bot apps. If Fly shows an extra stopped/paused machine, make sure only one machine is running before troubleshooting duplicate messages:
+
+```bash
+fly machines list -a chat-tag-bot-new
+fly scale count 1 -a chat-tag-bot-new --yes
+fly machines list -a chat-tag-new
+fly scale count 1 -a chat-tag-new --yes
+```
+
+The GitHub Actions deploy workflow also applies this automatically on every push to `main` (and when manually started with `workflow_dispatch`): it deploys with `--ha=false`, runs `flyctl scale count 1` for both apps, and prints the resulting machine lists.
+
 ## Overview
+
 This is a standalone version of the Chat Tag game designed for Firebase App Hosting. It includes:
 - Next.js web application with Firebase integration
 - Standalone Twitch bot service

@@ -92,6 +92,11 @@ async function postDiscordWebhook(payload: Record<string, unknown>) {
 }
 
 async function refreshDshEmbed(gameState: Record<string, unknown>) {
+  if (!DSH_URL) {
+    console.log("[Announce] DSH refresh skipped: DSH_URL is not configured");
+    return { ok: true, skipped: true, status: 0 };
+  }
+
   try {
     const dshRes = await fetch(`${DSH_URL}/api/chat-tag/refresh`, {
       method: "POST",
