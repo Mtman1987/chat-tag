@@ -93,10 +93,16 @@ function normalizeTargetArg(value?: string) {
 }
 
 function findPlayerForDiscordUser(players: any[], discordUserId?: string, userName?: string) {
-  return players.find(
-    (p: any) => (discordUserId && p.discordId === discordUserId) ||
-      (userName && userName !== 'Unknown' && p.discordUsername?.toLowerCase() === userName.toLowerCase())
-  ) as any;
+  const normalizedUserName = normalizeTargetArg(userName);
+  return players.find((p: any) => {
+    if (discordUserId && p.discordId === discordUserId) return true;
+    if (!normalizedUserName || normalizedUserName === 'unknown') return false;
+
+    const keys = [p.discordUsername, p.twitchUsername, p.username, p.displayName, p.kickUsername]
+      .map((key) => normalizeTargetArg(key))
+      .filter(Boolean);
+    return keys.includes(normalizedUserName);
+  }) as any;
 }
 
 function findTargetPlayer(players: any[], targetArg?: string) {
@@ -248,13 +254,13 @@ export async function POST(req: NextRequest) {
       }
       // For Discord join without a linked account, create with discord info
       // They need to link their Twitch first OR we create a discord-based player
-      await reply(`@${userName} To join, link your Twitch first in Twitch chat with "spmt discord ${userName}" then use "spmt join" in Twitch chat. Or ask a mod to add you!`);
+      await reply(`@${userName} To join from Discord, link your Twitch account with the Mountaineer Launch Twitch link button, then try again.`);
       return NextResponse.json({ success: true, reply: 'join-instructions' });
     }
 
     // All other commands require being in the game
     if (!player || !gameUserId) {
-      await reply(`@${userName} You're not in the game! Link your Discord in Twitch chat with "spmt discord ${userName}" then join.`);
+      await reply(`@${userName} You're not linked to a Chat Tag player yet. Use the Twitch link button in Mountaineer Launch, then try again.`);
       return NextResponse.json({ success: true, reply: 'not-in-game' });
     }
 
