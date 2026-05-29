@@ -23,9 +23,6 @@ const DEFAULT_COMMANDS = [
   { name: 'fr', description: 'Toggle French mode', enabled: true },
   { name: 'set @user', description: 'Admin: Set someone as it', enabled: true },
   { name: 'reset', description: 'Admin: Reset game', enabled: true },
-  { name: 'card', description: 'Show bingo card status', enabled: true },
-  { name: 'claim [0-24]', description: 'Claim a bingo square', enabled: true },
-  { name: 'bingo', description: 'Bingo game command', enabled: true },
 ];
 
 export async function GET() {

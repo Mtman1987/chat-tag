@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { quackverseCards } from '@/lib/quackverse-data';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +21,13 @@ function getInternalAppOrigin() {
   return process.env.INTERNAL_APP_ORIGIN || `http://127.0.0.1:${process.env.PORT || 3000}`;
 }
 
+function getWebhookMessageUrl(messageId: string) {
+  const url = new URL(DISCORD_WEBHOOK_URL);
+  url.search = '';
+  url.hash = '';
+  return `${url.toString()}/messages/${messageId}`;
+}
+
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
   if (!DISCORD_BOT_TOKEN || !channelId || !messageId) return;
 
@@ -32,21 +41,8 @@ async function deleteDiscordMessage(channelId: string, messageId?: string) {
   }
 }
 
-async function sendDiscordReply(channelId: string, content: string) {
-  const payload: any = {
-    username: CHAT_TAG_WEBHOOK_NAME,
-    allowed_mentions: { parse: [] },
-    embeds: [
-      {
-        title: 'Chat Tag',
-        description: content,
-        color: 0x00d9ff,
-        footer: { text: 'SPMT Chat Tag' },
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
-  if (CHAT_TAG_AVATAR_URL) payload.avatar_url = CHAT_TAG_AVATAR_URL;
+async function sendDiscordPayload(channelId: string, payload: any) {
+  if (CHAT_TAG_AVATAR_URL && !payload.avatar_url) payload.avatar_url = CHAT_TAG_AVATAR_URL;
 
   if (DISCORD_WEBHOOK_URL) {
     const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
@@ -62,20 +58,19 @@ async function sendDiscordReply(channelId: string, content: string) {
     const sent = await webhookRes.json().catch(() => null);
     if (sent?.id) {
       setTimeout(() => {
-        fetch(`${DISCORD_WEBHOOK_URL}/messages/${sent.id}`, { method: 'DELETE' }).catch(() => {});
+        fetch(getWebhookMessageUrl(sent.id), { method: 'DELETE' }).catch(() => {});
       }, CLEANUP_DELAY_MS);
     }
     return webhookRes;
   }
 
-  const fallbackPayload: any = { ...payload };
   const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
     },
-    body: JSON.stringify(fallbackPayload),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -88,6 +83,22 @@ async function sendDiscordReply(channelId: string, content: string) {
     }, CLEANUP_DELAY_MS);
   }
   return res;
+}
+
+async function sendDiscordReply(channelId: string, content: string) {
+  return sendDiscordPayload(channelId, {
+    username: CHAT_TAG_WEBHOOK_NAME,
+    allowed_mentions: { parse: [] },
+    embeds: [
+      {
+        title: 'Chat Tag',
+        description: content,
+        color: 0x00d9ff,
+        footer: { text: 'SPMT Chat Tag' },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  });
 }
 
 function normalizeTargetArg(value?: string) {
@@ -118,6 +129,74 @@ function findTargetPlayer(players: any[], targetArg?: string) {
     const keys = [p.twitchUsername, p.username, p.displayName, p.kickUsername, p.discordUsername]
       .map(k => (k || '').toLowerCase()).filter(Boolean);
     return keys.includes(target);
+  });
+}
+
+function crownPlayerName(name: string, winners: any[] = []) {
+  const winner = winners.find((entry: any) => normalizeTargetArg(entry.username) === normalizeTargetArg(name));
+  return winner ? `${name} 👑#${winner.place}` : name;
+}
+
+function rarityBreakdown(cardIds: number[] = []) {
+  const counts: Record<string, number> = {};
+  for (const id of cardIds) {
+    const card = quackverseCards.find((item) => item.id === Number(id));
+    const rarity = card?.rarity || 'Unknown';
+    counts[rarity] = (counts[rarity] || 0) + 1;
+  }
+
+  const order = ['Legendary', 'Epic', 'Rare', 'Uncommon', 'Common', 'Unknown'];
+  return order
+    .filter((rarity) => counts[rarity])
+    .map((rarity) => `${rarity}: ${counts[rarity]}`)
+    .join(' | ') || 'No cards yet';
+}
+
+async function sendDiscordPackReply(
+  req: NextRequest,
+  channelId: string,
+  userName: string,
+  packData: any,
+) {
+  const packCards = Array.isArray(packData.pack) ? packData.pack : [];
+  const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
+  const packIds = packCards.map((card: any) => Number(card?.id)).filter((id: number) => Number.isFinite(id) && id > 0).slice(0, 5);
+  const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
+  const uniqueCards = new Set(collectionIds).size;
+  const previewUrl = packIds.length > 0
+    ? `${getPublicAppOrigin(req)}/api/quackverse/pack-preview?ids=${packIds.join(',')}&t=${Date.now()}`
+    : '';
+
+  const embed: any = {
+    title: 'Quackverse Pack Opened',
+    description: `🦆 @${userName} opened a Quackverse pack: ${packNames}. ${Number(packData.packsRemaining || 0)}/3 packs left today.`,
+    color: 0x00d9ff,
+    fields: [
+      {
+        name: 'Pack',
+        value: packCards.map((card: any) => `${card?.name || 'Unknown'} (${card?.rarity || 'Unknown'})`).join('\n') || 'No cards returned.',
+        inline: false,
+      },
+      {
+        name: 'Collection',
+        value: `${collectionIds.length} total cards | ${uniqueCards} unique`,
+        inline: false,
+      },
+      {
+        name: 'Rarity Breakdown',
+        value: rarityBreakdown(collectionIds),
+        inline: false,
+      },
+    ],
+    footer: { text: 'SPMT Chat Tag' },
+    timestamp: new Date().toISOString(),
+  };
+  if (previewUrl) embed.image = { url: previewUrl };
+
+  return sendDiscordPayload(channelId, {
+    username: CHAT_TAG_WEBHOOK_NAME,
+    allowed_mentions: { parse: [] },
+    embeds: [embed],
   });
 }
 
@@ -208,6 +287,10 @@ export async function POST(req: NextRequest) {
 
     await deleteDiscordMessage(channelId, messageId);
 
+    if (cmd === 'card' || cmd === 'phrases' || cmd === 'claim' || cmd === 'newcard' || cmd === 'share' || cmd === 'export') {
+      return NextResponse.json({ success: true, skipped: 'deprecated-bingo-command' });
+    }
+
     // Look up the player by discordUsername or discordId
     const state = await readAppState();
     const players = Object.values(state.tagPlayers || {}) as any[];
@@ -253,10 +336,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, reply: 'join-instructions' });
     }
 
+    if (cmd === 'optout') {
+      await deleteDiscordMessage(channelId, messageId);
+      await reply(`@${userName} Opt-out is Twitch-channel only. Use "spmt optout" in the Twitch channel you want removed.`);
+      return NextResponse.json({ success: true, reply: 'twitch-only' });
+    }
+
     // All other commands require being in the game
     if (!player || !gameUserId) {
       await reply(`@${userName} You're not linked to a Chat Tag player yet. Use the Twitch link button in Mountaineer Launch, then try again.`);
       return NextResponse.json({ success: true, reply: 'not-in-game' });
+    }
+
+    if (cmd === 'leave') {
+      const leaveRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        body: JSON.stringify({ action: 'leave', userId: gameUserId, performedBy: userName }),
+      }).catch((error) => {
+        console.error('[Discord Chat] Leave failed:', error);
+        return null;
+      });
+      if (!leaveRes?.ok) {
+        await reply(`@${userName} Could not leave the tag game right now.`);
+        return NextResponse.json({ success: true, reply: 'leave-failed' });
+      }
+      await reply(`@${userName} left the tag game.`);
+      return NextResponse.json({ success: true });
     }
 
     if (cmd === 'tag') {
@@ -315,7 +421,8 @@ export async function POST(req: NextRequest) {
       const players = Object.values(state.tagPlayers || {}) as any[];
       const itPlayer = players.find(p => p.isIt);
       if (itPlayer) {
-        await reply(`🏷️ ${itPlayer.twitchUsername || 'someone'} is IT! Tag them or be tagged!`);
+        const itName = itPlayer.twitchUsername || itPlayer.username || 'someone';
+        await reply(`🏷️ Current IT: ${itName}. ${itName} must tag someone next; everyone else, stay alive.`);
       } else {
         await reply(`🏷️ FREE FOR ALL — no one is it! Anyone can tag!`);
       }
@@ -387,6 +494,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (cmd === 'pack' || cmd === 'quackpack') {
+      const packRes = await fetch(`${getInternalAppOrigin()}/api/quackverse/pack`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': process.env.BOT_SECRET_KEY || '1234',
+        },
+        body: JSON.stringify({
+          action: 'open',
+          userId: gameUserId,
+          twitchUsername: player.twitchUsername || player.username || userName,
+          source: 'discord',
+          channelId,
+          messageId,
+        }),
+      }).catch((error) => {
+        console.error('[Discord Chat] Pack open failed:', error);
+        return null;
+      });
+
+      if (!packRes) {
+        await reply(`@${userName} Could not open a Quackverse pack right now.`);
+        return NextResponse.json({ success: true, reply: 'pack-failed' });
+      }
+
+      const packData = await packRes.json().catch(() => ({}));
+      if (!packRes.ok || packData.error) {
+        await reply(`@${userName} ${packData.error || 'Could not open a Quackverse pack.'} ${Number(packData.packsRemaining || 0)}/3 packs left today.`);
+        return NextResponse.json({ success: true, reply: 'pack-error' });
+      }
+
+      await sendDiscordPackReply(req, channelId, userName, packData);
+      return NextResponse.json({ success: true });
+    }
+
     if (cmd === 'score' || cmd === 'rank') {
       const tagCounts: Record<string, { tags: number; tagged: number }> = {};
       const scoring = getScoringSettings(state);
@@ -407,17 +549,49 @@ export async function POST(req: NextRequest) {
         const myScore = allPlayers.find(p => p.id === gameUserId);
         await reply(`@${userName} Rank: #${rank}/${allPlayers.length} | Score: ${myScore?.score || 0} pts | Tags: ${myScore?.tags || 0} | Tagged: ${myScore?.tagged || 0} | 🎟️ Pass: ${player.passCount || 0}/3`);
       } else {
+        const winners = (state.tagGame?.state?.monthlyWinners || []) as any[];
         const filtered = allPlayers.filter((p: any) => (p.twitchUsername || '').toLowerCase() !== 'mtman1987');
-        const top5 = filtered.slice(0, 5);
-        const lines = top5.map((p, i) => `#${i + 1} ${p.twitchUsername || 'unknown'} (${p.score || 0}pts)`).join(' | ');
-        await reply(`🏆 Top 5: ${lines}`);
+        const top3 = filtered.slice(0, 3);
+        const lines = top3
+          .map((p, i) => `#${i + 1} ${crownPlayerName(p.twitchUsername || p.username || 'unknown', winners)} - ${p.score || 0} pts`)
+          .join('\n');
+        const winnerLine = winners.length > 0
+          ? `\n\nLast month's crowns: ${winners.map((w: any) => `👑#${w.place} ${w.username}`).join(' | ')}`
+          : '';
+        await reply(`🏆 Top 3\n${lines || 'No ranked players yet.'}${winnerLine}\n\nFull leaderboard: https://chat-tag-new.fly.dev/`);
       }
       return NextResponse.json({ success: true });
     }
 
     if (cmd === 'players') {
       const players = Object.values(state.tagPlayers || {}) as any[];
-      await reply(`@${userName} ${players.length} players in the game.`);
+      const liveRes = await fetch(`${getInternalAppOrigin()}/api/discord/live-members`, {
+        cache: 'no-store',
+      }).catch(() => null);
+      const liveData = liveRes?.ok ? await liveRes.json().catch(() => ({})) : {};
+      const playerSet = new Set(
+        players.map((p: any) => (p.twitchUsername || p.username || '').toLowerCase()).filter(Boolean)
+      );
+      const twitchLiveCount = (liveData.liveMembers || []).filter((member: any) =>
+        playerSet.has(String(member.twitchUsername || '').toLowerCase())
+      ).length;
+      const now = Date.now();
+      const discordOnlineCount = players.filter((p: any) => {
+        const seenChannel = String(p.lastSeenChannel || '').toLowerCase();
+        const lastChat = Number(p.lastChatAt || 0);
+        return seenChannel === 'discord' && lastChat && now - lastChat <= ACTIVE_CHAT_MS;
+      }).length;
+      await reply(`@${userName} ${players.length} players in the game, ${twitchLiveCount} live on Twitch, ${discordOnlineCount} online on Discord.`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'more') {
+      await reply(`@${userName} Pagination is available in Twitch chat right now. Use "spmt players" or "spmt live" here for the current snapshot.`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'sleep' || cmd === 'wake') {
+      await reply(`@${userName} "${cmd}" is now "away". Use "spmt away" to toggle.`);
       return NextResponse.json({ success: true });
     }
 
@@ -438,8 +612,106 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (cmd === 'rules') {
+      await reply(`@${userName} Tag Rules: Tag someone with "spmt tag @user". If you're it, tag someone else. "spmt away" toggles immunity. "spmt pass @user" uses an earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'pinrank') {
+      const pinRes = await fetch(`${getInternalAppOrigin()}/api/tag/pin-stats`, {
+        cache: 'no-store',
+      }).catch((error) => {
+        console.error('[Discord Chat] Pin rank failed:', error);
+        return null;
+      });
+      const pinData = pinRes?.ok ? await pinRes.json().catch(() => ({})) : {};
+      if (!pinData?.topTagged || pinData.topTagged.length === 0) {
+        await reply(`@${userName} Pin hasn't tagged anyone yet.`);
+        return NextResponse.json({ success: true });
+      }
+      const top5 = pinData.topTagged
+        .slice(0, 5)
+        .map((entry: any, i: number) => `#${i + 1} ${entry.username}: ${entry.count}`)
+        .join('\n');
+      await reply(`Pin's Top 5\n${top5}`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'admin' || cmd === 'mod') {
+      await reply(`@${userName} Mod/Admin commands: "spmt givepass @user". Twitch-only tools: mute, unmute, kick, and optout.`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'support' || cmd === 'ticket') {
+      const note = args.slice(1).join(' ').trim();
+      if (!note) {
+        await reply(`@${userName} Please describe what is going on so I can open a useful ticket. Type: "spmt ${cmd} <description>". Include what broke, where it happened, and what you expected.`);
+        return NextResponse.json({ success: true, reply: 'ticket-needs-description' });
+      }
+      const ticketRes = await fetch(`${getInternalAppOrigin()}/api/discord/help-ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        body: JSON.stringify({
+          requester: displayName,
+          requesterId: gameUserId,
+          channel: 'discord',
+          note,
+        }),
+      }).catch((error) => {
+        console.error('[Discord Chat] Support ticket failed:', error);
+        return null;
+      });
+      if (!ticketRes?.ok) {
+        await reply(`@${userName} Could not create a support ticket right now.`);
+        return NextResponse.json({ success: true, reply: 'ticket-failed' });
+      }
+      await reply(`@${userName} Support ticket created.`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'givepass') {
+      const target = normalizeTargetArg(args[1]);
+      if (!target) {
+        await reply(`@${userName} Usage: "spmt givepass @username"`);
+        return NextResponse.json({ success: true });
+      }
+      const targetPlayer = findTargetPlayer(players, args[1]);
+      if (!targetPlayer) {
+        await reply(`@${userName} Player "${target}" not found!`);
+        return NextResponse.json({ success: true });
+      }
+      const targetName = targetPlayer.twitchUsername || targetPlayer.username || target;
+      const grantRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: targetName, reason: `gifted by ${displayName}` }),
+      }).catch((error) => {
+        console.error('[Discord Chat] Give pass failed:', error);
+        return null;
+      });
+      const grantData = grantRes?.ok ? await grantRes.json().catch(() => ({})) : {};
+      if (grantData.granted) {
+        await reply(`🎟️ @${targetName} got an SPMT Pass from ${displayName}. Use "spmt pass @username" to tag anyone for double points.`);
+      } else if (grantData.reason === 'max-passes') {
+        await reply(`@${userName} ${targetName} already has the max 3/3 passes.`);
+      } else {
+        await reply(`@${userName} ${targetName} already has a pass or is not in the game.`);
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'mute' || cmd === 'unmute' || cmd === 'kick') {
+      await reply(`@${userName} "${cmd}" is Twitch-only.`);
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'twitch' || cmd === 'discord') {
+      await reply(`@${userName} Account linking is handled by the Twitch link button in Mountaineer Launch.`);
+      return NextResponse.json({ success: true });
+    }
+
     if (cmd === 'help') {
-      await reply(`@${userName} Commands: "spmt join" | "spmt tag @user" | "spmt pass @user" | "spmt status" | "spmt score" | "spmt rank" | "spmt players" | "spmt away" | "spmt help"`);
+      await reply(`@${userName} Commands: "spmt join" | "spmt tag @user" | "spmt pass @user" | "spmt pack" | "spmt status" | "spmt score" | "spmt rank" | "spmt players" | "spmt live" | "spmt away" | "spmt rules" | "spmt help"`);
       return NextResponse.json({ success: true });
     }
 

@@ -56,9 +56,6 @@ export default function AboutPage() {
                 ['@spmt live', 'Who\'s streaming now'],
                 ['@spmt sleep', 'Go immune/away'],
                 ['@spmt wake', 'Remove immunity'],
-                ['@spmt card', 'Show bingo grid'],
-                ['@spmt phrases', 'Bingo phrase list'],
-                ['@spmt claim [0-24]', 'Claim bingo square'],
                 ['@spmt rules', 'Quick rules + link'],
                 ['@spmt help', 'All commands'],
               ].map(([cmd, desc]) => (

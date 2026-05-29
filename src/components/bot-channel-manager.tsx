@@ -543,7 +543,7 @@ export function BotChannelManager() {
       return 0;
     });
 
-  const protectedCommands = ['join', 'card', 'bingo', 'tag'];
+  const protectedCommands = ['join', 'tag'];
 
   return (
     <Card className="bg-card/80 backdrop-blur-sm">

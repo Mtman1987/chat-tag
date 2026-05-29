@@ -2486,10 +2486,6 @@ console.log = (...args) => {
       reply(`🦆 @${user} opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`);
     }
 
-    else if (cmd === 'card' || cmd === 'phrases' || cmd === 'claim' || cmd === 'newcard' || cmd === 'share' || cmd === 'export') {
-      reply(`@${user} Bingo is currently disabled.`);
-    }
-    
     else if (cmd === 'pass') {
       const target = normalizeChatHandle(args[1]);
       console.log(`[Bot] Pass command from ${user}, target=${target}`);
