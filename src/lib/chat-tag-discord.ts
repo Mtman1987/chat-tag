@@ -9,6 +9,15 @@ const CHAT_TAG_CHANNEL_ID =
   process.env.DISCORD_TAG_CHANNEL_ID ||
   process.env.DISCORD_CHANNEL_ID ||
   '1463633163673927732';
+const DISCORD_CHANNEL_CLEANUP_LIMIT = Number(process.env.DISCORD_CHANNEL_CLEANUP_LIMIT || 5000);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isUnknownDiscordMessageError(error: Error) {
+  return /Discord request failed \(404\)|Unknown Message|code"?\s*:\s*10008/i.test(error.message || '');
+}
 export function buildGameStatePayload(state: AppState) {
   const scoring = getScoringSettings(state);
   const tagCounts: Record<string, { tags: number; tagged: number }> = {};
@@ -164,6 +173,14 @@ async function requestDiscord(path: string, init: RequestInit) {
   return text ? JSON.parse(text) : null;
 }
 
+async function tryRequestDiscord(path: string, init: RequestInit) {
+  try {
+    return await requestDiscord(path, init);
+  } catch (error: any) {
+    return { error };
+  }
+}
+
 export async function sendDiscordChannelMessage(channelId: string, payload: Record<string, unknown>) {
   return requestDiscord(`/channels/${channelId}/messages`, {
     method: 'POST',
@@ -178,6 +195,72 @@ async function editDiscordMessage(channelId: string, messageId: string, payload:
   });
 }
 
+async function deleteDiscordMessage(channelId: string, messageId: string) {
+  return requestDiscord(`/channels/${channelId}/messages/${messageId}`, {
+    method: 'DELETE',
+  });
+}
+
+async function listDiscordMessages(channelId: string, before?: string) {
+  const query = new URLSearchParams({ limit: '100' });
+  if (before) query.set('before', before);
+  return requestDiscord(`/channels/${channelId}/messages?${query.toString()}`, {
+    method: 'GET',
+  });
+}
+
+async function deleteDiscordMessages(channelId: string, messageIds: string[]) {
+  for (let index = 0; index < messageIds.length; index += 100) {
+    const chunk = messageIds.slice(index, index + 100);
+    if (chunk.length === 0) continue;
+
+    if (chunk.length >= 2) {
+      const result = await tryRequestDiscord(`/channels/${channelId}/messages/bulk-delete`, {
+        method: 'POST',
+        body: JSON.stringify({ messages: chunk }),
+      });
+      if (!result?.error) {
+        await sleep(400);
+        continue;
+      }
+      console.warn(`[ChatTagEmbed] Bulk delete failed, falling back to individual deletes: ${result.error.message}`);
+    }
+
+    for (const messageId of chunk) {
+      try {
+        await deleteDiscordMessage(channelId, messageId);
+        await sleep(150);
+      } catch (error: any) {
+        if (!isUnknownDiscordMessageError(error)) {
+          console.warn(`[ChatTagEmbed] Message cleanup failed for ${messageId}: ${error.message}`);
+        }
+      }
+    }
+  }
+}
+
+export async function wipeChatTagChannel(channelId = CHAT_TAG_CHANNEL_ID) {
+  let before: string | undefined;
+  let deleted = 0;
+
+  while (deleted < DISCORD_CHANNEL_CLEANUP_LIMIT) {
+    const messages = await listDiscordMessages(channelId, before);
+    if (!Array.isArray(messages) || messages.length === 0) break;
+
+    const ids = messages.map((message: any) => message?.id).filter(Boolean);
+    if (ids.length === 0) break;
+
+    await deleteDiscordMessages(channelId, ids);
+    deleted += ids.length;
+    before = ids[ids.length - 1];
+
+    if (messages.length < 100) break;
+  }
+
+  console.log(`[ChatTagEmbed] Channel cleanup deleted ${deleted} message(s) from ${channelId}`);
+  return { deleted, channelId };
+}
+
 export async function postOrUpdateChatTagEmbed() {
   const state = await readAppState();
   const gameState = buildGameStatePayload(state);
@@ -190,7 +273,13 @@ export async function postOrUpdateChatTagEmbed() {
       console.log('[ChatTagEmbed] Updated persistent embed:', stored.messageId);
       return { ok: true, action: 'updated', channelId: stored.channelId, messageId: stored.messageId };
     } catch (error: any) {
-      console.warn(`[ChatTagEmbed] Stored embed update failed, posting replacement: ${error.message}`);
+      console.warn(`[ChatTagEmbed] Stored embed update failed, wiping channel before replacement: ${error.message}`);
+      await wipeChatTagChannel(stored.channelId);
+      await updateAppState((draft) => {
+        if (draft.discordMessages) {
+          delete draft.discordMessages.chatTagPersistentEmbed;
+        }
+      });
     }
   }
 

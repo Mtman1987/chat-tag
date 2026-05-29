@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const CLEANUP_DELAY_MS = 5 * 60 * 1000;
+const REQUIRE_DISCORD_CHAT_SECRET = process.env.DISCORD_CHAT_REQUIRE_SECRET === 'true';
+const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
   if (!DISCORD_BOT_TOKEN || !channelId || !messageId) return;
@@ -78,22 +80,32 @@ async function announceTagEvent(req: NextRequest, body: any) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isBotRequest(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
     const body = await req.json();
     const { userId: discordUserId, guildId, message, userName: rawUserName, channelId, messageId, userAvatar } = body;
     const userName = rawUserName || 'Unknown';
+    const hasBotSecret = isBotRequest(req);
 
     if (!message || !channelId) {
       return NextResponse.json({ error: 'message and channelId required' }, { status: 400 });
     }
 
+    if (!hasBotSecret && REQUIRE_DISCORD_CHAT_SECRET) {
+      console.warn('[Discord Chat] Unauthorized request blocked');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Check if it's an spmt command
     const rawMessage = message.trim();
     const msg = rawMessage.toLowerCase();
+    console.log('[Discord Chat] Received message', {
+      command: msg.startsWith('spmt ') || msg.startsWith('@spmt '),
+      channelId,
+      messageId,
+      userName,
+      hasBotSecret,
+    });
+
     if (!msg.startsWith('spmt ') && !msg.startsWith('@spmt ')) {
       // Not a command — track chat activity if player exists, then return
       // Look up player by discord ID or username
@@ -127,6 +139,7 @@ export async function POST(req: NextRequest) {
     const normalized = msg.startsWith('@spmt ') ? msg : '@' + msg;
     const args = normalized.split(/\s+/).slice(1); // remove "@spmt"
     const cmd = args[0];
+    console.log(`[Discord Chat] Processing spmt ${cmd || '(empty)'}`);
 
     if (cmd === 'controls' || cmd === 'control') {
       return NextResponse.json({ success: true, skipped: 'controls-owned-by-dsh' });
@@ -245,6 +258,71 @@ export async function POST(req: NextRequest) {
       } else {
         await reply(`🏷️ FREE FOR ALL — no one is it! Anyone can tag!`);
       }
+      return NextResponse.json({ success: true });
+    }
+
+    if (cmd === 'live') {
+      const liveRes = await fetch(new URL('/api/discord/live-members', req.url).toString(), {
+        cache: 'no-store',
+      }).catch((error) => {
+        console.error('[Discord Chat] Live members fetch failed:', error);
+        return null;
+      });
+
+      if (!liveRes?.ok) {
+        await reply(`@${userName} Could not check live players right now.`);
+        return NextResponse.json({ success: true, reply: 'live-check-failed' });
+      }
+
+      const liveData = await liveRes.json().catch(() => ({}));
+      const playerSet = new Set(
+        players
+          .map((p: any) => (p.twitchUsername || p.username || '').toLowerCase())
+          .filter(Boolean)
+      );
+      const liveMembers = (liveData.liveMembers || []).filter((member: any) =>
+        playerSet.has(String(member.twitchUsername || '').toLowerCase())
+      );
+      const liveLogins = new Set(
+        liveMembers.map((member: any) => String(member.twitchUsername || '').toLowerCase()).filter(Boolean)
+      );
+
+      if (liveMembers.length === 0) {
+        await reply(`@${userName} No players are live right now!`);
+        return NextResponse.json({ success: true });
+      }
+
+      const now = Date.now();
+      const channelChatters: Record<string, string[]> = {};
+      for (const p of players) {
+        const pName = String(p.twitchUsername || p.username || '').toLowerCase();
+        if (!pName || liveLogins.has(pName)) continue;
+        const lastChat = Number(p.lastChatAt || 0);
+        const seenChannel = String(p.lastSeenChannel || '').toLowerCase();
+        if (!lastChat || now - lastChat > ACTIVE_CHAT_MS) continue;
+
+        const key = seenChannel === 'discord' ? '_discord' : seenChannel;
+        if (key === '_discord' || liveLogins.has(key)) {
+          if (!channelChatters[key]) channelChatters[key] = [];
+          channelChatters[key].push(pName);
+        }
+      }
+
+      const groups: string[] = [];
+      let totalChatters = 0;
+      for (const member of liveMembers) {
+        const login = String(member.twitchUsername || '').toLowerCase();
+        const chatters = channelChatters[login] || [];
+        totalChatters += chatters.length;
+        groups.push(`🟢${login}${chatters.length ? ` > 💬${chatters.join(', ')}` : ''}`);
+      }
+      const discordChatters = channelChatters._discord || [];
+      if (discordChatters.length > 0) {
+        totalChatters += discordChatters.length;
+        groups.push(`🟣Discord > 💬${discordChatters.join(', ')}`);
+      }
+
+      await reply(`@${userName} 🟢${liveMembers.length} live 💬${totalChatters} chatting: ${groups.join(' | ') || 'none'}`);
       return NextResponse.json({ success: true });
     }
 
