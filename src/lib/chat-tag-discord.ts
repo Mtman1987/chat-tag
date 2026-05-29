@@ -3,6 +3,13 @@ import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
+const DISCORD_WEBHOOK_URL =
+  process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || '';
+const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
+const CHAT_TAG_AVATAR_URL =
+  process.env.CHAT_TAG_AVATAR_URL ||
+  process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
+  '';
 const CHAT_TAG_CHANNEL_ID =
   process.env.CHAT_TAG_CHANNEL_ID ||
   process.env.DISCORD_CHAT_TAG_CHANNEL_ID ||
@@ -18,6 +25,23 @@ function sleep(ms: number) {
 function isUnknownDiscordMessageError(error: Error) {
   return /Discord request failed \(404\)|Unknown Message|code"?\s*:\s*10008/i.test(error.message || '');
 }
+
+function withChatTagWebhookIdentity(payload: Record<string, unknown>) {
+  return {
+    username: CHAT_TAG_WEBHOOK_NAME,
+    ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
+    ...payload,
+  };
+}
+
+function getWebhookMessageUrl(messageId?: string) {
+  if (!DISCORD_WEBHOOK_URL) return '';
+  const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
+  webhookUrl.search = '';
+  webhookUrl.hash = '';
+  return messageId ? `${webhookUrl.toString()}/messages/${messageId}` : webhookUrl.toString();
+}
+
 export function buildGameStatePayload(state: AppState) {
   const scoring = getScoringSettings(state);
   const tagCounts: Record<string, { tags: number; tagged: number }> = {};
@@ -195,6 +219,45 @@ async function editDiscordMessage(channelId: string, messageId: string, payload:
   });
 }
 
+async function sendDiscordWebhookMessage(payload: Record<string, unknown>) {
+  if (!DISCORD_WEBHOOK_URL) {
+    return sendDiscordChannelMessage(CHAT_TAG_CHANNEL_ID, payload);
+  }
+
+  const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
+  webhookUrl.searchParams.set('wait', 'true');
+  const response = await fetch(webhookUrl.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(withChatTagWebhookIdentity(payload)),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Discord webhook post failed (${response.status}): ${await response.text().catch(() => '')}`);
+  }
+
+  return response.json();
+}
+
+async function editDiscordWebhookMessage(messageId: string, payload: Record<string, unknown>) {
+  if (!DISCORD_WEBHOOK_URL) {
+    return editDiscordMessage(CHAT_TAG_CHANNEL_ID, messageId, payload);
+  }
+
+  const response = await fetch(getWebhookMessageUrl(messageId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(withChatTagWebhookIdentity(payload)),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Discord webhook edit failed (${response.status}): ${await response.text().catch(() => '')}`);
+  }
+
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
 async function deleteDiscordMessage(channelId: string, messageId: string) {
   return requestDiscord(`/channels/${channelId}/messages/${messageId}`, {
     method: 'DELETE',
@@ -267,9 +330,18 @@ export async function postOrUpdateChatTagEmbed() {
   const payload = buildChatTagEmbed(gameState);
   const stored = state.discordMessages?.chatTagPersistentEmbed as any;
 
+  if (stored?.messageId && DISCORD_WEBHOOK_URL && stored.via !== 'webhook') {
+    console.warn('[ChatTagEmbed] Stored persistent embed was bot-owned, wiping channel before webhook replacement');
+    await wipeChatTagChannel(stored.channelId || CHAT_TAG_CHANNEL_ID);
+    await updateAppState((draft) => {
+      if (draft.discordMessages) {
+        delete draft.discordMessages.chatTagPersistentEmbed;
+      }
+    });
+  } else
   if (stored?.messageId && stored?.channelId) {
     try {
-      await editDiscordMessage(stored.channelId, stored.messageId, payload);
+      await editDiscordWebhookMessage(stored.messageId, payload);
       console.log('[ChatTagEmbed] Updated persistent embed:', stored.messageId);
       return { ok: true, action: 'updated', channelId: stored.channelId, messageId: stored.messageId };
     } catch (error: any) {
@@ -283,7 +355,7 @@ export async function postOrUpdateChatTagEmbed() {
     }
   }
 
-  const message = await sendDiscordChannelMessage(CHAT_TAG_CHANNEL_ID, payload);
+  const message = await sendDiscordWebhookMessage(payload);
   const messageId = message?.id;
   if (!messageId) {
     throw new Error('Discord did not return a message id for Chat Tag embed');
@@ -293,6 +365,7 @@ export async function postOrUpdateChatTagEmbed() {
     draft.discordMessages.chatTagPersistentEmbed = {
       channelId: CHAT_TAG_CHANNEL_ID,
       messageId,
+      via: DISCORD_WEBHOOK_URL ? 'webhook' : 'bot',
       updatedAt: new Date().toISOString(),
     };
   });
