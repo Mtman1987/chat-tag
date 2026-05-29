@@ -6,12 +6,23 @@ import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
+const CLEANUP_DELAY_MS = 5 * 60 * 1000;
 
-async function sendDiscordReply(channelId: string, content: string, replyToMessageId?: string) {
-  const body: any = { content };
-  if (replyToMessageId) {
-    body.message_reference = { message_id: replyToMessageId };
+async function deleteDiscordMessage(channelId: string, messageId?: string) {
+  if (!DISCORD_BOT_TOKEN || !channelId || !messageId) return;
+
+  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+  }).catch(() => null);
+
+  if (response && !response.ok && response.status !== 404) {
+    console.error(`[Discord Chat] Failed to delete message: ${response.status} ${await response.text().catch(() => '')}`);
   }
+}
+
+async function sendDiscordReply(channelId: string, content: string) {
+  const body: any = { content, allowed_mentions: { parse: [] } };
   const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
@@ -24,7 +35,46 @@ async function sendDiscordReply(channelId: string, content: string, replyToMessa
     const text = await res.text();
     console.error(`[Discord Chat] Failed to send reply: ${res.status} ${text}`);
   }
+  const sent = await res.json().catch(() => null);
+  if (sent?.id) {
+    setTimeout(() => {
+      deleteDiscordMessage(channelId, sent.id).catch(() => {});
+    }, CLEANUP_DELAY_MS);
+  }
   return res;
+}
+
+function normalizeTargetArg(value?: string) {
+  return String(value || '').trim().toLowerCase().replace(/^@+/, '');
+}
+
+function findPlayerForDiscordUser(players: any[], discordUserId?: string, userName?: string) {
+  return players.find(
+    (p: any) => (discordUserId && p.discordId === discordUserId) ||
+      (userName && userName !== 'Unknown' && p.discordUsername?.toLowerCase() === userName.toLowerCase())
+  ) as any;
+}
+
+function findTargetPlayer(players: any[], targetArg?: string) {
+  const target = normalizeTargetArg(targetArg);
+  const mention = target.match(/^<@!?(\d+)>$/);
+  if (mention) {
+    return players.find((p: any) => p.discordId === mention[1]);
+  }
+
+  return players.find((p: any) => {
+    const keys = [p.twitchUsername, p.username, p.displayName, p.kickUsername, p.discordUsername]
+      .map(k => (k || '').toLowerCase()).filter(Boolean);
+    return keys.includes(target);
+  });
+}
+
+async function announceTagEvent(req: NextRequest, body: any) {
+  await fetch(new URL('/api/discord/announce', req.url).toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+    body: JSON.stringify(body),
+  }).catch((error) => console.error('[Discord Chat] Announce failed:', error));
 }
 
 export async function POST(req: NextRequest) {
@@ -78,18 +128,22 @@ export async function POST(req: NextRequest) {
     const args = normalized.split(/\s+/).slice(1); // remove "@spmt"
     const cmd = args[0];
 
+    if (cmd === 'controls' || cmd === 'control') {
+      return NextResponse.json({ success: true, skipped: 'controls-owned-by-dsh' });
+    }
+
+    await deleteDiscordMessage(channelId, messageId);
+
     // Look up the player by discordUsername or discordId
     const state = await readAppState();
-    const player = Object.values(state.tagPlayers || {}).find(
-      (p: any) => (discordUserId && p.discordId === discordUserId) ||
-                  (userName && userName !== 'Unknown' && p.discordUsername?.toLowerCase() === userName.toLowerCase())
-    ) as any;
+    const players = Object.values(state.tagPlayers || {}) as any[];
+    const player = findPlayerForDiscordUser(players, discordUserId, userName);
 
     const gameUserId = player?.id; // e.g. "user_12345"
     const displayName = player?.twitchUsername || userName;
 
     // Helper to reply
-    const reply = (text: string) => sendDiscordReply(channelId, text, messageId);
+    const reply = (text: string) => sendDiscordReply(channelId, text);
 
     // Capture away state before any mutations (needed for away toggle)
     const wasAway = player ? (player.sleepingImmunity || player.offlineImmunity) : false;
@@ -132,18 +186,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'tag') {
-      const target = args[1]?.replace(/^@+/, '').toLowerCase();
+      const target = normalizeTargetArg(args[1]);
       if (!target) {
         await reply(`@${userName} Usage: "spmt tag @username"`);
         return NextResponse.json({ success: true });
       }
       // Resolve target
-      const players = Object.values(state.tagPlayers || {}) as any[];
-      const targetPlayer = players.find(p => {
-        const keys = [p.twitchUsername, p.username, p.displayName, p.kickUsername, p.discordUsername]
-          .map(k => (k || '').toLowerCase()).filter(Boolean);
-        return keys.includes(target);
-      });
+      const targetPlayer = findTargetPlayer(players, args[1]);
       if (!targetPlayer) {
         await reply(`@${userName} Player "${target}" not found!`);
         return NextResponse.json({ success: true });
@@ -158,32 +207,18 @@ export async function POST(req: NextRequest) {
       if (tagData.error) {
         await reply(`@${userName} ${tagData.error}`);
       } else {
-        const tagMsg = tagData.doublePoints
-          ? `🔥 ${displayName} tagged @${targetPlayer.twitchUsername || target} for DOUBLE POINTS! 🔥`
-          : `🎯 ${displayName} tagged @${targetPlayer.twitchUsername || target} who is now it!`;
-        await reply(tagMsg);
-        // Also trigger announce
-        await fetch(new URL('/api/discord/announce', req.url).toString(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagger: displayName, tagged: targetPlayer.twitchUsername || target, doublePoints: tagData.doublePoints }),
-        }).catch(() => {});
+        await announceTagEvent(req, { tagger: displayName, tagged: targetPlayer.twitchUsername || target, doublePoints: tagData.doublePoints });
       }
       return NextResponse.json({ success: true });
     }
 
     if (cmd === 'pass') {
-      const target = args[1]?.replace(/^@+/, '').toLowerCase();
+      const target = normalizeTargetArg(args[1]);
       if (!target) {
         await reply(`@${userName} Usage: "spmt pass @username" — Use your pass to tag someone for DOUBLE POINTS!`);
         return NextResponse.json({ success: true });
       }
-      const players = Object.values(state.tagPlayers || {}) as any[];
-      const targetPlayer = players.find(p => {
-        const keys = [p.twitchUsername, p.username, p.displayName, p.kickUsername, p.discordUsername]
-          .map(k => (k || '').toLowerCase()).filter(Boolean);
-        return keys.includes(target);
-      });
+      const targetPlayer = findTargetPlayer(players, args[1]);
       if (!targetPlayer) {
         await reply(`@${userName} Player "${target}" not found!`);
         return NextResponse.json({ success: true });
@@ -197,12 +232,7 @@ export async function POST(req: NextRequest) {
       if (passData.error) {
         await reply(`@${userName} ${passData.error}`);
       } else {
-        await reply(`🎟️ ${displayName} used their PASS to tag @${targetPlayer.twitchUsername || target} for DOUBLE POINTS!`);
-        await fetch(new URL('/api/discord/announce', req.url).toString(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tagger: displayName, tagged: targetPlayer.twitchUsername || target, doublePoints: true, message: 'Used a Pass' }),
-        }).catch(() => {});
+        await announceTagEvent(req, { tagger: displayName, tagged: targetPlayer.twitchUsername || target, doublePoints: true, message: 'Used a Pass' });
       }
       return NextResponse.json({ success: true });
     }
