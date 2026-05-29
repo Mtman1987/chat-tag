@@ -233,7 +233,7 @@ async function updateEnvToken(key, value) {
       
       console.log(`[Bot] Token refresh: ${key} persisted to .env file and updated in memory`);
     } else {
-      console.warn(`[Bot] .env file not found at ${envPath} - token updated in memory only (will be lost on restart)`);
+      console.log(`[Bot] .env file not found at ${envPath}; token is persisted in ${TOKEN_STORE_FILE}`);
     }
   } catch (error) {
     console.error(`[Bot] Failed to persist token to .env:`, error.message);
