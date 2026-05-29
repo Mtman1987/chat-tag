@@ -401,11 +401,11 @@ function forwardToDSH(eventData) {
       if (Date.now() < dshErrorSuppressedUntil) return;
       dshErrorCount++;
       if (dshErrorCount > 3) {
-        console.log(`[DSH] Forward failing (${dshErrorCount} errors), suppressing logs for 60s`);
+        console.log(`[DSH] Twitch event forward failing (${dshErrorCount} errors, not Discord webhook), suppressing logs for 60s`);
         dshErrorSuppressedUntil = Date.now() + DSH_ERROR_WINDOW_MS;
         dshErrorCount = 0;
       } else {
-        console.log(`[DSH] Forward failed: ${r.status}`);
+        console.log(`[DSH] Twitch event forward failed (not Discord webhook): ${r.status}`);
       }
     } else {
       dshErrorCount = 0;
@@ -414,11 +414,11 @@ function forwardToDSH(eventData) {
     if (Date.now() < dshErrorSuppressedUntil) return;
     dshErrorCount++;
     if (dshErrorCount > 3) {
-      console.log(`[DSH] Forward errors (${dshErrorCount}), suppressing logs for 60s`);
+      console.log(`[DSH] Twitch event forward errors (${dshErrorCount}, not Discord webhook), suppressing logs for 60s`);
       dshErrorSuppressedUntil = Date.now() + DSH_ERROR_WINDOW_MS;
       dshErrorCount = 0;
     } else {
-      console.error('[DSH] Forward error:', e.message);
+      console.error('[DSH] Twitch event forward error (not Discord webhook):', e.message);
     }
   });
 }
@@ -1029,11 +1029,14 @@ console.log = (...args) => {
               if (!isStaleTimeout) {
                 const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
                 await broadcastToPlayers(client, msg);
-                await apiCall('/api/discord/announce', {
+                const announceRes = await apiCall('/api/discord/announce', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ tagger: 'System', tagged: chosen.twitchUsername, doublePoints: false, message: 'Random rotation' })
                 });
+                if (announceRes?.__ok === false || announceRes?.success === false) {
+                  console.error(`[Bot] Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
+                }
               }
             }
           } else {
@@ -1863,11 +1866,14 @@ console.log = (...args) => {
         
         // Discord announcement
         console.log('[Bot] Sending Discord announcement...');
-        await apiCall('/api/discord/announce', {
+        const announceRes = await apiCall('/api/discord/announce', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tagger: user, tagged: targetName, doublePoints: res.doublePoints })
         });
+        if (announceRes?.__ok === false || announceRes?.success === false) {
+          console.error(`[Bot] Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
+        }
         // Mod log
         await apiCall('/api/tag/mod-log', {
           method: 'POST',
@@ -2464,11 +2470,14 @@ console.log = (...args) => {
         if (!isMuted) {
           await broadcastToPlayers(client, msg, channelName);
         }
-        await apiCall('/api/discord/announce', {
+        const announceRes = await apiCall('/api/discord/announce', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tagger: user, tagged: targetName, doublePoints: true, message: 'Used a Pass' })
         });
+        if (announceRes?.__ok === false || announceRes?.success === false) {
+          console.error(`[Bot] Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
+        }
         await apiCall('/api/tag/mod-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

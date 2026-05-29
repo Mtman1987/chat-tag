@@ -1,9 +1,122 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { readAppState, toMillis } from '@/lib/volume-store';
-import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { NextRequest, NextResponse } from "next/server";
+import { readAppState, toMillis } from "@/lib/volume-store";
+import { getScoringSettings, scoreFromTagCounts } from "@/lib/scoring";
 
-const DSH_URL = process.env.DSH_URL || 'https://discord-stream-hub-new.fly.dev';
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
+const DSH_URL = process.env.DSH_URL || "https://discord-stream-hub-new.fly.dev";
+const DISCORD_WEBHOOK_URL =
+  process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || "";
+const DISCORD_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryDelayMs(response: Response, attempt: number) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number.parseFloat(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, 5000);
+    }
+  }
+
+  return Math.min(500 * 2 ** attempt, 3000);
+}
+
+async function postDiscordWebhook(payload: Record<string, unknown>) {
+  if (!DISCORD_WEBHOOK_URL) {
+    console.warn(
+      "[Announce] Discord webhook skipped: DISCORD_WEBHOOK_URL or DISCORD_TAG_WEBHOOK_URL is not configured",
+    );
+    return {
+      ok: false,
+      configured: false,
+      status: 0,
+      error: "Discord webhook URL is not configured",
+    };
+  }
+
+  let lastError = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        console.log(
+          `[Announce] Discord webhook message sent (status ${response.status})`,
+        );
+        return { ok: true, configured: true, status: response.status };
+      }
+
+      const text = await response.text();
+      lastError =
+        text.slice(0, 300) ||
+        response.statusText ||
+        "Discord webhook request failed";
+      console.error(
+        `[Announce] Discord webhook failed (attempt ${attempt + 1}/3): ${response.status} ${lastError}`,
+      );
+
+      if (!DISCORD_RETRY_STATUSES.has(response.status) || attempt === 2) {
+        return {
+          ok: false,
+          configured: true,
+          status: response.status,
+          error: lastError,
+        };
+      }
+
+      await sleep(getRetryDelayMs(response, attempt));
+    } catch (error: any) {
+      lastError = error?.message || "Discord webhook request failed";
+      console.error(
+        `[Announce] Discord webhook error (attempt ${attempt + 1}/3): ${lastError}`,
+      );
+      if (attempt === 2) {
+        return { ok: false, configured: true, status: 0, error: lastError };
+      }
+      await sleep(500 * 2 ** attempt);
+    }
+  }
+
+  return {
+    ok: false,
+    configured: true,
+    status: 0,
+    error: lastError || "Discord webhook request failed",
+  };
+}
+
+async function refreshDshEmbed(gameState: Record<string, unknown>) {
+  try {
+    const dshRes = await fetch(`${DSH_URL}/api/chat-tag/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gameState }),
+    });
+    if (dshRes.ok) {
+      console.log("[Announce] DSH embed updated");
+      return { ok: true, status: dshRes.status };
+    }
+
+    const text = await dshRes.text();
+    console.error(
+      `[Announce] DSH refresh failed: ${dshRes.status} ${text.slice(0, 200)}`,
+    );
+    return {
+      ok: false,
+      status: dshRes.status,
+      error: text.slice(0, 300) || dshRes.statusText,
+    };
+  } catch (e: any) {
+    console.error("[Announce] DSH refresh error:", e.message);
+    return { ok: false, status: 0, error: e.message };
+  }
+}
 
 function buildGameStatePayload(state: any) {
   const scoring = getScoringSettings(state);
@@ -12,11 +125,11 @@ function buildGameStatePayload(state: any) {
     if (entry.blocked) continue;
     const from = entry.taggerId || entry.from;
     const to = entry.taggedId || entry.to;
-    if (from && from !== 'system') {
+    if (from && from !== "system") {
       if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 };
       tagCounts[from].tags += 1;
     }
-    if (to && to !== 'system' && to !== 'free-for-all') {
+    if (to && to !== "system" && to !== "free-for-all") {
       if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 };
       tagCounts[to].tagged += 1;
     }
@@ -42,10 +155,13 @@ function buildGameStatePayload(state: any) {
     .sort((a, b) => b.score - a.score)
     .map((p, i) => ({ rank: i + 1, ...p }));
 
-  const currentIt = players.find(p => p.isIt);
+  const currentIt = players.find((p) => p.isIt);
 
   const recentHistory = [...state.tagHistory]
-    .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
+    .sort(
+      (a: any, b: any) =>
+        (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0),
+    )
     .slice(0, 25)
     .map((entry: any) => {
       const taggerId = entry.taggerId || entry.from;
@@ -61,7 +177,10 @@ function buildGameStatePayload(state: any) {
       };
     });
 
-  const bingoCard = state.bingoCards.current_user || { phrases: [], covered: {} };
+  const bingoCard = state.bingoCards.current_user || {
+    phrases: [],
+    covered: {},
+  };
   const bingo = {
     phrases: bingoCard.phrases || [],
     covered: bingoCard.covered || {},
@@ -71,7 +190,9 @@ function buildGameStatePayload(state: any) {
 
   return {
     tag: {
-      currentIt: currentIt ? { id: currentIt.id, twitchUsername: currentIt.twitchUsername } : null,
+      currentIt: currentIt
+        ? { id: currentIt.id, twitchUsername: currentIt.twitchUsername }
+        : null,
       isFreeForAll: !currentIt,
       lastTagTime: toMillis(state.tagGame.state.lastTagTime),
       playerCount: players.length,
@@ -92,54 +213,65 @@ export async function POST(req: NextRequest) {
     const state = await readAppState();
     const gameState = buildGameStatePayload(state);
 
-    // 1. Refresh the DSH persistent embed
-    try {
-      const dshRes = await fetch(`${DSH_URL}/api/chat-tag/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameState }),
+    let discordResult: Awaited<ReturnType<typeof postDiscordWebhook>> = {
+      ok: false,
+      configured: Boolean(DISCORD_WEBHOOK_URL),
+      status: 0,
+      error:
+        tagger && tagged
+          ? "Discord webhook was not attempted"
+          : "Tagger and tagged are required for Discord announcements",
+    };
+
+    // Post the Discord message first so a DSH outage/503 cannot block tag announcements.
+    if (tagger && tagged) {
+      const icon = doublePoints ? "🔥" : "🎯";
+      const pointsNote = doublePoints ? " for **DOUBLE POINTS**" : "";
+      const extraNote = message ? ` (${message})` : "";
+      const newIt = gameState.tag.currentIt?.twitchUsername || "Free for all";
+
+      discordResult = await postDiscordWebhook({
+        embeds: [
+          {
+            title: `${icon} Tag Event!`,
+            description: `**${tagger}** tagged **${tagged}**${pointsNote}!${extraNote}`,
+            color: doublePoints ? 0xff4500 : 0x00d9ff,
+            fields: [
+              { name: "Now IT", value: newIt, inline: true },
+              {
+                name: "Players",
+                value: `${gameState.tag.playerCount}`,
+                inline: true,
+              },
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: "SPMT Chat Tag" },
+          },
+        ],
       });
-      if (dshRes.ok) {
-        console.log('[Announce] DSH embed updated');
-      } else {
-        console.error('[Announce] DSH refresh failed:', dshRes.status);
-      }
-    } catch (e: any) {
-      console.error('[Announce] DSH refresh error:', e.message);
     }
 
-    // 2. Post a confirmation message to the Discord webhook
-    if (DISCORD_WEBHOOK_URL && tagger && tagged) {
-      try {
-        const icon = doublePoints ? '🔥' : '🎯';
-        const pointsNote = doublePoints ? ' for **DOUBLE POINTS**' : '';
-        const extraNote = message ? ` (${message})` : '';
-        const newIt = gameState.tag.currentIt?.twitchUsername || 'Free for all';
+    // Refreshing the DSH persistent embed is separate from sending Discord announcements.
+    // A 503 here should be visible in logs, but should not make Discord delivery fail.
+    const dshResult = await refreshDshEmbed(gameState);
 
-        await fetch(DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            embeds: [{
-              title: `${icon} Tag Event!`,
-              description: `**${tagger}** tagged **${tagged}**${pointsNote}!${extraNote}`,
-              color: doublePoints ? 0xFF4500 : 0x00D9FF,
-              fields: [
-                { name: 'Now IT', value: newIt, inline: true },
-                { name: 'Players', value: `${gameState.tag.playerCount}`, inline: true },
-              ],
-              timestamp: new Date().toISOString(),
-              footer: { text: 'SPMT Chat Tag' },
-            }],
-          }),
-        });
-        console.log('[Announce] Discord webhook message sent');
-      } catch (e: any) {
-        console.error('[Announce] Discord webhook error:', e.message);
-      }
+    if (tagger && tagged && (!discordResult.configured || !discordResult.ok)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: discordResult.error || "Discord webhook failed",
+          discord: discordResult,
+          dsh: dshResult,
+        },
+        { status: discordResult.configured ? 502 : 500 },
+      );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      discord: discordResult,
+      dsh: dshResult,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
