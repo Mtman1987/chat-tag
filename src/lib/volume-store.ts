@@ -31,6 +31,7 @@ export type AppState = {
   };
   discordMessages: {
     lastTagAnnouncement?: JsonObject;
+    chatTagPersistentEmbed?: JsonObject;
   };
   overlayMessages: Record<string, JsonObject[]>;
   modLog: JsonObject[];
