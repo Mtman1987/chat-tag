@@ -16,7 +16,13 @@ const CHAT_TAG_AVATAR_URL =
   '';
 const CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
-const DISCORD_CHAT_DEBUG = process.env.DISCORD_CHAT_DEBUG === '1';
+
+function debugEnabled(scope: string) {
+  const value = String(process.env.DEBUG || '').toLowerCase();
+  if (!value) return false;
+  const scopes = value.split(',').map((item) => item.trim()).filter(Boolean);
+  return scopes.some((item) => item === '1' || item === 'true' || item === '*' || item === 'all' || item === scope);
+}
 
 function getInternalAppOrigin() {
   return process.env.INTERNAL_APP_ORIGIN || `http://127.0.0.1:${process.env.PORT || 3000}`;
@@ -212,7 +218,7 @@ async function announceTagEvent(req: NextRequest, body: any) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    if (DISCORD_CHAT_DEBUG) {
+    if (debugEnabled('discord-chat') || debugEnabled('discord')) {
       console.log('[Discord Chat] Raw payload keys', {
         keys: Object.keys(body || {}),
         rootKeys: body?.root ? Object.keys(body.root || {}) : [],
@@ -246,7 +252,7 @@ export async function POST(req: NextRequest) {
     // Check if it's an spmt command
     const rawMessage = message.trim();
     const msg = rawMessage.toLowerCase();
-    if (DISCORD_CHAT_DEBUG) {
+    if (debugEnabled('discord-chat') || debugEnabled('discord')) {
       console.log('[Discord Chat] Received message', {
         command: msg.startsWith('spmt ') || msg.startsWith('@spmt '),
         channelId,
@@ -288,7 +294,7 @@ export async function POST(req: NextRequest) {
     const normalized = msg.startsWith('@spmt ') ? msg : '@' + msg;
     const args = normalized.split(/\s+/).slice(1); // remove "@spmt"
     const cmd = args[0];
-    if (DISCORD_CHAT_DEBUG) console.log(`[Discord Chat] Processing spmt ${cmd || '(empty)'}`);
+    if (debugEnabled('discord-chat') || debugEnabled('discord')) console.log(`[Discord Chat] Processing spmt ${cmd || '(empty)'}`);
 
     if (cmd === 'controls' || cmd === 'control') {
       return NextResponse.json({ success: true, skipped: 'controls-owned-by-dsh' });

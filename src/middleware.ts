@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+function debugEnabled(scope: string) {
+  const value = String(process.env.DEBUG || '').toLowerCase();
+  if (!value) return false;
+  const scopes = value.split(',').map((item) => item.trim()).filter(Boolean);
+  return scopes.some((item) => item === '1' || item === 'true' || item === '*' || item === 'all' || item === scope);
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const requestHost = request.headers.get('host') || '';
@@ -23,7 +30,7 @@ export function middleware(request: NextRequest) {
   const isTunnelHost = tunnelOnlyMode || /ngrok|trycloudflare|loca\.lt|localtunnel/i.test(hostSignals);
 
   if (
-    process.env.QUACKVERSE_REQUEST_LOGS === '1' &&
+    debugEnabled('quackverse') &&
     (pathname === '/quackverse' || pathname.startsWith('/api/quackverse/') || pathname === '/favicon.ico')
   ) {
     console.log('[quackverse:request]', {
