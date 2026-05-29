@@ -5,6 +5,15 @@ import { buildGameStatePayload, postOrUpdateChatTagEmbed } from "@/lib/chat-tag-
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || "";
 const DISCORD_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const TAG_EVENT_DELETE_DELAY_MS = 5 * 60 * 1000;
+
+type DiscordWebhookResult = {
+  ok: boolean;
+  configured: boolean;
+  status: number;
+  error?: string;
+  messageId?: string;
+};
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,7 +31,7 @@ function getRetryDelayMs(response: Response, attempt: number) {
   return Math.min(500 * 2 ** attempt, 3000);
 }
 
-async function postDiscordWebhook(payload: Record<string, unknown>) {
+async function postDiscordWebhook(payload: Record<string, unknown>): Promise<DiscordWebhookResult> {
   if (!DISCORD_WEBHOOK_URL) {
     console.warn(
       "[Announce] Discord webhook skipped: DISCORD_WEBHOOK_URL or DISCORD_TAG_WEBHOOK_URL is not configured",
@@ -38,17 +47,29 @@ async function postDiscordWebhook(payload: Record<string, unknown>) {
   let lastError = "";
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await fetch(DISCORD_WEBHOOK_URL, {
+      const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
+      webhookUrl.searchParams.set("wait", "true");
+      const response = await fetch(webhookUrl.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       if (response.ok) {
+        const sentMessage = await response.json().catch(() => null);
+        if (sentMessage?.id) {
+          setTimeout(() => {
+            fetch(`${DISCORD_WEBHOOK_URL}/messages/${sentMessage.id}`, {
+              method: "DELETE",
+            }).catch((error) => {
+              console.error("[Announce] Discord webhook cleanup failed:", error);
+            });
+          }, TAG_EVENT_DELETE_DELAY_MS);
+        }
         console.log(
           `[Announce] Discord webhook message sent (status ${response.status})`,
         );
-        return { ok: true, configured: true, status: response.status };
+        return { ok: true, configured: true, status: response.status, messageId: sentMessage?.id };
       }
 
       const text = await response.text();
@@ -98,9 +119,7 @@ export async function POST(req: NextRequest) {
     const state = await readAppState();
     const gameState = buildGameStatePayload(state);
 
-    let discordResult: Awaited<ReturnType<typeof postDiscordWebhook>> & {
-      skipped?: boolean;
-    } = {
+    let discordResult: DiscordWebhookResult & { skipped?: boolean } = {
       ok: Boolean(refreshOnly),
       configured: Boolean(DISCORD_WEBHOOK_URL),
       status: 0,
@@ -116,14 +135,17 @@ export async function POST(req: NextRequest) {
     if (!refreshOnly && tagger && tagged) {
       const icon = doublePoints ? "🔥" : "🎯";
       const pointsNote = doublePoints ? " for **DOUBLE POINTS**" : "";
-      const extraNote = message ? ` (${message})` : "";
       const newIt = gameState.tag.currentIt?.twitchUsername || "Free for all";
+      const passUsed = typeof message === "string" && /pass/i.test(message);
+      const description = passUsed
+        ? `🎟️ **${tagger}** used their **PASS** to tag **${tagged}** for **DOUBLE POINTS**!\n\n**${tagged}** is now it! Raid, follow, cheer, or sub to earn yours!`
+        : `**${tagger}** tagged **${tagged}**${pointsNote}!${message ? ` (${message})` : ""}`;
 
       discordResult = await postDiscordWebhook({
         embeds: [
           {
             title: `${icon} Tag Event!`,
-            description: `**${tagger}** tagged **${tagged}**${pointsNote}!${extraNote}`,
+            description,
             color: doublePoints ? 0xff4500 : 0x00d9ff,
             fields: [
               { name: "Now IT", value: newIt, inline: true },
