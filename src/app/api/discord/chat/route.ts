@@ -6,6 +6,13 @@ import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
+const DISCORD_WEBHOOK_URL =
+  process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || '';
+const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
+const CHAT_TAG_AVATAR_URL =
+  process.env.CHAT_TAG_AVATAR_URL ||
+  process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
+  '';
 const CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const REQUIRE_DISCORD_CHAT_SECRET = process.env.DISCORD_CHAT_REQUIRE_SECRET === 'true';
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
@@ -24,14 +31,49 @@ async function deleteDiscordMessage(channelId: string, messageId?: string) {
 }
 
 async function sendDiscordReply(channelId: string, content: string) {
-  const body: any = { content, allowed_mentions: { parse: [] } };
+  const payload: any = {
+    username: CHAT_TAG_WEBHOOK_NAME,
+    allowed_mentions: { parse: [] },
+    embeds: [
+      {
+        title: 'Chat Tag',
+        description: content,
+        color: 0x00d9ff,
+        footer: { text: 'SPMT Chat Tag' },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+  if (CHAT_TAG_AVATAR_URL) payload.avatar_url = CHAT_TAG_AVATAR_URL;
+
+  if (DISCORD_WEBHOOK_URL) {
+    const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
+    webhookUrl.searchParams.set('wait', 'true');
+    const webhookRes = await fetch(webhookUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!webhookRes.ok) {
+      console.error(`[Discord Chat] Failed to send webhook reply: ${webhookRes.status} ${await webhookRes.text().catch(() => '')}`);
+    }
+    const sent = await webhookRes.json().catch(() => null);
+    if (sent?.id) {
+      setTimeout(() => {
+        fetch(`${DISCORD_WEBHOOK_URL}/messages/${sent.id}`, { method: 'DELETE' }).catch(() => {});
+      }, CLEANUP_DELAY_MS);
+    }
+    return webhookRes;
+  }
+
+  const fallbackPayload: any = { ...payload };
   const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(fallbackPayload),
   });
   if (!res.ok) {
     const text = await res.text();

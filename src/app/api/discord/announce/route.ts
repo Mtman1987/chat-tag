@@ -4,6 +4,11 @@ import { buildGameStatePayload, postOrUpdateChatTagEmbed } from "@/lib/chat-tag-
 
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || "";
+const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || "Chat Tag";
+const CHAT_TAG_AVATAR_URL =
+  process.env.CHAT_TAG_AVATAR_URL ||
+  process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
+  "";
 const DISCORD_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const TAG_EVENT_DELETE_DELAY_MS = 5 * 60 * 1000;
 
@@ -49,10 +54,15 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
     try {
       const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
       webhookUrl.searchParams.set("wait", "true");
+      const webhookPayload = {
+        username: CHAT_TAG_WEBHOOK_NAME,
+        ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
+        ...payload,
+      };
       const response = await fetch(webhookUrl.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(webhookPayload),
       });
 
       if (response.ok) {
