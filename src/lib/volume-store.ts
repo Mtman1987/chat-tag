@@ -43,6 +43,11 @@ export type AppState = {
 
     joinedChannels: string[];
     firstLiveAnnouncementByChannel: Record<string, string>;
+    tokens?: {
+      TWITCH_BOT_TOKEN?: string;
+      TWITCH_BOT_REFRESH_TOKEN?: string;
+      updatedAt?: string;
+    };
   };
 };
 

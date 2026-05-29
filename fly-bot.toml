@@ -12,11 +12,6 @@ primary_region = 'iad'
 [processes]
   app = 'node bot.js'
 
-[[mounts]]
-  source = 'chat_tag_bot_data'
-  destination = '/data'
-  initial_size = '1gb'
-
 [http_service]
   internal_port = 8091
   processes = ['app']

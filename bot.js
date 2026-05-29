@@ -120,8 +120,6 @@ function updateWinnersCache(data) {
   if (data?.monthlyWinners) cachedWinners = data.monthlyWinners;
 }
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
-const TOKEN_STORE_DIR = process.env.CHAT_TAG_TOKEN_STORE_DIR || process.env.DATA_DIR || '/data';
-const TOKEN_STORE_FILE = process.env.CHAT_TAG_TOKEN_STORE_FILE || path.join(TOKEN_STORE_DIR, 'bot-tokens.json');
 const AUTO_ROTATE_MINUTES = Number.parseInt(process.env.AUTO_ROTATE_MINUTES || '60', 10);
 const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
@@ -161,43 +159,20 @@ async function refreshToken(refreshToken, clientId, clientSecret) {
   return res.json();
 }
 
-function loadPersistedTokens() {
+async function loadPersistedTokens() {
   try {
-    if (!fs.existsSync(TOKEN_STORE_FILE)) return;
-    const raw = fs.readFileSync(TOKEN_STORE_FILE, 'utf8');
-    const saved = JSON.parse(raw);
+    const saved = await apiCall('/api/bot/token-store');
     for (const key of ['TWITCH_BOT_TOKEN', 'TWITCH_BOT_REFRESH_TOKEN']) {
       if (saved?.[key]) {
         process.env[key] = saved[key];
       }
     }
-    console.log(`[Bot] Loaded persisted Twitch bot tokens from ${TOKEN_STORE_FILE}`);
-  } catch (error) {
-    console.error(`[Bot] Failed to load persisted tokens from ${TOKEN_STORE_FILE}:`, error.message);
-  }
-}
-
-async function persistTokenJson(key, value) {
-  await fs.promises.mkdir(path.dirname(TOKEN_STORE_FILE), { recursive: true });
-  let saved = {};
-  try {
-    const raw = await fs.promises.readFile(TOKEN_STORE_FILE, 'utf8');
-    saved = JSON.parse(raw);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      console.warn(`[Bot] Could not read existing token store ${TOKEN_STORE_FILE}: ${error.message}`);
+    if (saved?.TWITCH_BOT_TOKEN || saved?.TWITCH_BOT_REFRESH_TOKEN) {
+      console.log('[Bot] Loaded persisted Twitch bot tokens from Chat Tag API store');
     }
+  } catch (error) {
+    console.error('[Bot] Failed to load persisted tokens from Chat Tag API store:', error.message);
   }
-
-  saved = {
-    ...saved,
-    [key]: value,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const tempPath = `${TOKEN_STORE_FILE}.tmp`;
-  await fs.promises.writeFile(tempPath, JSON.stringify(saved, null, 2), { mode: 0o600 });
-  await fs.promises.rename(tempPath, TOKEN_STORE_FILE);
 }
 
 async function updateEnvToken(key, value) {
@@ -205,10 +180,17 @@ async function updateEnvToken(key, value) {
   process.env[key] = value;
 
   try {
-    await persistTokenJson(key, value);
-    console.log(`[Bot] Token refresh: ${key} persisted to ${TOKEN_STORE_FILE}`);
+    const tokenStoreRes = await apiCall('/api/bot/token-store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+    if (tokenStoreRes?.__ok === false || tokenStoreRes?.success === false) {
+      throw new Error(tokenStoreRes?.error || `status ${tokenStoreRes?.__status || 'unknown'}`);
+    }
+    console.log(`[Bot] Token refresh: ${key} persisted to Chat Tag API store`);
   } catch (error) {
-    console.error(`[Bot] Failed to persist token to ${TOKEN_STORE_FILE}:`, error.message);
+    console.error('[Bot] Failed to persist token to Chat Tag API store:', error.message);
   }
   
   // Try to persist to .env file if it exists
@@ -233,7 +215,7 @@ async function updateEnvToken(key, value) {
       
       console.log(`[Bot] Token refresh: ${key} persisted to .env file and updated in memory`);
     } else {
-      console.log(`[Bot] .env file not found at ${envPath}; token is persisted in ${TOKEN_STORE_FILE}`);
+      console.log(`[Bot] .env file not found at ${envPath}; token is persisted in Chat Tag API store`);
     }
   } catch (error) {
     console.error(`[Bot] Failed to persist token to .env:`, error.message);
@@ -242,7 +224,7 @@ async function updateEnvToken(key, value) {
 }
 
 async function getValidToken() {
-  loadPersistedTokens();
+  await loadPersistedTokens();
 
   const clientId = getTwitchClientId();
   const clientSecret = getTwitchClientSecret();
@@ -275,6 +257,18 @@ async function getValidToken() {
   }
   
   throw new Error('Failed to refresh token');
+}
+
+async function refreshDiscordEmbed(reason) {
+  console.log(`[Bot] Refreshing DSH Chat Tag embed: ${reason}`);
+  const announceRes = await apiCall('/api/discord/announce', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshOnly: true, message: reason })
+  });
+  if (announceRes?.__ok === false || announceRes?.success === false || announceRes?.dsh?.ok === false) {
+    console.error(`[Bot] DSH embed refresh failed: ${announceRes?.error || announceRes?.dsh?.error || announceRes?.__status || 'unknown error'}`);
+  }
 }
 
 async function apiCall(endpoint, options = {}) {
@@ -331,6 +325,7 @@ async function triggerFfaFallback(client, data, itUsername, reason) {
   }
 
   await broadcastToPlayers(client, `⏰ ${crown(itUsername)} could not be auto-rotated after ${MAX_ROTATE_FAILURES_BEFORE_FFA} attempts — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`);
+  await refreshDiscordEmbed('Auto-rotate fallback to free for all');
   lastFfaAnnouncedAt = Date.now();
   resetRotateFailures();
   return true;
@@ -1087,6 +1082,8 @@ console.log = (...args) => {
                 if (announceRes?.__ok === false || announceRes?.success === false) {
                   console.error(`[Bot] Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
                 }
+              } else {
+                await refreshDiscordEmbed('Stale holder random assignment');
               }
             }
           } else {
@@ -1099,6 +1096,9 @@ console.log = (...args) => {
             if (ffaRes?.__ok !== false && !ffaRes?.error) resetRotateFailures();
             if (!isStaleTimeout) {
               await broadcastToPlayers(client, '⏰ No eligible players — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
+              await refreshDiscordEmbed('No eligible players; free for all');
+            } else {
+              await refreshDiscordEmbed('Stale holder free for all');
             }
           }
         } else if (elapsed > AUTO_ROTATE_MINUTES * 60 * 1000) {
@@ -1126,6 +1126,7 @@ console.log = (...args) => {
               } else {
                 const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
                 await broadcastToPlayers(client, msg);
+                await refreshDiscordEmbed('Auto-rotate random assignment');
                 lastFfaAnnouncedAt = 0;
                 resetRotateFailures();
               }
@@ -1146,6 +1147,7 @@ console.log = (...args) => {
             });
             if (ffaRes?.__ok !== false && !ffaRes?.error) resetRotateFailures();
             await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
+            await refreshDiscordEmbed('Auto-rotate free for all');
             lastFfaAnnouncedAt = Date.now();
           }
         }
@@ -1180,6 +1182,7 @@ console.log = (...args) => {
           if (rotateRes?.success || rotateRes?.__ok !== false) {
             const msg = `🎲 No one was it! System randomly assigned ${crown(chosen.twitchUsername)} as it! Tag someone!`;
             await broadcastToPlayers(client, msg);
+            await refreshDiscordEmbed('Null-state random assignment');
             lastFfaAnnouncedAt = 0; // reset
             lastNullFfaAnnouncedAt = 0;
           } else {
@@ -1196,6 +1199,7 @@ console.log = (...args) => {
         if (nullCooldownElapsed || ffaCooldownElapsed) {
           console.log('[Bot] Announcing FFA (null cooldown ok or ffa reminder)');
           await broadcastToPlayers(client, '🔥 FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥 Type "spmt join" to play!');
+          await refreshDiscordEmbed('Free-for-all reminder');
           lastFfaAnnouncedAt = now;
           lastNullFfaAnnouncedAt = now;
         } else {

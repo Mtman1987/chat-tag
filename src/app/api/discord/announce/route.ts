@@ -213,23 +213,27 @@ function buildGameStatePayload(state: any) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { tagger, tagged, doublePoints, message } = body;
+    const { tagger, tagged, doublePoints, message, refreshOnly } = body;
 
     const state = await readAppState();
     const gameState = buildGameStatePayload(state);
 
-    let discordResult: Awaited<ReturnType<typeof postDiscordWebhook>> = {
-      ok: false,
+    let discordResult: Awaited<ReturnType<typeof postDiscordWebhook>> & {
+      skipped?: boolean;
+    } = {
+      ok: Boolean(refreshOnly),
       configured: Boolean(DISCORD_WEBHOOK_URL),
       status: 0,
-      error:
-        tagger && tagged
+      skipped: Boolean(refreshOnly),
+      error: refreshOnly
+        ? undefined
+        : tagger && tagged
           ? "Discord webhook was not attempted"
           : "Tagger and tagged are required for Discord announcements",
     };
 
     // Post the Discord message first so a DSH outage/503 cannot block tag announcements.
-    if (tagger && tagged) {
+    if (!refreshOnly && tagger && tagged) {
       const icon = doublePoints ? "🔥" : "🎯";
       const pointsNote = doublePoints ? " for **DOUBLE POINTS**" : "";
       const extraNote = message ? ` (${message})` : "";
