@@ -31,9 +31,15 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-fly deploy -c fly.toml -a chat-tag-new
+fly deploy -c fly.toml -a chat-tag-new --ha=false
 if errorlevel 1 (
     echo ERROR: chat-tag-new deployment failed
+    goto :ask_continue
+)
+echo Enforcing exactly one chat-tag web machine...
+fly scale count 1 -a chat-tag-new --yes
+if errorlevel 1 (
+    echo ERROR: could not scale chat-tag-new to one machine
     goto :ask_continue
 )
 echo ✓ chat-tag-new deployed successfully
@@ -46,9 +52,15 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-fly deploy -c fly-bot.toml -a chat-tag-bot-new
+fly deploy -c fly-bot.toml -a chat-tag-bot-new --ha=false
 if errorlevel 1 (
     echo ERROR: chat-tag-bot-new deployment failed
+    goto :ask_continue
+)
+echo Enforcing exactly one chat-tag bot machine...
+fly scale count 1 -a chat-tag-bot-new --yes
+if errorlevel 1 (
+    echo ERROR: could not scale chat-tag-bot-new to one machine
     goto :ask_continue
 )
 echo ✓ chat-tag-bot-new deployed successfully

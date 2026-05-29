@@ -3,7 +3,7 @@ import { readAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
-const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || 'https://streamweaver-main.fly.dev';
+const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || '';
 const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_SECRET_KEY || '1234';
 
 /**
@@ -46,22 +46,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, sent: 0 });
     }
 
-    // Forward to Streamweaver's Kick send endpoint
-    const res = await fetch(`${STREAMWEAVER_API}/api/kick/chat-tag-broadcast`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, channels, secret: STREAMWEAVER_SECRET }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[Kick Broadcast] Streamweaver returned ${res.status}: ${errText}`);
-      return NextResponse.json({ success: false, error: 'Streamweaver delivery failed' }, { status: 502 });
+    if (!STREAMWEAVER_API) {
+      console.warn('[Kick Broadcast] Skipped: STREAMWEAVER_API_BASE is not configured');
+      return NextResponse.json({ success: true, sent: 0, skipped: true, reason: 'STREAMWEAVER_API_BASE is not configured' });
     }
 
-    return NextResponse.json({ success: true, sent: channels.length });
+    // Forward to Streamweaver's Kick send endpoint. Kick delivery is best-effort so
+    // Streamweaver outages do not make the chat-tag broadcast look like a Discord failure.
+    try {
+      const res = await fetch(`${STREAMWEAVER_API}/api/kick/chat-tag-broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, channels, secret: STREAMWEAVER_SECRET }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`[Kick Broadcast] Streamweaver delivery failed (${res.status}): ${errText.slice(0, 200)}`);
+        return NextResponse.json({ success: false, sent: 0, attempted: channels.length, error: 'Streamweaver delivery failed' });
+      }
+
+      return NextResponse.json({ success: true, sent: channels.length });
+    } catch (error: any) {
+      console.warn(`[Kick Broadcast] Streamweaver unavailable: ${error?.cause?.code || error?.code || error?.message || 'unknown error'}`);
+      return NextResponse.json({ success: false, sent: 0, attempted: channels.length, error: 'Streamweaver unavailable' });
+    }
   } catch (error: any) {
-    console.error('[Kick Broadcast] Error:', error);
+    console.error('[Kick Broadcast] Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
