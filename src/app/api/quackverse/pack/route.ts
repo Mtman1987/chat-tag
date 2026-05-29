@@ -4,6 +4,7 @@ import { isAdminUsername } from '@/lib/admin';
 import { getCollectionForUser, normalizeQuackverseUserId, quackverseUserIdFromSession } from '@/lib/quackverse-access';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { openQuackverseBoosterPack } from '@/lib/quackverse-packs';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 import { makeId, updateAppState, readAppState } from '@/lib/volume-store';
 import {
   normalizeQuackverseState,
@@ -129,6 +130,9 @@ export async function POST(req: NextRequest) {
       collection.cards = [...collection.cards, ...collection.lastPack];
       state.updatedAt = new Date().toISOString();
       appState.quackverse = state;
+      const previewUrl = pack.length
+        ? `${getPublicAppOrigin(req)}/api/quackverse/pack-preview?ids=${pack.map((card) => card.id).join(',')}&t=${Date.now()}`
+        : '';
       const cards = pack.map((card) => ({
         id: card.id,
         name: card.name,
@@ -152,10 +156,11 @@ export async function POST(req: NextRequest) {
           uniqueCardsAfter: new Set(collection.cards).size,
           cards,
           rarityCounts,
+          previewUrl,
         },
         ...(Array.isArray(appState.quackversePackOpens) ? appState.quackversePackOpens : []),
       ].slice(0, 1000);
-      return { collection, pack };
+      return { collection, pack, previewUrl };
     }
 
     if (action === 'addToDeck') {
@@ -217,6 +222,7 @@ export async function POST(req: NextRequest) {
   const payload = {
     ...publicCollection((result as any).collection),
     pack: Array.isArray((result as any).pack) ? (result as any).pack : undefined,
+    previewUrl: (result as any).previewUrl || undefined,
   };
   if ((result as any).error) {
     return NextResponse.json({ ...payload, error: (result as any).error }, { status: (result as any).status || 400 });
