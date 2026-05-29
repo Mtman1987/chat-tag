@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
-import { isBotRequest } from '@/lib/auth';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +13,6 @@ const CHAT_TAG_AVATAR_URL =
   process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
   '';
 const CLEANUP_DELAY_MS = 5 * 60 * 1000;
-const REQUIRE_DISCORD_CHAT_SECRET = process.env.DISCORD_CHAT_REQUIRE_SECRET === 'true';
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 
 function getInternalAppOrigin() {
@@ -149,7 +147,6 @@ export async function POST(req: NextRequest) {
     const messageId = data.messageId || data.userMessageId || '';
     const userAvatar = data.userAvatar || data.avatarUrl || '';
     const userName = rawUserName || 'Unknown';
-    const hasBotSecret = isBotRequest(req);
 
     if (!message || !channelId) {
       console.warn('[Discord Chat] Missing required Discord chat fields', {
@@ -160,11 +157,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'message and channelId required' }, { status: 400 });
     }
 
-    if (!hasBotSecret && REQUIRE_DISCORD_CHAT_SECRET) {
-      console.warn('[Discord Chat] Unauthorized request blocked');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     // Check if it's an spmt command
     const rawMessage = message.trim();
     const msg = rawMessage.toLowerCase();
@@ -173,7 +165,6 @@ export async function POST(req: NextRequest) {
       channelId,
       messageId,
       userName,
-      hasBotSecret,
     });
 
     if (!msg.startsWith('spmt ') && !msg.startsWith('@spmt ')) {
