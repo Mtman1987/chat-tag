@@ -3,7 +3,7 @@ import { readAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
-const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || '';
+const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || 'https://streamweaver-new.fly.dev';
 const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_SECRET_KEY || '1234';
 
 /**

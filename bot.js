@@ -120,6 +120,8 @@ function updateWinnersCache(data) {
   if (data?.monthlyWinners) cachedWinners = data.monthlyWinners;
 }
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
+const TOKEN_STORE_DIR = process.env.CHAT_TAG_TOKEN_STORE_DIR || process.env.DATA_DIR || '/data';
+const TOKEN_STORE_FILE = process.env.CHAT_TAG_TOKEN_STORE_FILE || path.join(TOKEN_STORE_DIR, 'bot-tokens.json');
 const AUTO_ROTATE_MINUTES = Number.parseInt(process.env.AUTO_ROTATE_MINUTES || '60', 10);
 const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
@@ -159,9 +161,55 @@ async function refreshToken(refreshToken, clientId, clientSecret) {
   return res.json();
 }
 
+function loadPersistedTokens() {
+  try {
+    if (!fs.existsSync(TOKEN_STORE_FILE)) return;
+    const raw = fs.readFileSync(TOKEN_STORE_FILE, 'utf8');
+    const saved = JSON.parse(raw);
+    for (const key of ['TWITCH_BOT_TOKEN', 'TWITCH_BOT_REFRESH_TOKEN']) {
+      if (saved?.[key]) {
+        process.env[key] = saved[key];
+      }
+    }
+    console.log(`[Bot] Loaded persisted Twitch bot tokens from ${TOKEN_STORE_FILE}`);
+  } catch (error) {
+    console.error(`[Bot] Failed to load persisted tokens from ${TOKEN_STORE_FILE}:`, error.message);
+  }
+}
+
+async function persistTokenJson(key, value) {
+  await fs.promises.mkdir(path.dirname(TOKEN_STORE_FILE), { recursive: true });
+  let saved = {};
+  try {
+    const raw = await fs.promises.readFile(TOKEN_STORE_FILE, 'utf8');
+    saved = JSON.parse(raw);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn(`[Bot] Could not read existing token store ${TOKEN_STORE_FILE}: ${error.message}`);
+    }
+  }
+
+  saved = {
+    ...saved,
+    [key]: value,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const tempPath = `${TOKEN_STORE_FILE}.tmp`;
+  await fs.promises.writeFile(tempPath, JSON.stringify(saved, null, 2), { mode: 0o600 });
+  await fs.promises.rename(tempPath, TOKEN_STORE_FILE);
+}
+
 async function updateEnvToken(key, value) {
   // Critical Fix: Both update in-memory AND persist to .env file
   process.env[key] = value;
+
+  try {
+    await persistTokenJson(key, value);
+    console.log(`[Bot] Token refresh: ${key} persisted to ${TOKEN_STORE_FILE}`);
+  } catch (error) {
+    console.error(`[Bot] Failed to persist token to ${TOKEN_STORE_FILE}:`, error.message);
+  }
   
   // Try to persist to .env file if it exists
   try {
@@ -194,6 +242,8 @@ async function updateEnvToken(key, value) {
 }
 
 async function getValidToken() {
+  loadPersistedTokens();
+
   const clientId = getTwitchClientId();
   const clientSecret = getTwitchClientSecret();
   const token = env.TWITCH_BOT_TOKEN;
