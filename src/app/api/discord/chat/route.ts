@@ -82,11 +82,29 @@ async function announceTagEvent(req: NextRequest, body: any) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId: discordUserId, guildId, message, userName: rawUserName, channelId, messageId, userAvatar } = body;
+    console.log('[Discord Chat] Raw payload keys', {
+      keys: Object.keys(body || {}),
+      rootKeys: body?.root ? Object.keys(body.root || {}) : [],
+    });
+
+    // Support Kite/root-wrapped payloads, direct payloads, and older field names.
+    const data = body?.root || body || {};
+    const discordUserId = data.userId || data.discordUserId;
+    const guildId = data.guildId || data.serverId;
+    const message = data.message || data.content || '';
+    const rawUserName = data.userName || data.displayName || data.username;
+    const channelId = data.channelId || '';
+    const messageId = data.messageId || data.userMessageId || '';
+    const userAvatar = data.userAvatar || data.avatarUrl || '';
     const userName = rawUserName || 'Unknown';
     const hasBotSecret = isBotRequest(req);
 
     if (!message || !channelId) {
+      console.warn('[Discord Chat] Missing required Discord chat fields', {
+        hasMessage: Boolean(message),
+        hasChannelId: Boolean(channelId),
+        keys: Object.keys(data || {}),
+      });
       return NextResponse.json({ error: 'message and channelId required' }, { status: 400 });
     }
 
