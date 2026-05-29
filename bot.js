@@ -260,14 +260,14 @@ async function getValidToken() {
 }
 
 async function refreshDiscordEmbed(reason) {
-  console.log(`[Bot] Refreshing DSH Chat Tag embed: ${reason}`);
+  console.log(`[Bot] Refreshing Chat Tag Discord embed: ${reason}`);
   const announceRes = await apiCall('/api/discord/announce', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshOnly: true, message: reason })
   });
-  if (announceRes?.__ok === false || announceRes?.success === false || announceRes?.dsh?.ok === false) {
-    console.error(`[Bot] DSH embed refresh failed: ${announceRes?.error || announceRes?.dsh?.error || announceRes?.__status || 'unknown error'}`);
+  if (announceRes?.__ok === false || announceRes?.success === false || announceRes?.embed?.ok === false) {
+    console.error(`[Bot] Chat Tag embed refresh failed: ${announceRes?.error || announceRes?.embed?.error || announceRes?.__status || 'unknown error'}`);
   }
 }
 
