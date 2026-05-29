@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readAppState, toMillis } from "@/lib/volume-store";
 import { getScoringSettings, scoreFromTagCounts } from "@/lib/scoring";
 
-const DSH_URL = process.env.DSH_URL || "";
+const DSH_URL = process.env.DSH_URL || "https://discord-stream-hub-new.fly.dev";
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || "";
 const DISCORD_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
@@ -256,8 +256,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Refreshing the optional DSH persistent embed is separate from sending Discord announcements.
-    // A DSH 404/503 should be visible in logs when DSH_URL is configured, but should not make Discord delivery fail.
+    // Refreshing the DSH persistent embed is separate from sending Discord announcements.
+    // A 503 here should be visible in logs, but should not make Discord delivery fail.
     const dshResult = await refreshDshEmbed(gameState);
 
     if (tagger && tagged && (!discordResult.configured || !discordResult.ok)) {
