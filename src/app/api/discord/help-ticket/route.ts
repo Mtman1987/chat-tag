@@ -13,8 +13,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'requester and channel are required' }, { status: 400 });
     }
 
-    const webhookUrl = process.env.DISCORD_TAG_WEBHOOK_URL || 'https://discord.com/api/webhooks/1463633328816128042/n0nTDt7yIyy_NO1i_2VeRVrf9w91dgulYShbXZ_qZzGVKUEvL_Xoebna8vNrH6SSsBbn';
-    console.log('[help-ticket] Using webhook:', webhookUrl.substring(0, 50) + '...');
+    const webhookUrl = process.env.DISCORD_TAG_WEBHOOK_URL;
+    if (!webhookUrl) {
+      return NextResponse.json({ error: 'DISCORD_TAG_WEBHOOK_URL is not configured' }, { status: 500 });
+    }
+    console.log('[help-ticket] Discord webhook configured');
 
     // Get current game state
     console.log('[help-ticket] Fetching game state...');

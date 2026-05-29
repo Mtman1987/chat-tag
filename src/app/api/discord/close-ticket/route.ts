@@ -15,7 +15,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
     }
 
-    const webhookUrl = process.env.DISCORD_TAG_WEBHOOK_URL || 'https://discord.com/api/webhooks/1463633328816128042/n0nTDt7yIyy_NO1i_2VeRVrf9w91dgulYShbXZ_qZzGVKUEvL_Xoebna8vNrH6SSsBbn';
+    const webhookUrl = process.env.DISCORD_TAG_WEBHOOK_URL;
+    if (!webhookUrl) {
+      return NextResponse.json({ error: 'DISCORD_TAG_WEBHOOK_URL is not configured' }, { status: 500 });
+    }
     const urlParts = webhookUrl.match(/webhooks\/(\d+)\/([^\/]+)/);
     
     if (!urlParts) {
