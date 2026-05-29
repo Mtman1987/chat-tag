@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readAppState, toMillis } from "@/lib/volume-store";
 import { getScoringSettings, scoreFromTagCounts } from "@/lib/scoring";
+import { postOrUpdateGameEmbed } from "@/lib/discord-embed";
 
 const DSH_URL = process.env.DSH_URL || "https://discord-stream-hub-new.fly.dev";
 const DISCORD_WEBHOOK_URL =
@@ -120,6 +121,17 @@ async function refreshDshEmbed(gameState: Record<string, unknown>) {
   } catch (e: any) {
     console.error("[Announce] DSH refresh error:", e.message);
     return { ok: false, status: 0, error: e.message };
+  }
+}
+
+async function refreshSelfEmbed() {
+  try {
+    const result = await postOrUpdateGameEmbed();
+    console.log(`[Announce] Self-embed ${result.action}: ${result.messageId || 'none'}`);
+    return { ok: result.action !== 'skipped', ...result };
+  } catch (e: any) {
+    console.error('[Announce] Self-embed error:', e.message);
+    return { ok: false, action: 'skipped' as const, messageId: null, error: e.message };
   }
 }
 
@@ -260,9 +272,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Refreshing the DSH persistent embed is separate from sending Discord announcements.
-    // A 503 here should be visible in logs, but should not make Discord delivery fail.
-    const dshResult = await refreshDshEmbed(gameState);
+    // Refresh the persistent game-state embed (self-managed).
+    // Also refresh DSH as a fallback if configured.
+    const [selfEmbedResult, dshResult] = await Promise.all([
+      refreshSelfEmbed(),
+      refreshDshEmbed(gameState),
+    ]);
 
     if (tagger && tagged && (!discordResult.configured || !discordResult.ok)) {
       return NextResponse.json(
@@ -270,6 +285,7 @@ export async function POST(req: NextRequest) {
           success: false,
           error: discordResult.error || "Discord webhook failed",
           discord: discordResult,
+          embed: selfEmbedResult,
           dsh: dshResult,
         },
         { status: discordResult.configured ? 502 : 500 },
@@ -279,6 +295,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       discord: discordResult,
+      embed: selfEmbedResult,
       dsh: dshResult,
     });
   } catch (error: any) {
