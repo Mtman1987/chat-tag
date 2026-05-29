@@ -17,6 +17,10 @@ const CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const REQUIRE_DISCORD_CHAT_SECRET = process.env.DISCORD_CHAT_REQUIRE_SECRET === 'true';
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 
+function getInternalAppOrigin() {
+  return process.env.INTERNAL_APP_ORIGIN || `http://127.0.0.1:${process.env.PORT || 3000}`;
+}
+
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
   if (!DISCORD_BOT_TOKEN || !channelId || !messageId) return;
 
@@ -120,7 +124,7 @@ function findTargetPlayer(players: any[], targetArg?: string) {
 }
 
 async function announceTagEvent(req: NextRequest, body: any) {
-  await fetch(new URL('/api/discord/announce', req.url).toString(), {
+  await fetch(`${getInternalAppOrigin()}/api/discord/announce`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
     body: JSON.stringify(body),
@@ -277,7 +281,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
       // Call the tag API internally via fetch to self
-      const tagRes = await fetch(new URL('/api/tag', req.url).toString(), {
+      const tagRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
         body: JSON.stringify({ action: 'tag', userId: gameUserId, twitchUsername: player.twitchUsername, targetUserId: targetPlayer.id, streamerId: 'discord' }),
@@ -302,7 +306,7 @@ export async function POST(req: NextRequest) {
         await reply(`@${userName} Player "${target}" not found!`);
         return NextResponse.json({ success: true });
       }
-      const passRes = await fetch(new URL('/api/tag', req.url).toString(), {
+      const passRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
         body: JSON.stringify({ action: 'use-pass', userId: gameUserId, twitchUsername: player.twitchUsername, targetUserId: targetPlayer.id, streamerId: 'discord' }),
@@ -328,7 +332,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'live') {
-      const liveRes = await fetch(new URL('/api/discord/live-members', req.url).toString(), {
+      const liveRes = await fetch(`${getInternalAppOrigin()}/api/discord/live-members`, {
         cache: 'no-store',
       }).catch((error) => {
         console.error('[Discord Chat] Live members fetch failed:', error);
