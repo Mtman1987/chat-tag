@@ -185,9 +185,11 @@ async function sendDiscordPackReply(
   const packIds = packCards.map((card: any) => Number(card?.id)).filter((id: number) => Number.isFinite(id) && id > 0).slice(0, 5);
   const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
   const uniqueCards = new Set(collectionIds).size;
-  const previewUrl = packIds.length > 0
-    ? `${getPublicAppOrigin(req)}/api/quackverse/pack-preview?ids=${packIds.join(',')}&t=${Date.now()}`
-    : '';
+  const previewUrl = typeof packData.packImageUrl === 'string' && packData.packImageUrl
+    ? packData.packImageUrl
+    : typeof packData.packId === 'string' && packData.packId
+      ? `${getPublicAppOrigin(req)}/api/quackverse/pack/image?packId=${encodeURIComponent(packData.packId)}&t=${Date.now()}`
+      : '';
 
   const embed: any = {
     title: 'Quackverse Pack Opened',
