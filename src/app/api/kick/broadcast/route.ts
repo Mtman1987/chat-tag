@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState } from '@/lib/volume-store';
+import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 export const dynamic = 'force-dynamic';
 
 const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || 'https://streamweaver-new.fly.dev';
-const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_SECRET_KEY || '1234';
 
 /**
  * POST /api/kick/broadcast
@@ -12,6 +12,7 @@ const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_S
  * Body: { message, channel? (optional, specific channel), secret }
  */
 export async function POST(req: NextRequest) {
+  const STREAMWEAVER_SECRET = getStreamweaverSecret();
   try {
     const body = await req.json();
     const { message, channel, secret } = body;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminUsername } from '@/lib/admin';
 import { verifySessionToken, type SessionUser } from '@/lib/session';
+import { getBotSecret } from '@/lib/runtime-secrets';
 
 export function getSessionUserFromRequest(req: NextRequest): SessionUser | null {
   const authHeader = req.headers.get('authorization');
@@ -13,7 +14,7 @@ export function getSessionUserFromRequest(req: NextRequest): SessionUser | null 
 
 export function isBotRequest(req: NextRequest): boolean {
   const secret = req.headers.get('x-bot-secret') || req.nextUrl.searchParams.get('secret');
-  return Boolean(secret && secret === (process.env.BOT_SECRET_KEY || '1234'));
+  return Boolean(secret && secret === getBotSecret());
 }
 
 export function requireAdminRequest(

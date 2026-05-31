@@ -3,10 +3,9 @@ import { readAppState, updateAppState, makeId, isTimedImmune } from '@/lib/volum
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 export const dynamic = 'force-dynamic';
-
-const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_SECRET_KEY || '1234';
 
 function isPlayerImmune(player: any, taggerId: string): { immune: boolean; reason?: string } {
   if (!player) return { immune: true, reason: 'player-not-found' };
@@ -24,6 +23,7 @@ function isPlayerImmune(player: any, taggerId: string): { immune: boolean; reaso
  * Returns: { reply: "text to send back to Kick" } or { replies: ["msg1", "msg2"] } for broadcasts
  */
 export async function POST(req: NextRequest) {
+  const STREAMWEAVER_SECRET = getStreamweaverSecret();
   try {
     const body = await req.json();
     const { username, twitchUsername, userId: rawUserId, message, channel, secret } = body;

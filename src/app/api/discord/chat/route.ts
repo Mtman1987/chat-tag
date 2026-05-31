@@ -6,6 +6,7 @@ import { quackverseCards } from '@/lib/quackverse-data';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getPlayerHelpText, getRulesText, getModHelpText } from '@/lib/chat-tag-command-text';
 import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser } from '@/lib/chat-tag-player-lookup';
+import { getBotSecret } from '@/lib/runtime-secrets';
 
 export const dynamic = 'force-dynamic';
 
@@ -224,7 +225,7 @@ async function sendDiscordPackReply(
 async function announceTagEvent(req: NextRequest, body: any) {
   await fetch(`${getInternalAppOrigin()}/api/discord/announce`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+    headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
     body: JSON.stringify(body),
   }).catch((error) => console.error('[Discord Chat] Announce failed:', error));
 }
@@ -378,7 +379,7 @@ export async function POST(req: NextRequest) {
     if (cmd === 'leave') {
       const leaveRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
         body: JSON.stringify({ action: 'leave', userId: gameUserId, performedBy: userName }),
       }).catch((error) => {
         console.error('[Discord Chat] Leave failed:', error);
@@ -407,7 +408,7 @@ export async function POST(req: NextRequest) {
       // Call the tag API internally via fetch to self
       const tagRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
         body: JSON.stringify({ action: 'tag', userId: gameUserId, twitchUsername: player.twitchUsername, targetUserId: targetPlayer.id, streamerId: 'discord' }),
       });
       const tagData = await tagRes.json();
@@ -432,7 +433,7 @@ export async function POST(req: NextRequest) {
       }
       const passRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
         body: JSON.stringify({ action: 'use-pass', userId: gameUserId, twitchUsername: player.twitchUsername, targetUserId: targetPlayer.id, streamerId: 'discord' }),
       });
       const passData = await passRes.json();
@@ -526,7 +527,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-bot-secret': process.env.BOT_SECRET_KEY || '1234',
+          'x-bot-secret': getBotSecret(),
         },
         body: JSON.stringify({
           action: 'open',
@@ -677,7 +678,7 @@ export async function POST(req: NextRequest) {
       }
       const ticketRes = await fetch(`${getInternalAppOrigin()}/api/discord/help-ticket`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
         body: JSON.stringify({
           requester: displayName,
           requesterId: gameUserId,
@@ -710,7 +711,7 @@ export async function POST(req: NextRequest) {
       const targetName = targetPlayer.twitchUsername || targetPlayer.username || target;
       const grantRes = await fetch(`${getInternalAppOrigin()}/api/tag`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': process.env.BOT_SECRET_KEY || '1234' },
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
         body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: targetName, reason: `gifted by ${displayName}` }),
       }).catch((error) => {
         console.error('[Discord Chat] Give pass failed:', error);

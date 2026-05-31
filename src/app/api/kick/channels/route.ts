@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState } from '@/lib/volume-store';
+import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 export const dynamic = 'force-dynamic';
-
-const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_SECRET_KEY || '1234';
 
 /**
  * GET /api/kick/channels?secret=xxx
@@ -11,6 +10,7 @@ const STREAMWEAVER_SECRET = process.env.STREAMWEAVER_SECRET || process.env.BOT_S
  * Only includes players who have linked a kickUsername.
  */
 export async function GET(req: NextRequest) {
+  const STREAMWEAVER_SECRET = getStreamweaverSecret();
   const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== STREAMWEAVER_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

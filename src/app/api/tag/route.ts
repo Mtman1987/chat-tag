@@ -94,7 +94,13 @@ function isPlayerImmune(player: TagPlayer | undefined, taggerId: string): { immu
 export async function GET() {
   try {
     const state = await readAppState();
-    let players = Object.values(state.tagPlayers);
+    const blacklisted = new Set(
+      (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => normalizeUsername(channel))
+    );
+    let players = Object.values(state.tagPlayers).filter((player: any) => {
+      const username = normalizeUsername(player?.twitchUsername || player?.username || '');
+      return !player?.optedOut && !blacklisted.has(username);
+    });
 
     const tagCounts: Record<string, { tags: number; tagged: number }> = {};
     const scoring = getScoringSettings(state);
@@ -341,6 +347,14 @@ export async function POST(req: NextRequest) {
 
     if (action === 'join') {
       const normalizedUsername = (twitchUsername || username || userId).toLowerCase();
+      const state = await readAppState();
+      const blacklisted = new Set(
+        (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => normalizeUsername(channel))
+      );
+      if (blacklisted.has(normalizedUsername)) {
+        return NextResponse.json({ error: 'Channel is blacklisted/opted out and cannot rejoin.' }, { status: 400 });
+      }
+
       let resolvedUserId = userId;
       let twitchUser: Awaited<ReturnType<typeof lookupTwitchUser>> | null = null;
 

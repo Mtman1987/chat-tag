@@ -9,6 +9,13 @@ const { normalizeChatHandle, getPlayerDisplayName, resolvePlayerTarget } = requi
 const env = process.env;
 
 const API_BASE = process.env.API_BASE || 'https://chat-tag-new.fly.dev';
+function getBotSecret() {
+  if (process.env.BOT_SECRET_KEY) return process.env.BOT_SECRET_KEY;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('BOT_SECRET_KEY is not configured.');
+  }
+  return '1234';
+}
 const IGNORED_SENDER_NAMES = new Set([
   'frostytools',
   'streamelements',
@@ -261,7 +268,7 @@ async function apiCall(endpoint, options = {}) {
   try {
     const headers = {
       ...(options.headers || {}),
-      'x-bot-secret': process.env.BOT_SECRET_KEY || '1234',
+      'x-bot-secret': getBotSecret(),
     };
     const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
     const text = await res.text();

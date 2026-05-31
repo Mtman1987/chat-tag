@@ -5,7 +5,10 @@ import { getPublicAppOrigin } from '@/lib/public-origin';
 export async function GET(_request: NextRequest) {
   try {
     const result = await updateAppState(async (state) => {
-      const channels = Object.keys(state.botChannels);
+      const blacklisted = new Set(
+        (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => String(channel || '').toLowerCase())
+      );
+      const channels = Object.keys(state.botChannels).filter((channel) => !blacklisted.has(String(channel || '').toLowerCase()));
 
       if (channels.length === 0) {
         return { liveMembers: [], allMembers: [] };

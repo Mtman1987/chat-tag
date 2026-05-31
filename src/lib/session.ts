@@ -1,6 +1,15 @@
 import crypto from 'crypto';
 
-const SECRET = process.env.NEXTAUTH_SECRET || process.env.BOT_SECRET_KEY || 'chat-tag-default-secret';
+function getSessionSecret(): string {
+  const sessionSecret = process.env.NEXTAUTH_SECRET || process.env.BOT_SECRET_KEY;
+  if (sessionSecret) return sessionSecret;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('NEXTAUTH_SECRET is not configured.');
+  }
+
+  return 'chat-tag-default-secret';
+}
 
 export interface SessionUser {
   id: string;
@@ -9,6 +18,7 @@ export interface SessionUser {
 }
 
 export function createSessionToken(user: SessionUser): string {
+  const SECRET = getSessionSecret();
   const payload = JSON.stringify({ ...user, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 }); // 30 days
   const b64 = Buffer.from(payload).toString('base64url');
   const sig = crypto.createHmac('sha256', SECRET).update(b64).digest('base64url');
@@ -17,6 +27,7 @@ export function createSessionToken(user: SessionUser): string {
 
 export function verifySessionToken(token: string): SessionUser | null {
   try {
+    const SECRET = getSessionSecret();
     const [b64, sig] = token.split('.');
     if (!b64 || !sig) return null;
     const expected = crypto.createHmac('sha256', SECRET).update(b64).digest('base64url');
