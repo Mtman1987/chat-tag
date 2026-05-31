@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
 import { makeId, updateAppState } from '@/lib/volume-store';
+import { adminActor, appendAdminHistory } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   const auth = requireAdminRequest(request);
@@ -18,6 +19,12 @@ export async function POST(request: NextRequest) {
         (user as any).isIt = false;
       }
       (mtman[1] as any).isIt = true;
+      appendAdminHistory(state, {
+        action: 'make-me-it',
+        performedBy: adminActor(auth.user),
+        targetUser: 'mtman1987',
+        details: 'Set mtman1987 as it from admin route',
+      });
 
       return { success: true, message: 'mtman1987 is now it!' };
     });
@@ -54,6 +61,12 @@ export async function PUT(request: NextRequest) {
         streamerId: 'manual-timeout',
         doublePoints: true,
         timestamp: Date.now(),
+      });
+      appendAdminHistory(state, {
+        action: 'manual-timeout',
+        performedBy: adminActor(auth.user),
+        targetUser: previousIt || '',
+        details: previousIt ? `Triggered FFA from ${previousIt}` : 'Triggered FFA with no previous it',
       });
 
       return {

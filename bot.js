@@ -2,6 +2,8 @@ const tmi = require('tmi.js');
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
+const { getPlayerHelpText, getRulesText, getModHelpText } = require('./src/lib/chat-tag-command-text');
+const { normalizeChatHandle, getPlayerDisplayName, resolvePlayerTarget } = require('./src/lib/chat-tag-player-lookup');
 
 // Load environment variables
 const env = process.env;
@@ -20,6 +22,38 @@ const IGNORED_SENDER_NAMES = new Set([
     .filter(Boolean),
 ]);
 const joinFailSilenced = new Set();
+const PAGINATION_STATE_TTL_MS = Number.parseInt(process.env.PAGINATION_STATE_TTL_MS || '3600000', 10);
+const PAGINATION_STATE_MAX_USERS = Number.parseInt(process.env.PAGINATION_STATE_MAX_USERS || '500', 10);
+const playerPageByUser = new Map();
+const livePageByUser = new Map();
+const lastListCommandByUser = new Map();
+
+function getExpiringState(map, key, fallback) {
+  const entry = map.get(key);
+  if (!entry) return fallback;
+  if (Date.now() - entry.updatedAt > PAGINATION_STATE_TTL_MS) {
+    map.delete(key);
+    return fallback;
+  }
+  return entry.value;
+}
+
+function setExpiringState(map, key, value) {
+  const now = Date.now();
+  map.set(key, { value, updatedAt: now });
+
+  for (const [entryKey, entry] of map) {
+    if (now - entry.updatedAt > PAGINATION_STATE_TTL_MS) {
+      map.delete(entryKey);
+    }
+  }
+
+  while (map.size > PAGINATION_STATE_MAX_USERS) {
+    const oldestKey = map.keys().next().value;
+    if (oldestKey === undefined) break;
+    map.delete(oldestKey);
+  }
+}
 
 function isIgnoredSender(login, channelName = '') {
   const normalizedLogin = String(login || '').toLowerCase().replace(/^#/, '');
@@ -27,54 +61,6 @@ function isIgnoredSender(login, channelName = '') {
   if (!normalizedLogin) return true;
   if (normalizedLogin === normalizedChannel) return false;
   return IGNORED_SENDER_NAMES.has(normalizedLogin);
-}
-
-function normalizeChatHandle(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^@+/, '')
-    .replace(/[^a-z0-9_]/g, '');
-}
-
-function getPlayerDisplayName(player, fallback = '') {
-  return player?.twitchUsername || player?.username || player?.displayName || fallback;
-}
-
-function getPlayerLookupKeys(player) {
-  return [
-    player?.twitchUsername,
-    player?.username,
-    player?.displayName,
-    player?.login,
-    player?.kickUsername,
-    player?.discordUsername,
-  ]
-    .map(normalizeChatHandle)
-    .filter(Boolean);
-}
-
-function resolvePlayerTarget(players, rawTarget) {
-  const target = normalizeChatHandle(rawTarget);
-  const list = Array.isArray(players) ? players : [];
-  if (!target) return { target, error: 'empty' };
-
-  const exact = list.find((player) => getPlayerLookupKeys(player).includes(target));
-  if (exact) return { target, player: exact, matchType: 'exact' };
-
-  if (target.length >= 4) {
-    const prefixMatches = list.filter((player) =>
-      getPlayerLookupKeys(player).some((key) => key.startsWith(target))
-    );
-    if (prefixMatches.length === 1) {
-      return { target, player: prefixMatches[0], matchType: 'prefix' };
-    }
-    if (prefixMatches.length > 1) {
-      return { target, error: 'ambiguous', matches: prefixMatches };
-    }
-  }
-
-  return { target, error: 'not-found' };
 }
 
 async function replyPlayerLookupFailure(reply, requester, resolution, players) {
@@ -294,6 +280,24 @@ async function apiCall(endpoint, options = {}) {
   }
 }
 
+async function recordBotEvent(action, target = '', detail = '', channel = 'system') {
+  const res = await apiCall('/api/tag/mod-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      actor: 'bot',
+      action,
+      target,
+      detail,
+      channel,
+    })
+  });
+
+  if (res?.__ok === false || res?.error) {
+    console.error(`[Bot] Failed to record ${action} event: ${res?.error || res?.__status || 'unknown error'}`);
+  }
+}
+
 function resetRotateFailures() {
   rotateFailureState = { key: null, count: 0 };
 }
@@ -312,6 +316,7 @@ async function triggerFfaFallback(client, data, itUsername, reason) {
   const failures = recordRotateFailure(data, reason);
   if (failures < MAX_ROTATE_FAILURES_BEFORE_FFA) return false;
 
+  await recordBotEvent('auto-rotate-failed', itUsername, `${failures}/${MAX_ROTATE_FAILURES_BEFORE_FFA}: ${reason}`);
   console.log(`[Bot] Auto-rotate failed ${failures} times for ${itUsername}; triggering FFA fallback`);
   const res = await apiCall('/api/tag', {
     method: 'POST',
@@ -324,6 +329,7 @@ async function triggerFfaFallback(client, data, itUsername, reason) {
     return false;
   }
 
+  await recordBotEvent('auto-rotate-ffa-fallback', itUsername, `Fallback after ${failures} failures: ${reason}`);
   await broadcastToPlayers(client, `⏰ ${crown(itUsername)} could not be auto-rotated after ${MAX_ROTATE_FAILURES_BEFORE_FFA} attempts — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`);
   await refreshDiscordEmbed('Auto-rotate fallback to free for all');
   lastFfaAnnouncedAt = Date.now();
@@ -1070,6 +1076,7 @@ console.log = (...args) => {
               await triggerFfaFallback(client, data, itUsername, rotateRes?.error || `set-it returned ${rotateRes?.__status || 'unknown status'}`);
             } else {
               resetRotateFailures();
+              await recordBotEvent('auto-rotate-random', chosen.twitchUsername || chosen.id, `from=${itUsername}; elapsed=${elapsedMin}m; stale=${isStaleTimeout}`);
               lastFfaAnnouncedAt = 0;
               if (!isStaleTimeout) {
                 const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
@@ -1093,7 +1100,10 @@ console.log = (...args) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'auto-rotate', performedBy: 'bot-auto-rotate' })
             });
-            if (ffaRes?.__ok !== false && !ffaRes?.error) resetRotateFailures();
+            if (ffaRes?.__ok !== false && !ffaRes?.error) {
+              resetRotateFailures();
+              await recordBotEvent('auto-rotate-ffa', itUsername, `no eligible players; elapsed=${elapsedMin}m; stale=${isStaleTimeout}`);
+            }
             if (!isStaleTimeout) {
               await broadcastToPlayers(client, '⏰ No eligible players — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
               await refreshDiscordEmbed('No eligible players; free for all');
@@ -1127,6 +1137,7 @@ console.log = (...args) => {
                 const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
                 await broadcastToPlayers(client, msg);
                 await refreshDiscordEmbed('Auto-rotate random assignment');
+                await recordBotEvent('auto-rotate-random', chosen.twitchUsername || chosen.id, `from=${itUsername}; elapsed=${elapsedMin}m; live=${itIsLive}; recentChat=${recentlySeenInPlayerChat}`);
                 lastFfaAnnouncedAt = 0;
                 resetRotateFailures();
               }
@@ -1145,7 +1156,10 @@ console.log = (...args) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'auto-rotate', performedBy: 'bot-auto-rotate' })
             });
-            if (ffaRes?.__ok !== false && !ffaRes?.error) resetRotateFailures();
+            if (ffaRes?.__ok !== false && !ffaRes?.error) {
+              resetRotateFailures();
+              await recordBotEvent('auto-rotate-ffa', itUsername, `inactive and unseen; elapsed=${elapsedMin}m`);
+            }
             await broadcastToPlayers(client, '⏰ Auto-rotate: FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥');
             await refreshDiscordEmbed('Auto-rotate free for all');
             lastFfaAnnouncedAt = Date.now();
@@ -1183,6 +1197,7 @@ console.log = (...args) => {
             const msg = `🎲 No one was it! System randomly assigned ${crown(chosen.twitchUsername)} as it! Tag someone!`;
             await broadcastToPlayers(client, msg);
             await refreshDiscordEmbed('Null-state random assignment');
+            await recordBotEvent('auto-assign-random', chosen.twitchUsername || chosen.id, 'null current-it state');
             lastFfaAnnouncedAt = 0; // reset
             lastNullFfaAnnouncedAt = 0;
           } else {
@@ -1200,6 +1215,7 @@ console.log = (...args) => {
           console.log('[Bot] Announcing FFA (null cooldown ok or ffa reminder)');
           await broadcastToPlayers(client, '🔥 FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥 Type "spmt join" to play!');
           await refreshDiscordEmbed('Free-for-all reminder');
+          await recordBotEvent('free-for-all-reminder', 'free-for-all', `nullCooldown=${nullCooldownElapsed}; ffaCooldown=${ffaCooldownElapsed}`);
           lastFfaAnnouncedAt = now;
           lastNullFfaAnnouncedAt = now;
         } else {
@@ -2014,8 +2030,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'players') {
-      if (!global.lastListCmd) global.lastListCmd = {};
-      global.lastListCmd[userId] = 'players';
+      setExpiringState(lastListCommandByUser, userId, 'players');
       const data = await apiCall('/api/tag');
       const players = data?.players || [];
       const liveNow = await getLiveMembersCached();
@@ -2047,11 +2062,10 @@ console.log = (...args) => {
       }
       if (pages.length === 0) pages.push([]);
 
-      if (!global.playerPages) global.playerPages = {};
       // "players" always resets to page 1, "more" advances
-      if (cmd === 'players') global.playerPages[userId] = 0;
+      if (cmd === 'players') setExpiringState(playerPageByUser, userId, 0);
       
-      const page = global.playerPages[userId] || 0;
+      const page = getExpiringState(playerPageByUser, userId, 0);
       const totalPages = pages.length;
       const currentPagePlayers = pages[page] || [];
       const pageNames = currentPagePlayers.map(p => {
@@ -2061,11 +2075,11 @@ console.log = (...args) => {
 
       reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
       
-      global.playerPages[userId] = (page + 1) % totalPages;
+      setExpiringState(playerPageByUser, userId, (page + 1) % totalPages);
     }
 
     else if (cmd === 'more') {
-      const lastCmd = global.lastListCmd?.[userId] || 'players';
+      const lastCmd = getExpiringState(lastListCommandByUser, userId, 'players');
       // Re-run the last list command to advance the page
       if (lastCmd === 'live') {
         // Trigger live logic
@@ -2127,13 +2141,12 @@ console.log = (...args) => {
         }
         if (pages.length === 1 && pages[0].length === 0) pages[0] = [];
         
-        if (!global.livePages) global.livePages = {};
-        const page = global.livePages[userId] || 0;
+        const page = getExpiringState(livePageByUser, userId, 0);
         const totalPages = pages.length;
         const pageContent = (pages[page] || []).join(' | ');
         
         reply(`@${user} 🟢${liveMembers.length} live 💬${totalChatters} chatting (${page + 1}/${totalPages}): ${pageContent || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
-        global.livePages[userId] = (page + 1) % totalPages;
+        setExpiringState(livePageByUser, userId, (page + 1) % totalPages);
       } else {
         // Default: advance players list
         const data = await apiCall('/api/tag');
@@ -2165,8 +2178,7 @@ console.log = (...args) => {
         }
         if (pages.length === 0) pages.push([]);
         
-        if (!global.playerPages) global.playerPages = {};
-        const page = global.playerPages[userId] || 0;
+        const page = getExpiringState(playerPageByUser, userId, 0);
         const totalPages = pages.length;
         const currentPagePlayers = pages[page] || [];
         const pageNames = currentPagePlayers.map(p => {
@@ -2175,7 +2187,7 @@ console.log = (...args) => {
         }).join(', ');
         
         reply(`@${user} ${players.length} players [🟢${live.length} 💬${chatting.length}] (${page + 1}/${totalPages}): ${pageNames || 'none'}${page + 1 < totalPages ? ' | "spmt more" for next' : ''}`);
-        global.playerPages[userId] = (page + 1) % totalPages;
+        setExpiringState(playerPageByUser, userId, (page + 1) % totalPages);
       }
     }
 
@@ -2188,7 +2200,7 @@ console.log = (...args) => {
       }
       console.log('[Bot] Sending admin command list');
       await reply(
-        `@${user} Mod/Admin: "spmt givepass @user" = Give pass | "spmt support" = Help ticket | "spmt away @user" = Toggle away | "spmt mute" = Toggle OBS overlay mode`
+        `@${user} ${getModHelpText()}`
       );
       console.log('[Bot] Admin command complete');
     }
@@ -2221,8 +2233,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'live') {
-      if (!global.lastListCmd) global.lastListCmd = {};
-      global.lastListCmd[userId] = 'live';
+      setExpiringState(lastListCommandByUser, userId, 'live');
       const liveData = await apiCall('/api/discord/live-members');
       const playersData = await apiCall('/api/tag');
       const players = playersData?.players || [];
@@ -2286,10 +2297,9 @@ console.log = (...args) => {
       }
       if (pages.length === 1 && pages[0].length === 0) pages[0] = [];
       
-      if (!global.livePages) global.livePages = {};
-      if (cmd === 'live') global.livePages[userId] = 0;
+      if (cmd === 'live') setExpiringState(livePageByUser, userId, 0);
       
-      const page = global.livePages[userId] || 0;
+      const page = getExpiringState(livePageByUser, userId, 0);
       const totalPages = pages.length;
       const pageContent = (pages[page] || []).join(' | ');
       
@@ -2298,7 +2308,7 @@ console.log = (...args) => {
         await queueLiveOverlay(channelName, pages[page] || [], liveMembers.length, totalChatters, page + 1, totalPages);
       }
       
-      global.livePages[userId] = (page + 1) % totalPages;
+      setExpiringState(livePageByUser, userId, (page + 1) % totalPages);
     }
     
     else if (cmd === 'score') {
@@ -2345,7 +2355,7 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'rules') {
-      const rulesText = `@${user} Tag Rules: Tag someone with "spmt tag @user" in their chat. If you're it, tag someone else! "spmt away" = toggle immunity. "spmt pass @user" = earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`;
+      const rulesText = `@${user} ${getRulesText()}`;
       if (isMuted) {
         await mirrorOverlayLinkReply(client, channelName, rulesText);
         await sendOverlayMessage(channelName, rulesText);
@@ -2580,7 +2590,7 @@ console.log = (...args) => {
     else if (cmd === 'help') {
       console.log(`[Bot] Attempting to send help to ${channel}`);
       try {
-        await reply( `@${user} "spmt join" = Join | "spmt tag @user" = Tag | "spmt pass @user" = Pass (earned) | "spmt pack" = Open Quackverse pack | "spmt status" = Who's it | "spmt score" = Stats | "spmt rank" = Top 3 | "spmt players" = List | "spmt live" = Live | "spmt away" = Toggle immunity | "spmt rules" = Rules | Mods: "spmt mod"`);
+        await reply( `@${user} ${getPlayerHelpText()}`);
         console.log(`[Bot] Help message sent successfully`);
       } catch (e) {
         console.error('[Bot] Error sending help:', e.message);

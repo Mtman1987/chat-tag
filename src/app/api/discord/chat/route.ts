@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
+import { appendAdminHistory } from '@/lib/audit';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { getPlayerHelpText, getRulesText, getModHelpText } from '@/lib/chat-tag-command-text';
+import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser } from '@/lib/chat-tag-player-lookup';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +38,33 @@ function getWebhookMessageUrl(messageId: string) {
   return `${url.toString()}/messages/${messageId}`;
 }
 
+async function recordDiscordSendFailure(
+  channelId: string,
+  transport: 'webhook' | 'bot',
+  status: number | string,
+  detail = ''
+) {
+  await updateAppState((state) => {
+    appendAdminHistory(state, {
+      action: 'discord-send-failed',
+      performedBy: 'discord-chat-route',
+      targetUser: channelId || 'unknown-channel',
+      details: `transport=${transport}; status=${status}; detail=${String(detail || '').slice(0, 180)}`,
+    });
+  }).catch((error) => {
+    console.error('[Discord Chat] Failed to record send failure:', error);
+  });
+}
+
+function parseJsonText(text: string) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
   if (!DISCORD_BOT_TOKEN || !channelId || !messageId) return;
 
@@ -54,42 +84,57 @@ async function sendDiscordPayload(channelId: string, payload: any) {
   if (DISCORD_WEBHOOK_URL) {
     const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
     webhookUrl.searchParams.set('wait', 'true');
-    const webhookRes = await fetch(webhookUrl.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!webhookRes.ok) {
-      console.error(`[Discord Chat] Failed to send webhook reply: ${webhookRes.status} ${await webhookRes.text().catch(() => '')}`);
+    try {
+      const webhookRes = await fetch(webhookUrl.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await webhookRes.text().catch(() => '');
+      if (!webhookRes.ok) {
+        console.error(`[Discord Chat] Failed to send webhook reply: ${webhookRes.status} ${text}`);
+        await recordDiscordSendFailure(channelId, 'webhook', webhookRes.status, text);
+      }
+      const sent = parseJsonText(text);
+      if (sent?.id) {
+        setTimeout(() => {
+          fetch(getWebhookMessageUrl(sent.id), { method: 'DELETE' }).catch(() => {});
+        }, CLEANUP_DELAY_MS);
+      }
+      return webhookRes;
+    } catch (error: any) {
+      console.error('[Discord Chat] Failed to send webhook reply:', error);
+      await recordDiscordSendFailure(channelId, 'webhook', 'network', error?.message || String(error));
+      throw error;
     }
-    const sent = await webhookRes.json().catch(() => null);
-    if (sent?.id) {
-      setTimeout(() => {
-        fetch(getWebhookMessageUrl(sent.id), { method: 'DELETE' }).catch(() => {});
-      }, CLEANUP_DELAY_MS);
-    }
-    return webhookRes;
   }
 
-  const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`[Discord Chat] Failed to send reply: ${res.status} ${text}`);
+  try {
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text().catch(() => '');
+    if (!res.ok) {
+      console.error(`[Discord Chat] Failed to send reply: ${res.status} ${text}`);
+      await recordDiscordSendFailure(channelId, 'bot', res.status, text);
+    }
+    const sent = parseJsonText(text);
+    if (sent?.id) {
+      setTimeout(() => {
+        deleteDiscordMessage(channelId, sent.id).catch(() => {});
+      }, CLEANUP_DELAY_MS);
+    }
+    return res;
+  } catch (error: any) {
+    console.error('[Discord Chat] Failed to send reply:', error);
+    await recordDiscordSendFailure(channelId, 'bot', 'network', error?.message || String(error));
+    throw error;
   }
-  const sent = await res.json().catch(() => null);
-  if (sent?.id) {
-    setTimeout(() => {
-      deleteDiscordMessage(channelId, sent.id).catch(() => {});
-    }, CLEANUP_DELAY_MS);
-  }
-  return res;
 }
 
 async function sendDiscordReply(channelId: string, content: string) {
@@ -108,39 +153,8 @@ async function sendDiscordReply(channelId: string, content: string) {
   });
 }
 
-function normalizeTargetArg(value?: string) {
-  return String(value || '').trim().toLowerCase().replace(/^@+/, '');
-}
-
-function findPlayerForDiscordUser(players: any[], discordUserId?: string, userName?: string) {
-  const normalizedUserName = normalizeTargetArg(userName);
-  return players.find((p: any) => {
-    if (discordUserId && p.discordId === discordUserId) return true;
-    if (!normalizedUserName || normalizedUserName === 'unknown') return false;
-
-    const keys = [p.discordUsername, p.twitchUsername, p.username, p.displayName, p.kickUsername]
-      .map((key) => normalizeTargetArg(key))
-      .filter(Boolean);
-    return keys.includes(normalizedUserName);
-  }) as any;
-}
-
-function findTargetPlayer(players: any[], targetArg?: string) {
-  const target = normalizeTargetArg(targetArg);
-  const mention = target.match(/^<@!?(\d+)>$/);
-  if (mention) {
-    return players.find((p: any) => p.discordId === mention[1]);
-  }
-
-  return players.find((p: any) => {
-    const keys = [p.twitchUsername, p.username, p.displayName, p.kickUsername, p.discordUsername]
-      .map(k => (k || '').toLowerCase()).filter(Boolean);
-    return keys.includes(target);
-  });
-}
-
 function crownPlayerName(name: string, winners: any[] = []) {
-  const winner = winners.find((entry: any) => normalizeTargetArg(entry.username) === normalizeTargetArg(name));
+  const winner = winners.find((entry: any) => normalizeChatHandle(entry.username) === normalizeChatHandle(name));
   return winner ? `${name} 👑#${winner.place}` : name;
 }
 
@@ -381,7 +395,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'tag') {
-      const target = normalizeTargetArg(args[1]);
+      const target = normalizeChatHandle(args[1]);
       if (!target) {
         await reply(`@${userName} Usage: "spmt tag @username"`);
         return NextResponse.json({ success: true });
@@ -408,7 +422,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'pass') {
-      const target = normalizeTargetArg(args[1]);
+      const target = normalizeChatHandle(args[1]);
       if (!target) {
         await reply(`@${userName} Usage: "spmt pass @username" — Use your pass to tag someone for DOUBLE POINTS!`);
         return NextResponse.json({ success: true });
@@ -628,7 +642,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'rules') {
-      await reply(`@${userName} Tag Rules: Tag someone with "spmt tag @user". If you're it, tag someone else. "spmt away" toggles immunity. "spmt pass @user" uses an earned double-points tag. Full guide: https://chat-tag-new.fly.dev/about`);
+      await reply(`@${userName} ${getRulesText()}`);
       return NextResponse.json({ success: true });
     }
 
@@ -653,7 +667,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'admin' || cmd === 'mod') {
-      await reply(`@${userName} Mod/Admin commands: "spmt givepass @user". Twitch-only tools: mute, unmute, kick, and optout.`);
+      await reply(`@${userName} ${getModHelpText('spmt', 'discord')}`);
       return NextResponse.json({ success: true });
     }
 
@@ -685,7 +699,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'givepass') {
-      const target = normalizeTargetArg(args[1]);
+      const target = normalizeChatHandle(args[1]);
       if (!target) {
         await reply(`@${userName} Usage: "spmt givepass @username"`);
         return NextResponse.json({ success: true });
@@ -726,7 +740,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'help') {
-      await reply(`@${userName} Commands: "spmt join" | "spmt tag @user" | "spmt pass @user" | "spmt pack" | "spmt status" | "spmt score" | "spmt rank" | "spmt players" | "spmt live" | "spmt away" | "spmt rules" | "spmt help"`);
+      await reply(`@${userName} Commands: ${getPlayerHelpText()}`);
       return NextResponse.json({ success: true });
     }
 

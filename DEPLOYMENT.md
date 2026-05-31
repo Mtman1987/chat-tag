@@ -1,195 +1,181 @@
-# Chat Tag Game - Firebase Deployment Guide
+# Chat Tag Production Deployment Runbook
 
-## Fly.io machine count
+This project now deploys to **Fly.io** as two single-machine apps backed by local/volume state. The old Firebase/Firestore deployment notes are no longer the production path.
 
-Chat Tag should run as a single Fly machine for each Chat Tag app:
+## Production apps
 
-- `chat-tag-new`: one web machine, because runtime state is stored on a single Fly volume.
-- `chat-tag-bot-new`: one bot machine, because two running bot machines will both connect to chat and can send duplicate messages.
+| App | Fly app | Config | Runtime notes |
+| --- | --- | --- | --- |
+| Web/API | `chat-tag-new` | `fly.toml` | Next.js app on port `3000`; state persists on the `chat_tag_data` Fly volume mounted at `/data`. |
+| Twitch bot | `chat-tag-bot-new` | `fly-bot.toml` | `node bot.js` on port `8091`; must run as one machine to avoid duplicate chat connections/messages. |
 
-The deploy scripts use `fly deploy --ha=false` and then `fly scale count 1` for the Chat Tag web and bot apps. If Fly shows an extra stopped/paused machine, make sure only one machine is running before troubleshooting duplicate messages:
+## Branch and remote preflight
 
-```bash
-fly machines list -a chat-tag-bot-new
-fly scale count 1 -a chat-tag-bot-new --yes
-fly machines list -a chat-tag-new
-fly scale count 1 -a chat-tag-new --yes
-```
+1. Confirm the working tree is clean:
+   ```bash
+   git status --short --branch
+   ```
+2. Confirm a GitHub remote exists before treating local production work as safely backed up:
+   ```bash
+   git remote -v
+   ```
+3. Fetch and compare the intended deploy branch before pushing or deploying:
+   ```bash
+   git fetch --all --prune
+   git log --oneline --decorate --graph --max-count=20 --all
+   ```
+4. If this checkout still has no remote configured, add the correct GitHub remote and push the current work branch or open a PR before deploying.
 
-The GitHub Actions deploy workflow also applies this automatically on every push to `main` (and when manually started with `workflow_dispatch`): it deploys with `--ha=false`, runs `flyctl scale count 1` for both apps, and prints the resulting machine lists.
+## Required validation before deploy
 
-## Overview
+Run these from the repo root:
 
-This is a standalone version of the Chat Tag game designed for Firebase App Hosting. It includes:
-- Next.js web application with Firebase integration
-- Standalone Twitch bot service
-- Firestore database for game state
-- Discord webhook integration
-
-## Prerequisites
-1. Firebase project created
-2. Twitch application registered (for bot credentials)
-3. Discord webhook URL (optional, for announcements)
-
-## Setup Steps
-
-### 1. Install Dependencies
 ```bash
 npm install
-```
-
-### 2. Configure Firebase
-1. Go to Firebase Console: https://console.firebase.google.com
-2. Create a new project or select existing
-3. Enable Firestore Database
-4. Enable Authentication > Twitch provider
-5. Get your Firebase config from Project Settings
-
-### 3. Configure Environment Variables
-Copy `.env.local` and fill in all values:
-
-**Required:**
-- `NEXT_PUBLIC_FIREBASE_*` - Firebase web config
-- `FIREBASE_PROJECT_ID` - For bot service
-- `FIREBASE_CLIENT_EMAIL` - Service account email
-- `FIREBASE_PRIVATE_KEY` - Service account private key
-- `TWITCH_BOT_USERNAME` - Your bot's Twitch username
-- `TWITCH_BOT_TOKEN` - OAuth token (get from https://twitchapps.com/tmi/)
-- `TWITCH_CLIENT_ID` - Twitch app client ID
-- `TWITCH_CLIENT_SECRET` - Twitch app client secret
-
-**Optional:**
-- `DISCORD_WEBHOOK_URL` - For Discord announcements
-- `DISCORD_INVITE_LINK` - Discord server invite
-
-### 4. Deploy Firestore Rules
-```bash
-firebase deploy --only firestore:rules
-firebase deploy --only firestore:indexes
-```
-
-### 5. Initialize Game Settings
-Create a document in Firestore:
-- Collection: `gameSettings`
-- Document ID: `default`
-- Fields:
-  ```json
-  {
-    "tagSuccessPoints": 100,
-    "tagPenaltyPoints": 50,
-    "discordWebhookUrl": "your_webhook_url",
-    "discordLeaderboardMessageId": "",
-    "bingoCardsCompleted": 0,
-    "externalApiUrl": ""
-  }
-  ```
-
-### 6. Deploy Next.js App
-For Firebase App Hosting:
-```bash
+npm run typecheck
 npm run build
-firebase deploy --only hosting
+node --check bot.js
 ```
 
-For other platforms (Vercel, Railway, etc.):
+Do not deploy if typecheck or build fails. `next.config.ts` currently skips type/lint validation during `next build`, so `npm run typecheck` is a separate required gate.
+
+## Secrets and environment checklist
+
+Confirm these values exist in Fly secrets or runtime environment before deploying:
+
+### Shared / web app
+- `BOT_SECRET_KEY` — shared secret for bot-to-web API calls.
+- `PUBLIC_APP_ORIGIN` or the production public URL used by Discord embeds and user-facing links.
+- `INTERNAL_APP_ORIGIN` — internal web origin used for server-to-server/self calls when needed.
+- `DATA_DIR=/data` — configured in `fly.toml`; do not remove while volume-backed state is in use.
+
+### Twitch
+- `TWITCH_BOT_USERNAME`
+- `TWITCH_BOT_TOKEN`
+- `TWITCH_CLIENT_ID`
+- `TWITCH_CLIENT_SECRET`
+- `NEXT_PUBLIC_TWITCH_CLIENT_ID` when required by the browser auth flow.
+
+### Discord / DSH / Kite
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_WEBHOOK_URL` or `DISCORD_TAG_WEBHOOK_URL`
+- `CHAT_TAG_WEBHOOK_NAME` / `CHAT_TAG_AVATAR_URL` if customized.
+- `DSH_API_BASE` or DSH URL variables used by the current deployment.
+
+Use Fly to review/set secrets without printing secret values into logs:
+
 ```bash
-npm run build
-npm start
+fly secrets list -a chat-tag-new
+fly secrets list -a chat-tag-bot-new
+fly secrets set KEY=value -a chat-tag-new
+fly secrets set KEY=value -a chat-tag-bot-new
 ```
 
-### 7. Run the Bot Service
-The bot needs to run 24/7 on a server. Options:
+## Deploy commands
 
-**Option A: Railway/Render/Fly.io**
-1. Create new service
-2. Connect to this repository
-3. Set build command: `npm install`
-4. Set start command: `npm run bot`
-5. Add all environment variables
+Deploy the web/API app:
 
-**Option B: Local/VPS**
 ```bash
-npm run bot
+fly deploy --config fly.toml --ha=false -a chat-tag-new
+fly scale count 1 -a chat-tag-new --yes
+fly machines list -a chat-tag-new
 ```
 
-## Architecture
+Deploy the bot app:
 
-```
-┌─────────────────────────────────────────┐
-│         Firebase App Hosting            │
-│  ┌───────────────────────────────────┐  │
-│  │      Next.js Application          │  │
-│  │  - Web UI                         │  │
-│  │  - API Routes                     │  │
-│  │  - Twitch Auth                    │  │
-│  └───────────────┬───────────────────┘  │
-│                  │                       │
-│  ┌───────────────▼───────────────────┐  │
-│  │      Firestore Database           │  │
-│  │  - users (players)                │  │
-│  │  - chatTags (tag events)          │  │
-│  │  - bingoEvents (bingo wins)       │  │
-│  │  - gameSettings                   │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│      Separate Bot Service               │
-│      (Railway/Render/VPS)               │
-│  ┌───────────────────────────────────┐  │
-│  │      Twitch IRC Bot (bot.js)      │  │
-│  │  - Connects to Twitch IRC         │  │
-│  │  - Listens for @spmt commands     │  │
-│  │  - Updates Firestore              │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
+```bash
+fly deploy --config fly-bot.toml --ha=false -a chat-tag-bot-new
+fly scale count 1 -a chat-tag-bot-new --yes
+fly machines list -a chat-tag-bot-new
 ```
 
-## Bot Commands
-Players can use these commands in any Twitch chat:
-- `@spmt join` - Join the tag game
-- `@spmt tag @username` - Tag another player (when you're "it")
-- `@spmt status` - Check who is currently "it"
-- `@spmt help` - Show available commands
+Only one web machine should be running because the app uses one mounted volume for state. Only one bot machine should be running because two bots can both connect to Twitch/Discord and send duplicate messages.
 
-## Cost Estimates
+The GitHub Actions Fly deploy workflow also deploys with `--ha=false`, scales both apps to one machine, and prints machine lists when it runs from `main` or manual `workflow_dispatch`.
 
-### Minimal Setup (Hobby)
-- Firebase (Spark Plan): Free
-  - 50K reads/day
-  - 20K writes/day
-  - 1GB storage
-- Railway (Bot): $5/month
-- **Total: $5/month**
+## Post-deploy repair and smoke tests
 
-### Production Setup
-- Firebase (Blaze Plan): ~$25/month
-  - Pay as you go
-  - More capacity
-- Railway (Bot): $10/month
-- **Total: ~$35/month**
+### One-time data repair after deploy
 
-## Monitoring
-- Firebase Console: Monitor database usage
-- Railway Dashboard: Monitor bot uptime
-- Discord: Receive game event notifications
+Run the player repair endpoint once after a successful deploy to backfill missing avatars, merge duplicate/manual players, and sync bot-channel data:
 
-## Troubleshooting
+```bash
+curl -X POST https://chat-tag-new.fly.dev/api/admin/fix-players \
+  -H "Authorization: Bearer <admin-session-token>" \
+  -H "Content-Type: application/json"
+```
 
-### Bot not connecting
-- Check `TWITCH_BOT_TOKEN` is valid
-- Verify bot account exists on Twitch
-- Check Firebase credentials are correct
+If authorization changes, use the current admin/session mechanism rather than weakening the route.
 
-### Players not syncing
-- Verify Firestore rules allow authenticated reads/writes
-- Check Firebase indexes are deployed
-- Verify API routes are accessible
+### Discord smoke test
 
-### Tags not working
-- Check Firestore security rules
-- Verify game state in Firestore console
-- Check browser console for errors
+In the real production Discord channel, verify:
 
-## Support
-Refer to TAG_GAME_CLOUD_HOSTING_GUIDE.txt for detailed architecture information.
+- `spmt help`
+- `spmt join`
+- `spmt status`
+- `spmt tag <user>`
+- `spmt pass <user>`
+- `spmt live`
+- `spmt players`
+- `spmt score`
+- `spmt rank`
+- `spmt pack`
+- `spmt away`
+
+Confirm replies are embeds, mentions are not mass-pinging users, pack previews render, and cleanup timing is acceptable.
+
+### Twitch smoke test
+
+In Twitch chat, verify:
+
+- `spmt help`
+- `spmt join`
+- `spmt status`
+- `spmt tag <user>`
+- `spmt pass <user>`
+- `spmt live`
+- `spmt players`
+- `spmt score`
+- `spmt rank`
+- `spmt pack`
+- `spmt away`
+
+Confirm Discord-active users appear in `spmt live` without breaking Twitch live grouping.
+
+### Logs and health checks
+
+```bash
+fly logs -a chat-tag-new
+fly logs -a chat-tag-bot-new
+curl -I https://chat-tag-new.fly.dev/
+curl https://chat-tag-bot-new.fly.dev/health
+```
+
+Also check the app mod/admin logs after auto-rotate, away toggles, fix/prune actions, or support tickets.
+
+## Rollback
+
+1. Identify the last known-good image/release:
+   ```bash
+   fly releases -a chat-tag-new
+   fly releases -a chat-tag-bot-new
+   ```
+2. Roll back the affected app:
+   ```bash
+   fly releases rollback <version> -a chat-tag-new
+   fly releases rollback <version> -a chat-tag-bot-new
+   ```
+3. Reconfirm single-machine counts:
+   ```bash
+   fly scale count 1 -a chat-tag-new --yes
+   fly scale count 1 -a chat-tag-bot-new --yes
+   ```
+4. Repeat the Discord/Twitch smoke tests for the impacted command paths.
+
+## Known production risks still tracked in `AUDIT.md`
+
+- Restore/push Git remote state before production deploys from local-only work.
+- Finish shared command extraction so Discord and Twitch command logic cannot drift.
+- Finish server-side role authorization and move dangerous controls to an `/admin` surface.
+- Prune/archive remaining root utility scripts.

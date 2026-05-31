@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
+import { adminActor, appendAdminHistory } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   const auth = requireAdminRequest(request);
@@ -22,6 +23,12 @@ export async function POST(request: NextRequest) {
           pruned++;
         }
       }
+
+      appendAdminHistory(state, {
+        action: 'prune-channels',
+        performedBy: adminActor(auth.user),
+        details: `before=${before}; after=${before - pruned}; pruned=${pruned}; players=${playerUsernames.size}`,
+      });
 
       return { before, after: before - pruned, pruned, players: playerUsernames.size };
     });

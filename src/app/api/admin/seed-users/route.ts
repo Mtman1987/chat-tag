@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
+import { adminActor, appendAdminHistory } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const auth = requireAdminRequest(req);
@@ -29,6 +30,11 @@ export async function POST(req: NextRequest) {
       for (const user of testUsers) {
         state.users[user.id] = { ...(state.users[user.id] || {}), ...user };
       }
+      appendAdminHistory(state, {
+        action: 'seed-users',
+        performedBy: adminActor(auth.user),
+        details: `seeded=${testUsers.length}`,
+      });
     });
 
     return NextResponse.json({

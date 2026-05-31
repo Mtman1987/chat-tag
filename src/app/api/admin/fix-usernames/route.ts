@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
+import { adminActor, appendAdminHistory } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const auth = requireAdminRequest(req);
@@ -78,6 +79,12 @@ export async function POST(req: NextRequest) {
           channelsNotInPlayers.push(channelName);
         }
       }
+
+      appendAdminHistory(state, {
+        action: 'fix-usernames',
+        performedBy: adminActor(auth.user),
+        details: `syncAll=${syncAll}; fixedCase=${fixedCase}; addedToChannels=${addedToChannels}; addedToPlayers=${addedToPlayers}`,
+      });
 
       return {
         fixedCase,

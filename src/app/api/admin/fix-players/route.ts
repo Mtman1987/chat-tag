@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
-import { updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppState } from '@/lib/volume-store';
+import { adminActor, appendAdminHistory } from '@/lib/audit';
 import { lookupTwitchUsers } from '@/lib/twitch';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,6 @@ export async function POST(request: NextRequest) {
   if (!auth.ok) return auth.response;
   try {
     // Pre-fetch all players that need avatar or ID resolution
-    const { readAppState } = await import('@/lib/volume-store');
     const preState = await readAppState();
     const allPlayers = Object.entries(preState.tagPlayers) as [string, any][];
     const logins = [...new Set(allPlayers.map(([, p]) => (p.twitchUsername || '').toLowerCase()).filter(Boolean))];
@@ -124,6 +124,12 @@ export async function POST(request: NextRequest) {
           stats.channelsAdded++;
         }
       }
+
+      appendAdminHistory(state, {
+        action: 'fix-players',
+        performedBy: adminActor(auth.user),
+        details: `mergedDupes=${stats.mergedDupes}; avatarsFetched=${stats.avatarsFetched}; channelsAdded=${stats.channelsAdded}; errors=${stats.errors.length}`,
+      });
 
       return stats;
     });
