@@ -681,7 +681,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                             const message = isCurrentIt
                               ? `🎯 @${player.username} Status: You are IT! Tag someone else to pass it on.`
                               : isImmune
-                                ? `🛡️ @${player.username} Status: You are currently away/immune. Use @spmt wake when ready.`
+                                ? `🛡️ @${player.username} Status: You are currently away/immune. Use spmt wake when ready.`
                                 : `ℹ️ @${player.username} Status: You are not IT right now. Current IT: ${currentItName}.`;
                             
                             const res = await fetch('/api/bot/broadcast', {
