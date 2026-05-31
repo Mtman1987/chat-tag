@@ -1405,7 +1405,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   }, [collection.length, pendingPacks]);
 
   useEffect(() => {
-    let cancelled = false;
+    const cancelled = false;
 
     async function loadTestPlayers() {
       try {
@@ -1552,7 +1552,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const drawBattleCards = (owner: PlayerId, count = 1) => {
     if (count <= 0) return;
     setBattlePiles((current) => {
-      let pile = current[owner];
+      const pile = current[owner];
       let drawPile = [...pile.drawPile];
       let discardPile = [...pile.discardPile];
       let hand = [...pile.hand];
@@ -2095,7 +2095,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     void sendQuackverseAction({ type: 'pass' });
   };
 
-  const useAbility = (ability = selectedPiece?.card.abilities[0]) => {
+  const handleUseAbility = (ability = selectedPiece?.card.abilities[0]) => {
     if (selectedBoardIndex === null || !canActWithSelected || !selectedPiece || !ability) return;
     if (turnActions[selectedPiece.owner].usedAbility.includes(pieceKey(selectedPiece))) {
       addLog(`${displayPlayers[selectedPiece.owner].short} already used an ability with ${selectedPiece.card.name} this turn.`);
@@ -2276,7 +2276,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
               variant="secondary"
               className="max-w-full justify-start text-left"
               disabled={isActionPending || !selectedPieceCanUseAbility}
-              onClick={() => useAbility(ability)}
+              onClick={() => handleUseAbility(ability)}
               title={ability}
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0" />

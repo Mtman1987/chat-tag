@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,9 +11,10 @@ export async function GET(req: NextRequest) {
       throw new Error('Twitch Client ID is not configured.');
     }
 
+    const appUrl = getPublicAppOrigin(req);
     const redirectUri =
       process.env.TWITCH_OAUTH_REDIRECT_URI ||
-      'https://discord-stream-hub-new.fly.dev/api/twitch/oauth/callback';
+      new URL('/api/auth/twitch/callback', appUrl).toString();
 
     const authUrl = new URL('https://id.twitch.tv/oauth2/authorize');
     authUrl.searchParams.set('client_id', twitchClientId);

@@ -32,7 +32,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Also try to get bot runtime logs
-    let botLogs = '';
     try {
       const botRes = await fetch(`${BOT_URL}/health`, { signal: AbortSignal.timeout(5000) });
       if (botRes.ok) {
