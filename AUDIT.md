@@ -1,7 +1,56 @@
-# Chat-Tag Codebase Audit & TODO
+# Chat-Tag Codebase Audit & Road to Production
 
-**Date:** Generated from full codebase review
+**Date:** 2026-05-31
 **Scope:** All source files in `chat-tag/`
+**Current local branch:** `work`
+**Remote status:** No Git remotes are configured in this checkout, so the latest production-oriented changes are local-only until a remote is added and pushed.
+
+---
+
+## 2026-05-31 Local Production Recovery Snapshot
+
+These are the production-oriented changes that were already present locally before this audit update:
+
+- `7bd1fad` — **Complete Discord SPMT command handling**
+  - Expanded the Kite/DSH `/api/discord/chat` handler to cover the Discord-side command surface: `join`, `leave`, `optout`, `tag`, `pass`, `status`, `live`, `pack`, `score`, `rank`, `players`, `away`, `rules`, `pinrank`, `givepass`, moderation handoffs, platform links, and help.
+  - Added a Discord pack-preview image route for Quackverse pack replies.
+  - Removed stale `@spmt` wording from selected UI copy and made the bot-channel input use `onKeyDown`.
+- `5d9c065` — **Quiet production Discord chat logging**
+  - Reduced noisy request/body/channel logging in production while keeping targeted diagnostics available.
+- `363b264` — **Use global debug flag for request logs**
+  - Gated remaining Discord chat request logs behind the global `DEBUG` scope flag.
+
+**Branch note:** A local branch named `production` was not present in this checkout when this file was updated. The recoverable work is on `work` and should be pushed or merged according to the deployment workflow once the remote is restored.
+
+---
+
+## Road to Production — Next Work Queue
+
+### P0 — Before any production deploy
+- [ ] **Restore/push Git remote state.** Add the GitHub remote, fetch branches, confirm where `work` should land, then push or PR these local commits. Do not deploy from an untracked local-only branch.
+- [ ] **Run the full production build.** `npm run typecheck` and `npm run build` must both pass on the machine that will deploy.
+- [ ] **Deploy-time data repair.** Run `POST /api/admin/fix-players` once after deploy to backfill missing avatars and merge duplicate/manual players.
+- [ ] **Secrets audit.** Confirm production values for `BOT_SECRET_KEY`, Discord webhook/bot token variables, Twitch Helix credentials, `PUBLIC_APP_ORIGIN` or equivalent public URL, and `INTERNAL_APP_ORIGIN`.
+- [ ] **Manual smoke test in Discord.** In the real Discord channel, verify `spmt help`, `spmt join`, `spmt status`, `spmt tag <user>`, `spmt pass`, `spmt live`, `spmt players`, `spmt score`, `spmt rank`, `spmt pack`, and `spmt away`.
+- [ ] **Manual smoke test in Twitch.** Verify the same critical commands in Twitch chat and confirm Discord-active users appear in `spmt live` without breaking Twitch live grouping.
+
+### P1 — Stabilize Discord command parity
+- [ ] **Extract shared command logic.** Discord and Twitch now have broad command parity, but the logic still lives in separate large handlers. Shared help/rules/mod command text and shared player lookup are extracted; scoring, tag/pass, and live/player summaries still need shared helpers.
+- [x] **Normalize command responses.** Discord command replies now flow through shared embed helpers with `allowed_mentions: { parse: [] }`, shared command text, and consistent cleanup handling.
+- [ ] **Add Discord route tests.** Shared player-lookup fixtures now cover Discord mentions and username matching; full Kite/DSH route payload fixtures, missing channel/message IDs, and admin/mod command handoff tests still need coverage.
+- [x] **Capture failed webhook sends.** Discord webhook/bot send failures now append structured `discord-send-failed` entries to volume-store admin history without enabling full request-body logging.
+
+### P2 — Lock down admin and data mutation surfaces
+- [ ] **Finish server-side role authorization.** Every dangerous mutation route should use one shared auth/authorization helper instead of scattered checks.
+- [ ] **Move dangerous controls to `/admin`.** Keep player-facing surfaces focused on playing/viewing; isolate reset, force winner, channel pruning, logs, fix players, and scoring controls.
+- [ ] **Review bot secret usage.** Keep bot-to-app routes protected, but avoid blocking legitimate Kite/DSH Discord ingress paths that cannot send the same secret.
+- [x] **Add audit entries for admin actions.** Admin maintenance/settings routes now append admin-history entries with actor, action, target/details, and timestamp.
+
+### P3 — Operational hardening
+- [x] **Prune or archive root utility scripts.** Archived one-off root utilities in `scripts/legacy-root/` with README notes; runtime/package entry points remain at root until removed separately.
+- [x] **Bound in-memory pagination/state.** Replaced `global.*` pagination caches in `bot.js` with bounded Maps and expiry.
+- [x] **Document deployment runbook.** `DEPLOYMENT.md` now covers Fly apps, build gates, secrets, deploy commands, repair calls, Discord/Twitch smoke tests, health checks, and rollback.
+- [x] **Add observability around auto-rotate/away.** Bot auto-rotate, FFA fallback, null-state assignment, and FFA reminder events now write low-noise entries to the mod log; away toggles already write mod-log entries.
 
 ---
 
@@ -148,9 +197,9 @@
 - **File:** `bot.js` `updateEnvToken()`
 - **Fix:** Store refreshed tokens in volume-store or Fly.io secrets.
 
-### 23. Bot uses `global.*` for pagination state (memory leak)
-- **File:** `bot.js` — `global.playerPages`, `global.livePages`, `global.phrasePages`
-- **Fix:** Use a bounded Map with TTL.
+### 23. Bot used `global.*` for pagination state (fixed)
+- **File:** `bot.js` — player/live pagination and last-list command state
+- **Fix:** Replaced global object caches with bounded Maps that expire stale users and cap retained entries.
 
 ### 24. Tailwind config references nonexistent `./src/pages/**`
 - **File:** `tailwind.config.ts`
@@ -163,9 +212,9 @@
 
 ## 🔵 LOW — Dead Code & Cleanup
 
-### 26. Unused root-level scripts (17+ files)
-- `add-channel.js`, `add-webhook.js`, `bot-minimal.js`, `calculate-scores.js`, `clear-muted.js`, `fix-usernames.js`, `init-scores.js`, `migrate-data.js`, `migrate-tags.js`, `reauth-bot.js`, `refresh-token.js`, `reset-game.js`, `test-bot.js`, `test-connection.js`, `test-grid.js`, `validate-token.js`, `ws-server.js`
-- **Fix:** Move to `scripts/` or delete.
+### 26. Root-level utility scripts archived
+- **Moved:** one-off maintenance/test scripts now live in `scripts/legacy-root/` with README notes.
+- **Still at root intentionally:** `bot.js`, `migrate-data.js`, and `ws-server.js` remain package/runtime entry points until those legacy paths are removed separately.
 
 ### 27. Unused `src/ai/` directory (genkit files)
 - **Fix:** Delete `src/ai/dev.ts` and `src/ai/genkit.ts`. Remove `genkit`, `@genkit-ai/*`, `genkit-cli` from package.json.
@@ -268,8 +317,8 @@
 - [x] Clean up unused `BingoCell` props (claimerId, players, Avatar imports)
 - [x] Verify `BOT_SECRET_KEY` is set in env (it is: `1234`)
 - [ ] Update help text, about page, bot replies, and embed footer to show `spmt` instead of `@spmt` (future sweep)
-- [ ] Replace `global.*` pagination in bot.js with bounded Map (future)
-- [ ] Move 17 root-level utility scripts to `scripts/` folder (future)
+- [x] Replace `global.*` pagination in bot.js with bounded Maps and TTL
+- [x] Move root-level utility scripts to `scripts/legacy-root/` with README notes
 
 ### Cross-Platform Discord Integration (completed)
 - [x] DSH `/api/discord/chat` now sends `chat-activity` to chat-tag API with `channel: 'discord'`

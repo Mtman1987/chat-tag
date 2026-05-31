@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
 import { readAppState, updateAppState } from '@/lib/volume-store';
+import { adminActor, appendAdminHistory } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     await updateAppState((state) => {
       state.gameSettings.default = { ...state.gameSettings.default, ...body };
+      appendAdminHistory(state, {
+        action: 'settings-update',
+        performedBy: adminActor(auth.user),
+        details: `keys=${Object.keys(body || {}).sort().join(',') || 'none'}`,
+      });
     });
     return NextResponse.json({ success: true });
   } catch (error: any) {
