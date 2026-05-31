@@ -23,6 +23,7 @@ const SettingsSchema = z.object({
   tagPenaltyPoints: z.coerce.number().min(0),
   bingoSquarePoints: z.coerce.number().min(0),
   bingoWinPoints: z.coerce.number().min(0),
+  uiThemePreset: z.enum(['cosmic', 'aurora', 'ember']),
 });
 
 type SettingsForm = z.infer<typeof SettingsSchema>;
@@ -46,8 +47,14 @@ export default function SettingsPage() {
       tagPenaltyPoints: 50,
       bingoSquarePoints: 10,
       bingoWinPoints: 250,
+      uiThemePreset: 'cosmic',
     },
   });
+
+  const applyThemePreview = (preset: SettingsForm['uiThemePreset']) => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.appTheme = preset;
+  };
 
   useEffect(() => {
     if (isUserLoading) return;
@@ -68,7 +75,9 @@ export default function SettingsPage() {
             tagPenaltyPoints: data.tagPenaltyPoints ?? 50,
             bingoSquarePoints: data.bingoSquarePoints ?? 10,
             bingoWinPoints: data.bingoWinPoints ?? 250,
+            uiThemePreset: data.uiThemePreset ?? 'cosmic',
           });
+          applyThemePreview(data.uiThemePreset ?? 'cosmic');
         }
       } catch (e) {
         console.error('Failed to load settings:', e);
@@ -115,6 +124,7 @@ export default function SettingsPage() {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error('Failed to save');
+      applyThemePreview(data.uiThemePreset);
       toast({ title: "Settings saved!", description: "Your settings have been updated." });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save Failed", description: error.message });
@@ -140,7 +150,7 @@ export default function SettingsPage() {
 
   if (isUserLoading) {
     return (
-      <main className="container mx-auto p-4 md:p-6">
+      <main className="cosmic-page">
         <div className="max-w-4xl mx-auto text-sm text-muted-foreground">Loading settings...</div>
       </main>
     );
@@ -148,8 +158,8 @@ export default function SettingsPage() {
 
   if (!isAdmin) {
     return (
-      <main className="container mx-auto p-4 md:p-6">
-        <Card className="max-w-2xl mx-auto bg-card/80 backdrop-blur-sm">
+      <main className="cosmic-page">
+        <Card className="max-w-2xl mx-auto rounded-[1.5rem] border-white/10 bg-white/[0.05] backdrop-blur-xl">
           <CardHeader>
             <CardTitle className="font-headline">Admin Access Required</CardTitle>
             <CardDescription>
@@ -162,9 +172,38 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="container mx-auto p-4 md:p-6">
-      <div className="grid gap-6 max-w-4xl mx-auto">
-        <Card className="bg-card/80 backdrop-blur-sm">
+    <main className="cosmic-page">
+      <section className="cosmic-hero max-w-6xl mx-auto">
+        <div className="cosmic-card space-y-4">
+          <div className="cosmic-status">Production Layout</div>
+          <h1 className="cosmic-title">Settings</h1>
+          <p className="cosmic-subtitle">
+            Scoring, repair tasks, bot cleanup, support queue, and theme editing stay wired to the current admin routes. This page now matches the suite shell instead of the old standalone admin card layout.
+          </p>
+          <div className="cosmic-note">
+            Theme preset saves into app settings and is applied through the root shell, so the suite look can be changed without editing CSS per deploy.
+          </div>
+        </div>
+        <div className="cosmic-panel">
+          <h2 className="mb-4 font-headline text-2xl text-white">Live Preview</h2>
+          <div className="mock-window">
+            <div className="mock-head">
+              <span className="mock-dot mock-dot-red" />
+              <span className="mock-dot mock-dot-amber" />
+              <span className="mock-dot mock-dot-green" />
+            </div>
+            <div className="mock-body">
+              <div className="mock-row"><span>App</span><span>Chat-Tag</span></div>
+              <div className="mock-row"><span>Page</span><span>settings</span></div>
+              <div className="mock-row"><span>Mode</span><span>Admin tools</span></div>
+              <div className="mock-row"><span>Theme</span><span>{form.watch('uiThemePreset')}</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-6 max-w-5xl mx-auto">
+        <Card className="rounded-[1.5rem] border-white/10 bg-white/[0.05] backdrop-blur-xl">
           <CardHeader>
             <CardTitle className="font-headline">Game Settings</CardTitle>
             <CardDescription>Configure scoring and integrations.</CardDescription>
@@ -206,6 +245,23 @@ export default function SettingsPage() {
                       <FormMessage />
                     </FormItem>
                   )} />
+                  <FormField control={form.control} name="uiThemePreset" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Suite Theme</FormLabel>
+                      <FormControl>
+                        <select
+                          {...field}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="cosmic">Cosmic</option>
+                          <option value="aurora">Aurora</option>
+                          <option value="ember">Ember</option>
+                        </select>
+                      </FormControl>
+                      <FormDescription>Saved shell preset for the app chrome and suite accents.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
                 </div>
                 <Button type="submit" disabled={form.formState.isSubmitting || isLoading}>
                   {isLoading ? "Loading..." : form.formState.isSubmitting ? "Saving..." : "Save Settings"}
@@ -215,7 +271,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/80 backdrop-blur-sm">
+        <Card className="rounded-[1.5rem] border-white/10 bg-white/[0.05] backdrop-blur-xl">
           <CardHeader>
             <CardTitle className="font-headline">Admin Actions</CardTitle>
             <CardDescription>Tools for managing the game.</CardDescription>
@@ -307,7 +363,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-card/80 backdrop-blur-sm">
+        <Card className="rounded-[1.5rem] border-white/10 bg-white/[0.05] backdrop-blur-xl">
           <CardHeader>
             <CardTitle className="font-headline">Support Tickets</CardTitle>
             <CardDescription>Manage support requests from players</CardDescription>

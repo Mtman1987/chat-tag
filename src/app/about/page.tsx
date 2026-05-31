@@ -9,8 +9,38 @@ import { Separator } from "@/components/ui/separator";
 
 export default function AboutPage() {
   return (
-    <main className="container mx-auto p-4 md:p-6 max-w-4xl">
-      <Card className="bg-card/80 backdrop-blur-sm">
+    <main className="cosmic-page max-w-6xl">
+      <section className="cosmic-hero">
+        <div className="cosmic-card space-y-4">
+          <div className="cosmic-status">Production Layout</div>
+          <h1 className="cosmic-title">About</h1>
+          <p className="cosmic-subtitle">
+            Rules, commands, and the game model still live here. This route now follows the same suite shell as the rest of the app instead of floating as a separate one-off page.
+          </p>
+          <div className="cosmic-note">
+            Chat Tag rules, shared bingo behavior, and planned hard-mode notes below remain the same production content.
+          </div>
+        </div>
+
+        <div className="cosmic-panel">
+          <h2 className="mb-4 font-headline text-2xl text-white">Live Preview</h2>
+          <div className="mock-window">
+            <div className="mock-head">
+              <span className="mock-dot mock-dot-red" />
+              <span className="mock-dot mock-dot-amber" />
+              <span className="mock-dot mock-dot-green" />
+            </div>
+            <div className="mock-body">
+              <div className="mock-row"><span>App</span><span>Chat-Tag</span></div>
+              <div className="mock-row"><span>Page</span><span>about</span></div>
+              <div className="mock-row"><span>Rules</span><span>Live</span></div>
+              <div className="mock-row"><span>Theme</span><span>Cosmic Shell</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Card className="rounded-[1.5rem] border-white/10 bg-white/[0.05] backdrop-blur-xl">
         <CardHeader className="text-center">
           <div className="flex justify-center items-center gap-4 mb-4">
             <Rocket className="h-10 w-10 text-primary" />

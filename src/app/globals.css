@@ -4,48 +4,66 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 302 59% 64%;
-    --primary-foreground: 302 100% 10%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    --background: 232 41% 6%;
+    --foreground: 210 40% 98%;
+    --card: 228 34% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 228 34% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 263 84% 68%;
+    --primary-foreground: 225 54% 10%;
+    --secondary: 230 28% 18%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 230 23% 21%;
+    --muted-foreground: 220 18% 72%;
+    --accent: 189 82% 53%;
+    --accent-foreground: 228 54% 10%;
+    --destructive: 343 89% 69%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 302 59% 64%;
-    --radius: 0.5rem;
+    --border: 230 20% 24%;
+    --input: 230 20% 24%;
+    --ring: 189 82% 53%;
+    --radius: 1rem;
   }
 
   .dark {
-    --background: 0 0% 4%;
+    --background: 232 41% 6%;
     --foreground: 210 40% 98%;
-    --card: 240 30% 12%;
+    --card: 228 34% 12%;
     --card-foreground: 210 40% 98%;
-    --popover: 240 30% 12%;
+    --popover: 228 34% 12%;
     --popover-foreground: 210 40% 98%;
-    --primary: 302 59% 64%;
-    --primary-foreground: 302 100% 10%;
-    --secondary: 240 15% 15%;
+    --primary: 263 84% 68%;
+    --primary-foreground: 225 54% 10%;
+    --secondary: 230 28% 18%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 240 15% 15%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 15% 25%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
+    --muted: 230 23% 21%;
+    --muted-foreground: 220 18% 72%;
+    --accent: 189 82% 53%;
+    --accent-foreground: 228 54% 10%;
+    --destructive: 343 51% 33%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 15% 20%;
-    --input: 240 15% 20%;
-    --ring: 302 59% 64%;
+    --border: 230 20% 24%;
+    --input: 230 20% 24%;
+    --ring: 189 82% 53%;
+  }
+
+  :root[data-app-theme="aurora"],
+  .dark[data-app-theme="aurora"] {
+    --primary: 168 83% 56%;
+    --primary-foreground: 220 54% 10%;
+    --accent: 191 95% 48%;
+    --accent-foreground: 220 54% 10%;
+    --ring: 168 83% 56%;
+  }
+
+  :root[data-app-theme="ember"],
+  .dark[data-app-theme="ember"] {
+    --primary: 22 93% 61%;
+    --primary-foreground: 220 54% 10%;
+    --accent: 343 89% 69%;
+    --accent-foreground: 220 54% 10%;
+    --ring: 22 93% 61%;
   }
 }
 
@@ -53,8 +71,14 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    background:
+      radial-gradient(circle at top left, rgba(139, 92, 246, 0.22), transparent 30%),
+      radial-gradient(circle at top right, rgba(34, 211, 238, 0.18), transparent 28%),
+      radial-gradient(circle at bottom center, rgba(99, 102, 241, 0.16), transparent 32%),
+      hsl(var(--background));
   }
 
   html:has(body.overlay-route),
@@ -64,10 +88,105 @@
   }
 }
 
+@layer components {
+  .cosmic-shell {
+    @apply relative min-h-screen;
+  }
+
+  .cosmic-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 16% 12%, rgba(139, 92, 246, 0.2), transparent 16rem),
+      radial-gradient(circle at 84% 10%, rgba(34, 211, 238, 0.18), transparent 16rem),
+      radial-gradient(circle at 50% 92%, rgba(124, 58, 237, 0.12), transparent 22rem);
+  }
+
+  .cosmic-page {
+    @apply relative z-10 mx-auto w-full max-w-[1500px] space-y-6 px-4 pb-10 pt-6 md:px-8;
+  }
+
+  .cosmic-hero {
+    @apply grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)];
+  }
+
+  .cosmic-card {
+    @apply rounded-[1.5rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_80px_rgba(3,8,24,0.35)] backdrop-blur-xl;
+  }
+
+  .cosmic-panel {
+    @apply rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(23,27,49,0.92),rgba(11,15,30,0.92))] p-6 shadow-[0_24px_80px_rgba(3,8,24,0.4)];
+  }
+
+  .cosmic-status {
+    @apply inline-flex items-center rounded-full border border-emerald-300/30 bg-emerald-300/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200;
+  }
+
+  .cosmic-title {
+    @apply font-headline text-4xl font-bold tracking-tight text-white md:text-5xl;
+  }
+
+  .cosmic-subtitle {
+    @apply max-w-3xl text-sm leading-7 text-slate-300 md:text-base;
+  }
+
+  .cosmic-grid {
+    @apply grid gap-4 md:grid-cols-2 xl:grid-cols-3;
+  }
+
+  .cosmic-tile {
+    @apply rounded-[1.125rem] border border-white/10 bg-black/20 p-5 text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)];
+  }
+
+  .cosmic-kpi {
+    @apply mb-3 font-headline text-3xl font-bold text-white;
+  }
+
+  .cosmic-note {
+    @apply rounded-2xl border border-cyan-300/25 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50;
+  }
+
+  .mock-window {
+    @apply overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70;
+  }
+
+  .mock-head {
+    @apply flex gap-2 border-b border-white/10 bg-slate-950/70 px-4 py-3;
+  }
+
+  .mock-dot {
+    @apply h-2.5 w-2.5 rounded-full;
+  }
+
+  .mock-dot-red {
+    @apply bg-red-500;
+  }
+
+  .mock-dot-amber {
+    @apply bg-amber-400;
+  }
+
+  .mock-dot-green {
+    @apply bg-emerald-400;
+  }
+
+  .mock-body {
+    @apply space-y-3 px-4 py-4;
+  }
+
+  .mock-row {
+    @apply flex items-center justify-between gap-4 border-b border-white/10 py-3 text-sm text-slate-300 last:border-b-0 last:pb-0;
+  }
+}
+
 @keyframes animated-stars {
   from {
     transform: translateY(0px);
   }
+
   to {
     transform: translateY(-2000px);
   }
