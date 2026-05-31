@@ -79,7 +79,12 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
         console.log(
           `[Announce] Discord webhook message sent (status ${response.status})`,
         );
-        return { ok: true, configured: true, status: response.status, messageId: sentMessage?.id };
+        return {
+          ok: true,
+          configured: true,
+          status: response.status,
+          messageId: sentMessage?.id,
+        };
       }
 
       const text = await response.text();
@@ -121,6 +126,52 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
   };
 }
 
+function buildCustomEmbed(body: Record<string, any>) {
+  const hasCustomEmbed =
+    Array.isArray(body.embeds) ||
+    typeof body.title === "string" ||
+    typeof body.description === "string" ||
+    typeof body.imageUrl === "string" ||
+    typeof body.thumbnailUrl === "string" ||
+    Array.isArray(body.fields);
+
+  if (!hasCustomEmbed) return null;
+
+  if (Array.isArray(body.embeds)) {
+    return { embeds: body.embeds };
+  }
+
+  const embed: Record<string, any> = {
+    title: body.title || undefined,
+    description: body.description || undefined,
+    color: Number.isFinite(body.color) ? body.color : 0x00d9ff,
+    timestamp: body.timestamp || new Date().toISOString(),
+    footer: body.footerText ? { text: body.footerText } : { text: "SPMT Chat Tag" },
+  };
+
+  if (Array.isArray(body.fields) && body.fields.length > 0) {
+    embed.fields = body.fields
+      .map((field: any) => ({
+        name: String(field?.name || "").slice(0, 256),
+        value: String(field?.value || "").slice(0, 1024),
+        inline: Boolean(field?.inline),
+      }))
+      .filter((field: any) => field.name && field.value);
+  }
+
+  if (body.imageUrl) embed.image = { url: body.imageUrl };
+  if (body.thumbnailUrl) embed.thumbnail = { url: body.thumbnailUrl };
+  if (body.authorName || body.authorUrl || body.authorIconUrl) {
+    embed.author = {
+      name: body.authorName || undefined,
+      url: body.authorUrl || undefined,
+      icon_url: body.authorIconUrl || undefined,
+    };
+  }
+
+  return { embeds: [embed] };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -128,6 +179,7 @@ export async function POST(req: NextRequest) {
 
     const state = await readAppState();
     const gameState = buildGameStatePayload(state);
+    const customPayload = buildCustomEmbed(body);
 
     let discordResult: DiscordWebhookResult & { skipped?: boolean } = {
       ok: Boolean(refreshOnly),
@@ -136,13 +188,17 @@ export async function POST(req: NextRequest) {
       skipped: Boolean(refreshOnly),
       error: refreshOnly
         ? undefined
-        : tagger && tagged
+        : customPayload
           ? "Discord webhook was not attempted"
-          : "Tagger and tagged are required for Discord announcements",
+          : tagger && tagged
+            ? "Discord webhook was not attempted"
+            : "Tagger and tagged are required for Discord announcements",
     };
 
-    // Post the Discord message first so a DSH outage/503 cannot block tag announcements.
-    if (!refreshOnly && tagger && tagged) {
+    // Post the Discord message first so a DSH outage/503 cannot block announcements.
+    if (!refreshOnly && customPayload) {
+      discordResult = await postDiscordWebhook(customPayload);
+    } else if (!refreshOnly && tagger && tagged) {
       const icon = doublePoints ? "🔥" : "🎯";
       const pointsNote = doublePoints ? " for **DOUBLE POINTS**" : "";
       const newIt = gameState.tag.currentIt?.twitchUsername || "Free for all";
@@ -180,7 +236,8 @@ export async function POST(req: NextRequest) {
       embedResult = { ok: false, error: error.message };
     }
 
-    if (tagger && tagged && (!discordResult.configured || !discordResult.ok)) {
+    const shouldEnforceDiscordResult = Boolean(customPayload) || (tagger && tagged && !refreshOnly);
+    if (shouldEnforceDiscordResult && (!discordResult.configured || !discordResult.ok)) {
       return NextResponse.json(
         {
           success: false,

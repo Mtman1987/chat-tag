@@ -2497,10 +2497,46 @@ console.log = (...args) => {
         reply(`@${user} ${res.error} ${Number(res.packsRemaining || 0)}/3 packs left today.`);
         return;
       }
-      const packNames = Array.isArray(res?.pack)
-        ? res.pack.map((card) => card?.name).filter(Boolean).slice(0, 5).join(', ')
+      const packCards = Array.isArray(res?.pack) ? res.pack : [];
+      const packNames = packCards.length
+        ? packCards.map((card) => card?.name).filter(Boolean).slice(0, 5).join(', ')
         : 'pack opened';
       reply(`🦆 @${user} opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`);
+
+      const rarityCounts = packCards.reduce((acc, card) => {
+        const rarity = card?.rarity || 'Unknown';
+        acc[rarity] = (acc[rarity] || 0) + 1;
+        return acc;
+      }, {});
+      const packCardLines = packCards.map((card) => `${card?.name || 'Unknown'} (${card?.rarity || 'Unknown'})`).join('\n') || 'pack opened';
+      const collectionCards = Array.isArray(res?.cards) ? res.cards : [];
+      const collectionTotal = collectionCards.length;
+      const collectionUnique = new Set(collectionCards).size;
+      const rarityText = Object.entries(rarityCounts)
+        .map(([rarity, count]) => `${rarity}: ${count}`)
+        .join(' | ') || 'Unknown';
+
+      if (res?.packImageUrl) {
+        const announceRes = await apiCall('/api/discord/announce', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: '🦆 Quackverse Pack Opened',
+            description: `**@${user}** opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`,
+            imageUrl: res.packImageUrl,
+            color: 0x00d9ff,
+            fields: [
+              { name: 'Pack', value: packCardLines, inline: false },
+              { name: 'Collection', value: `${collectionTotal} total cards | ${collectionUnique} unique`, inline: true },
+              { name: 'Rarity Breakdown', value: rarityText, inline: false },
+            ],
+            footerText: 'SPMT Chat Tag',
+          }),
+        });
+        if (announceRes?.__ok === false || announceRes?.success === false) {
+          console.error(`[Bot] Quackverse Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
+        }
+      }
     }
 
     else if (cmd === 'pass') {

@@ -5,6 +5,7 @@ import { getCollectionForUser, normalizeQuackverseUserId, quackverseUserIdFromSe
 import { quackverseCards } from '@/lib/quackverse-data';
 import { openQuackverseBoosterPack } from '@/lib/quackverse-packs';
 import { makeId, updateAppState, readAppState } from '@/lib/volume-store';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 import {
   normalizeQuackverseState,
   quackverseDailyPackLimit,
@@ -129,6 +130,7 @@ export async function POST(req: NextRequest) {
       collection.cards = [...collection.cards, ...collection.lastPack];
       state.updatedAt = new Date().toISOString();
       appState.quackverse = state;
+      const packId = makeId('qpack');
       const cards = pack.map((card) => ({
         id: card.id,
         name: card.name,
@@ -141,7 +143,7 @@ export async function POST(req: NextRequest) {
       }, {});
       appState.quackversePackOpens = [
         {
-          id: makeId('qpack'),
+          id: packId,
           at: new Date().toISOString(),
           day: today,
           userId,
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest) {
         },
         ...(Array.isArray(appState.quackversePackOpens) ? appState.quackversePackOpens : []),
       ].slice(0, 1000);
-      return { collection, pack };
+      return { collection, pack, packId };
     }
 
     if (action === 'addToDeck') {
@@ -217,6 +219,10 @@ export async function POST(req: NextRequest) {
   const payload = {
     ...publicCollection((result as any).collection),
     pack: Array.isArray((result as any).pack) ? (result as any).pack : undefined,
+    packId: typeof (result as any).packId === 'string' ? (result as any).packId : undefined,
+    packImageUrl: typeof (result as any).packId === 'string'
+      ? `${getPublicAppOrigin(req)}/api/quackverse/pack/image?packId=${encodeURIComponent((result as any).packId)}`
+      : undefined,
   };
   if ((result as any).error) {
     return NextResponse.json({ ...payload, error: (result as any).error }, { status: (result as any).status || 400 });
