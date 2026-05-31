@@ -3,7 +3,7 @@ import { readAppState, updateAppState, makeId } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const state = await readAppState();
     const modLog = (state as any).modLog || [];

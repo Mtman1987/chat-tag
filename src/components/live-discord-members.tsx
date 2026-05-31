@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -163,9 +164,12 @@ export function LiveDiscordMembers() {
                 
                 {member.thumbnailUrl && (
                   <div className="mt-3">
-                    <img
+                    <Image
                       src={member.thumbnailUrl.replace('{width}', '320').replace('{height}', '180')}
                       alt={`${member.twitchUsername} stream thumbnail`}
+                      width={320}
+                      height={180}
+                      unoptimized
                       className="w-full max-w-xs rounded border"
                     />
                   </div>

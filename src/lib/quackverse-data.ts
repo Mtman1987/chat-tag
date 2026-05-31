@@ -1,7 +1,6 @@
 import {
   normalizeQuackverseCard,
   validateQuackverseCards,
-  type QuackverseCard,
   type QuackverseLegacyCard,
 } from '@/lib/quackverse-schema';
 

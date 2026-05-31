@@ -1,9 +1,9 @@
 'use client';
 
 import type { Player } from "@/lib/types";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Trophy, Star, Server, Gem } from "lucide-react";
+import { Trophy, Star } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { useState, useEffect } from "react";
@@ -20,7 +20,6 @@ const rankIcons = [
 
 export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
   const [tagPlayers, setTagPlayers] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchPlayers = async () => {
@@ -28,13 +27,10 @@ export function Leaderboard({ players: propPlayers }: LeaderboardProps) {
         const res = await fetch('/api/tag');
         if (res.ok) {
           const data = await res.json();
-          console.log('[Leaderboard] Player count:', data.players?.length);
           setTagPlayers(data.players || []);
         }
       } catch (e) {
         console.error('Failed to fetch tag players', e);
-      } finally {
-        setIsLoading(false);
       }
     };
     fetchPlayers();

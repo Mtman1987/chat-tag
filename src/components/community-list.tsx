@@ -49,7 +49,7 @@ export function CommunityList({ players = [] }: CommunityListProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [tagStatusByUser, setTagStatusByUser] = useState<Record<string, { isIt: boolean; away: boolean }>>({});
   const { toast } = useToast();
-  const { allCommunityMembers, liveStreamers, refreshStreamers, isLoading } = useLiveStreamers();
+  const { allCommunityMembers, refreshStreamers } = useLiveStreamers();
 
   const fetchTagStatus = async () => {
     try {
@@ -108,7 +108,7 @@ export function CommunityList({ players = [] }: CommunityListProps) {
         title: "List Refreshed!",
         description: "Successfully synchronized players.",
       });
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Sync Failed",

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Shuffle, RefreshCw } from 'lucide-react';
+import { Plus, Shuffle } from 'lucide-react';
 import { commonBingoPhrases } from '@/lib/bingo-data';
 import { BingoCell } from '@/components/bingo-cell';
 import { useToast } from '@/hooks/use-toast';
@@ -86,13 +86,14 @@ export function BingoCard() {
       } catch (e) {
           console.error('Failed to fetch bingo state', e);
           // Fallback to default phrases if API fails
-          if (phrases.length === 0) {
-              const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
-              shuffled.splice(12, 0, 'FREE SPACE');
-              setPhrases(shuffled);
-          }
+          setPhrases((current) => {
+            if (current.length > 0) return current;
+            const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
+            shuffled.splice(12, 0, 'FREE SPACE');
+            return shuffled;
+          });
       }
-  }, [phrases.length]);
+  }, []);
 
   useEffect(() => {
       // Initialize with default phrases immediately
@@ -118,7 +119,7 @@ export function BingoCard() {
               intervalRef.current = null;
           }
       };
-  }, [fetchState]);
+  }, [fetchState, phrases.length]);
 
   const checkBingo = (currentCovered: Record<number, CoveredInfo>) => {
     const isCovered = (idx: number) => !!currentCovered[idx];

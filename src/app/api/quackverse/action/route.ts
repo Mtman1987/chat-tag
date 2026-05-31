@@ -9,7 +9,7 @@ import {
   redactQuackverseStateForViewer,
   viewerPayload,
 } from '@/lib/quackverse-access';
-import { quackverseCards, quackverseDucks, type QuackverseCard } from '@/lib/quackverse-data';
+import { quackverseCards, type QuackverseCard } from '@/lib/quackverse-data';
 import { findQuackverseStructuredEffect, getQuackverseAbilityCost, summarizeQuackverseGear } from '@/lib/quackverse-effects';
 import { quackverseRoomKeyFromParams, quackverseScopeFromParams } from '@/lib/quackverse-rooms';
 import { updateAppState } from '@/lib/volume-store';
@@ -29,10 +29,6 @@ type PlayerId = QuackversePlayerId;
 const gridSize = quackverseGridSize;
 const victoryTarget = 6;
 const formationVpLimit = 3;
-const quickStartSquads: Record<PlayerId, number[]> = {
-  playerOne: [1, 4, 24, 32, 52],
-  playerTwo: [9, 19, 37, 43, 73],
-};
 const starterBattleDecks: Record<PlayerId, number[]> = {
   playerOne: [1, 4, 24, 32, 52, 81, 84, 85, 86, 88],
   playerTwo: [9, 19, 37, 43, 73, 83, 87, 90, 95, 96],

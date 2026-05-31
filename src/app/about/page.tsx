@@ -1,6 +1,6 @@
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Gamepad2, Rocket, Target, Shield, Users, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Switch } from "@/components/ui/switch";

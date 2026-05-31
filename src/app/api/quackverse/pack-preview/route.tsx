@@ -126,7 +126,15 @@ function PackCard({ card }: { card: any }) {
         }}
       >
         {card.art ? (
-          <img src={card.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              backgroundImage: `url(${card.art})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
         ) : (
           <div style={{ fontSize: 52, fontWeight: 900, color: rarity.border }}>QV</div>
         )}

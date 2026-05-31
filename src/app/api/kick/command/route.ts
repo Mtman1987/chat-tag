@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readAppState, updateAppState, makeId, isTimedImmune, toMillis } from '@/lib/volume-store';
+import { readAppState, updateAppState, makeId, isTimedImmune } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { getPublicAppOrigin } from '@/lib/public-origin';

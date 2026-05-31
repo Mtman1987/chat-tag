@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
           const seat = viewer?.seat || getClaimedSeat(state, viewerUserId);
           send('state', redactQuackverseStateForViewer(state, seat));
 
-        } catch (error) {
+        } catch {
           send('error', { message: 'Failed to read Quackverse state' });
         }
       };

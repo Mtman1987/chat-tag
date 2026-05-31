@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ function AssetPreview({ card, entry }: { card: QuackverseCard; entry?: Quackvers
         onMouseLeave={() => setHovered(false)}
       >
         {src ? (
-          <img src={src} alt={card.name} className="aspect-[16/10] w-full object-cover" />
+          <Image src={src} alt={card.name} width={1280} height={800} unoptimized className="aspect-[16/10] w-full object-cover" />
         ) : (
           <div className="flex aspect-[16/10] items-center justify-center text-sm text-slate-400">
             No art uploaded yet
@@ -59,7 +60,7 @@ function AssetPreview({ card, entry }: { card: QuackverseCard; entry?: Quackvers
         <div className="rounded-md border border-white/10 bg-white/[0.04] p-2">
           <div className="mb-1 font-semibold text-white">Static image</div>
           {entry?.static ? (
-            <img src={entry.static.url} alt={`${card.name} static`} className="h-36 w-full rounded-md object-cover" />
+            <Image src={entry.static.url} alt={`${card.name} static`} width={512} height={288} unoptimized className="h-36 w-full rounded-md object-cover" />
           ) : (
             <div className="flex h-36 items-center justify-center rounded-md border border-dashed border-white/10 text-slate-500">
               Not set
@@ -69,7 +70,7 @@ function AssetPreview({ card, entry }: { card: QuackverseCard; entry?: Quackvers
         <div className="rounded-md border border-white/10 bg-white/[0.04] p-2">
           <div className="mb-1 font-semibold text-white">Hover art</div>
           {entry?.hover ? (
-            <img src={entry.hover.url} alt={`${card.name} hover`} className="h-36 w-full rounded-md object-cover" />
+            <Image src={entry.hover.url} alt={`${card.name} hover`} width={512} height={288} unoptimized className="h-36 w-full rounded-md object-cover" />
           ) : (
             <div className="flex h-36 items-center justify-center rounded-md border border-dashed border-white/10 text-slate-500">
               Not set

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, X, RefreshCw, Play, Pause, Square, MessageSquare, Trash2 } from 'lucide-react';
+import { Users, Plus, X, RefreshCw, Play, Pause, MessageSquare, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -33,8 +33,6 @@ export function BotChannelManager() {
   const [searchFilter, setSearchFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isJoiningAll, setIsJoiningAll] = useState(false);
-  const [joinProgress, setJoinProgress] = useState({ current: 0, total: 0 });
   const [commands, setCommands] = useState<BotCommand[]>([]);
   const [newCommandName, setNewCommandName] = useState('');
   const [newCommandDescription, setNewCommandDescription] = useState('');
@@ -151,7 +149,7 @@ export function BotChannelManager() {
           description: error || "Failed to add and join channel",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Failed",
@@ -185,7 +183,7 @@ export function BotChannelManager() {
           description: error || "Failed to join channel",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Join Failed",
@@ -193,74 +191,6 @@ export function BotChannelManager() {
       });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleJoinAllChannels = async () => {
-    if (pendingChannels.length === 0) {
-      toast({
-        title: "No Pending Channels",
-        description: "All available channels have been joined or there are no channels to join.",
-      });
-      return;
-    }
-
-    setIsJoiningAll(true);
-    setJoinProgress({ current: 0, total: pendingChannels.length });
-
-    try {
-      const res = await fetch('/api/bot/channels/join-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channels: pendingChannels }),
-      });
-
-      if (res.ok) {
-        toast({
-          title: "Join Process Started",
-          description: `Starting to join ${pendingChannels.length} channels in the background.`,
-        });
-        // Refresh after a delay to show progress
-        setTimeout(fetchChannels, 5000);
-      } else {
-        const error = await res.text();
-        console.error('[BotChannelManager] Join all failed:', res.status, error);
-        toast({
-          variant: "destructive",
-          title: "Join Failed",
-          description: `Failed to start joining channels (${res.status}): ${error.substring(0, 100)}${error.length > 100 ? '...' : ''}`,
-        });
-      }
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Join Failed",
-        description: "Network error while starting join process",
-      });
-    } finally {
-      setIsJoiningAll(false);
-    }
-  };
-
-  const handleStopJoining = async () => {
-    try {
-      const res = await fetch('/api/bot/channels/stop-joining', {
-        method: 'POST',
-      });
-
-      if (res.ok) {
-        toast({
-          title: "Join Process Stopped",
-          description: "Background channel joining has been stopped.",
-        });
-        setIsJoiningAll(false);
-      }
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Stop Failed",
-        description: "Failed to stop the join process",
-      });
     }
   };
 
@@ -369,7 +299,7 @@ export function BotChannelManager() {
           description: error || "Failed to add command",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Add Failed",
@@ -400,7 +330,7 @@ export function BotChannelManager() {
           description: error || "Failed to delete command",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Delete Failed",
@@ -436,7 +366,7 @@ export function BotChannelManager() {
           description: error || 'Failed to blacklist channel',
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Blacklist Failed',
@@ -467,7 +397,7 @@ export function BotChannelManager() {
           description: error || 'Failed to remove blacklisted channel',
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Remove Failed',

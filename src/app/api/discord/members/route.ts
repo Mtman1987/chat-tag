@@ -37,7 +37,7 @@ export async function GET() {
 
     console.log(`[Discord Members] Fetched ${formattedMembers.length} members`);
     return NextResponse.json({ members: formattedMembers });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ members: [] });
   }
 }

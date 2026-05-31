@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { getChatTagSoundUrl, type ChatTagSoundKey } from '@/lib/sound-effects';
 
@@ -94,11 +94,14 @@ export default function OverlayPage() {
   const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const previewTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const crown = (name: string) => {
-    if (!data?.monthlyWinners?.length) return name;
-    const w = data.monthlyWinners.find((e: any) => (e.username || '').toLowerCase() === (name || '').toLowerCase());
-    return w ? `👑 ${name}` : name;
-  };
+  const crown = useCallback(
+    (name: string) => {
+      if (!data?.monthlyWinners?.length) return name;
+      const w = data.monthlyWinners.find((e: any) => (e.username || '').toLowerCase() === (name || '').toLowerCase());
+      return w ? `👑 ${name}` : name;
+    },
+    [data?.monthlyWinners],
+  );
 
   useEffect(() => {
     const unlockAudio = () => {
@@ -128,7 +131,7 @@ export default function OverlayPage() {
     };
   }, []);
 
-  const playGeneratedBroadcastSound = (type: BroadcastType) => {
+  const playGeneratedBroadcastSound = useCallback((type: BroadcastType) => {
     try {
       const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtor) return;
@@ -161,31 +164,34 @@ export default function OverlayPage() {
         osc.stop(now + index * 0.11 + 0.24);
       });
     } catch {}
-  };
+  }, []);
 
-  const playBroadcastSound = (broadcast: Broadcast) => {
-    const soundUrl = getChatTagSoundUrl(broadcast.sound);
-    if (!soundUrl) {
-      playGeneratedBroadcastSound(broadcast.type);
-      return;
-    }
-
-    try {
-      let audio = audioCacheRef.current.get(soundUrl);
-      if (!audio) {
-        audio = new Audio(soundUrl);
-        audio.preload = 'auto';
-        audio.volume = 0.78;
-        audioCacheRef.current.set(soundUrl, audio);
+  const playBroadcastSound = useCallback(
+    (broadcast: Broadcast) => {
+      const soundUrl = getChatTagSoundUrl(broadcast.sound);
+      if (!soundUrl) {
+        playGeneratedBroadcastSound(broadcast.type);
+        return;
       }
-      audio.currentTime = 0;
-      void audio.play().catch(() => playGeneratedBroadcastSound(broadcast.type));
-    } catch {
-      playGeneratedBroadcastSound(broadcast.type);
-    }
-  };
 
-  const spawnConfetti = (colors: string[]) => {
+      try {
+        let audio = audioCacheRef.current.get(soundUrl);
+        if (!audio) {
+          audio = new Audio(soundUrl);
+          audio.preload = 'auto';
+          audio.volume = 0.78;
+          audioCacheRef.current.set(soundUrl, audio);
+        }
+        audio.currentTime = 0;
+        void audio.play().catch(() => playGeneratedBroadcastSound(broadcast.type));
+      } catch {
+        playGeneratedBroadcastSound(broadcast.type);
+      }
+    },
+    [playGeneratedBroadcastSound],
+  );
+
+  const spawnConfetti = useCallback((colors: string[]) => {
     const pieces: ConfettiPiece[] = Array.from({ length: 28 }, (_, index) => ({
       id: `${Date.now()}-${index}`,
       left: Math.random() * 100,
@@ -198,80 +204,95 @@ export default function OverlayPage() {
     }));
     setConfetti(pieces);
     setTimeout(() => setConfetti([]), 5600);
-  };
+  }, []);
 
-  const fireBroadcast = (b: Broadcast, duration = 6000) => {
-    if (broadcastTimer.current) clearTimeout(broadcastTimer.current);
-    activeBroadcastRef.current = true;
-    setDimBar(true);
-    setBroadcast(b);
-    playBroadcastSound(b);
-    if (b.type !== 'history' && b.type !== 'message') {
-      spawnConfetti([b.color, '#ffffff', b.glow, '#ffd700']);
-    }
-    broadcastTimer.current = setTimeout(() => {
-      activeBroadcastRef.current = false;
-      setBroadcast(null);
-      setTimeout(() => setDimBar(false), 400);
-      setTimeout(() => {
-        const nextQueued = pendingBroadcasts.current.shift();
-        if (nextQueued) {
-          fireBroadcast(nextQueued.broadcast, nextQueued.duration);
-        }
-      }, 450);
-    }, duration);
-  };
+  const fireBroadcast = useCallback(
+    (b: Broadcast, duration = 6000) => {
+      if (broadcastTimer.current) clearTimeout(broadcastTimer.current);
+      activeBroadcastRef.current = true;
+      setDimBar(true);
+      setBroadcast(b);
+      playBroadcastSound(b);
+      if (b.type !== 'history' && b.type !== 'message') {
+        spawnConfetti([b.color, '#ffffff', b.glow, '#ffd700']);
+      }
+      broadcastTimer.current = setTimeout(() => {
+        activeBroadcastRef.current = false;
+        setBroadcast(null);
+        setTimeout(() => setDimBar(false), 400);
+        setTimeout(() => {
+          const nextQueued = pendingBroadcasts.current.shift();
+          if (nextQueued) {
+            fireBroadcast(nextQueued.broadcast, nextQueued.duration);
+          }
+        }, 450);
+      }, duration);
+    },
+    [playBroadcastSound, spawnConfetti],
+  );
 
-  const queueBroadcast = (b: Broadcast, duration = 6000) => {
-    if (!activeBroadcastRef.current) {
-      fireBroadcast(b, duration);
-      return;
-    }
-    pendingBroadcasts.current.push({ broadcast: b, duration });
-  };
+  const queueBroadcast = useCallback(
+    (b: Broadcast, duration = 6000) => {
+      if (!activeBroadcastRef.current) {
+        fireBroadcast(b, duration);
+        return;
+      }
+      pendingBroadcasts.current.push({ broadcast: b, duration });
+    },
+    [fireBroadcast],
+  );
 
-  const fireHistoryBroadcast = (history: any[]) => {
-    if (!history.length || broadcast) return;
-    const lines = history.slice(0, 6).map((h: any) => {
-      if (h.blocked) return `🛡️ ${h.tagger} → ${h.tagged} (${h.blocked})`;
-      return `${h.doublePoints ? '🔥' : '🎯'} ${crown(h.tagger)} tagged ${crown(h.tagged)}${h.doublePoints ? ' 2x!' : ''}`;
-    });
-    fireBroadcast({ type: 'history', lines, icon: '📜', color: '#9146ff', glow: '#9146ff', sound: 'history' }, 15000);
-    lastHistoryShow.current = Date.now();
-  };
+  const fireHistoryBroadcast = useCallback(
+    (history: any[]) => {
+      if (!history.length || broadcast) return;
+      const lines = history.slice(0, 6).map((h: any) => {
+        if (h.blocked) return `🛡️ ${h.tagger} → ${h.tagged} (${h.blocked})`;
+        return `${h.doublePoints ? '🔥' : '🎯'} ${crown(h.tagger)} tagged ${crown(h.tagged)}${h.doublePoints ? ' 2x!' : ''}`;
+      });
+      fireBroadcast({ type: 'history', lines, icon: '📜', color: '#9146ff', glow: '#9146ff', sound: 'history' }, 15000);
+      lastHistoryShow.current = Date.now();
+    },
+    [broadcast, crown, fireBroadcast],
+  );
 
-  const fireLeaderboardBroadcast = (leaderboard: any[]) => {
-    if (!leaderboard.length || broadcast) return;
-    const lines = leaderboard.slice(0, 5).map((player: any, index: number) =>
-      `#${index + 1} ${crown(player.twitchUsername || player.username || '?')} ${player.score} pts`
-    );
-    fireBroadcast({ type: 'history', lines, icon: '🏆', color: '#ffd700', glow: '#ffb300', sound: 'leaderboard' }, 15000);
-    spawnConfetti(['#ffd700', '#fff2a8', '#ffffff', '#ffb300']);
-    lastHistoryShow.current = Date.now();
-  };
+  const fireLeaderboardBroadcast = useCallback(
+    (leaderboard: any[]) => {
+      if (!leaderboard.length || broadcast) return;
+      const lines = leaderboard.slice(0, 5).map((player: any, index: number) =>
+        `#${index + 1} ${crown(player.twitchUsername || player.username || '?')} ${player.score} pts`
+      );
+      fireBroadcast({ type: 'history', lines, icon: '🏆', color: '#ffd700', glow: '#ffb300', sound: 'leaderboard' }, 15000);
+      spawnConfetti(['#ffd700', '#fff2a8', '#ffffff', '#ffb300']);
+      lastHistoryShow.current = Date.now();
+    },
+    [broadcast, crown, fireBroadcast, spawnConfetti],
+  );
 
-  const fireLiveBroadcast = (state: OverlayState) => {
-    const liveUsers = state.liveUsers || [];
-    const lines = liveUsers.length
-      ? liveUsers.slice(0, 5).map((user: any) => {
-          const name = user.displayName || user.username || '?';
-          const viewers = typeof user.viewerCount === 'number' ? ` • ${user.viewerCount} viewers` : '';
-          const shared = user.isSharedChat ? ' • shared chat' : '';
-          return `🟢 ${name}${viewers}${shared}`;
-        })
-      : [`${state.liveCount || 0} live right now`, `${state.playerCount || 0} players tracked`];
+  const fireLiveBroadcast = useCallback(
+    (state: OverlayState) => {
+      const liveUsers = state.liveUsers || [];
+      const lines = liveUsers.length
+        ? liveUsers.slice(0, 5).map((user: any) => {
+            const name = user.displayName || user.username || '?';
+            const viewers = typeof user.viewerCount === 'number' ? ` • ${user.viewerCount} viewers` : '';
+            const shared = user.isSharedChat ? ' • shared chat' : '';
+            return `🟢 ${name}${viewers}${shared}`;
+          })
+        : [`${state.liveCount || 0} live right now`, `${state.playerCount || 0} players tracked`];
 
-    if (state.it?.username) {
-      lines.unshift(`IT: ${crown(state.it.username)}`);
-    } else {
-      lines.unshift('FREE FOR ALL');
-    }
+      if (state.it?.username) {
+        lines.unshift(`IT: ${crown(state.it.username)}`);
+      } else {
+        lines.unshift('FREE FOR ALL');
+      }
 
-    fireBroadcast({ type: 'history', lines, icon: '📺', color: '#34d399', glow: '#34d399', sound: 'live' }, 15000);
-    lastHistoryShow.current = Date.now();
-  };
+      fireBroadcast({ type: 'history', lines, icon: '📺', color: '#34d399', glow: '#34d399', sound: 'live' }, 15000);
+      lastHistoryShow.current = Date.now();
+    },
+    [crown, fireBroadcast],
+  );
 
-  const buildBroadcastFromOverlayMessage = (message: OverlayMessage): Broadcast | null => {
+  const buildBroadcastFromOverlayMessage = useCallback((message: OverlayMessage): Broadcast | null => {
     const payload = message.payload || {};
     switch (message.type) {
       case 'leaderboard-card':
@@ -374,7 +395,7 @@ export default function OverlayPage() {
           sound: 'message',
         };
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!isPreview) return;
@@ -453,11 +474,12 @@ export default function OverlayPage() {
     };
 
     window.addEventListener('message', onMessage);
+    const previewTimer = previewTimerRef.current;
     return () => {
       window.removeEventListener('message', onMessage);
-      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (previewTimer) clearTimeout(previewTimer);
     };
-  }, [isPreview]);
+  }, [buildBroadcastFromOverlayMessage, fireHistoryBroadcast, isPreview, queueBroadcast]);
 
   useEffect(() => {
     if (isPreview) return;
@@ -472,7 +494,6 @@ export default function OverlayPage() {
         const latestMessageTs = latestMessage?.timestamp || 0;
         if (prevOverlayMessageTs.current !== null && latestMessageTs > prevOverlayMessageTs.current) {
           showedOverlayMessage = true;
-          const richBroadcast = latestMessage ? buildBroadcastFromOverlayMessage(latestMessage) : null;
           const newOverlayMessages = (next.overlayMessages || [])
             .filter((entry: OverlayMessage) => (entry.timestamp || 0) > prevOverlayMessageTs.current!)
             .sort((a: OverlayMessage, b: OverlayMessage) => (a.timestamp || 0) - (b.timestamp || 0));
@@ -517,7 +538,7 @@ export default function OverlayPage() {
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [userId, isPreview]);
+  }, [buildBroadcastFromOverlayMessage, crown, fireBroadcast, isPreview, queueBroadcast, userId]);
 
   useEffect(() => {
     broadcastRef.current = broadcast;
@@ -549,7 +570,7 @@ export default function OverlayPage() {
       fireLiveBroadcast(current);
     }, 10000);
     return () => { if (historyTimer.current) clearInterval(historyTimer.current); };
-  }, [historyInterval, isPreview]);
+  }, [fireHistoryBroadcast, fireLeaderboardBroadcast, fireLiveBroadcast, historyInterval, isPreview]);
 
   if (!data) return null;
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;

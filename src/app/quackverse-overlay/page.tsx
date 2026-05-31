@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { quackverseCards } from '@/lib/quackverse-data';
 import {
   defaultQuackverseState,
@@ -140,11 +141,20 @@ export default function QuackverseOverlayPage() {
                     {piece && card ? (
                       <div className="flex h-full flex-col overflow-hidden rounded-lg">
                         <div className="relative flex-1 overflow-hidden rounded-lg">
-                          <img
-                            src={card.artUrl || ''}
-                            alt={card.name}
-                            className="h-full w-full object-cover"
-                          />
+                          {card.artUrl ? (
+                            <Image
+                              src={card.artUrl}
+                              alt={card.name}
+                              width={320}
+                              height={180}
+                              unoptimized
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-slate-900 text-xs text-slate-500">
+                              No art
+                            </div>
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                           <div className="absolute inset-x-0 top-0 flex justify-between gap-1 p-2 text-[clamp(0.5rem,0.75vw,0.7rem)]">
                             <span className="rounded bg-black/45 px-1.5 py-0.5">{players[piece.owner].short}</span>

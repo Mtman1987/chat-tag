@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, Trash2, Image, Trash, Download } from "lucide-react";
+import { AlertTriangle, Trash2, Image as ImageIcon, Trash, Download } from "lucide-react";
 import { useSession } from "@/contexts/session-context";
 import { isAdminUsername } from "@/lib/admin";
 import { getAuthHeaders } from "@/lib/client-auth";
@@ -253,7 +253,7 @@ export default function SettingsPage() {
                   setIsFixingPlayers(false);
                 }
               }} disabled={isFixingPlayers}>
-                <Image className={`mr-2 h-4 w-4 ${isFixingPlayers ? 'animate-spin' : ''}`} />
+                <ImageIcon className={`mr-2 h-4 w-4 ${isFixingPlayers ? 'animate-spin' : ''}`} />
                 {isFixingPlayers ? 'Fixing...' : 'Fix Players & Avatars'}
               </Button>
             </div>

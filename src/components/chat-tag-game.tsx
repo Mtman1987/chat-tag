@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLiveStreamers } from '@/contexts/live-streamers-context';
 import { useSession } from '@/contexts/session-context';
 import { isAdminUsername } from '@/lib/admin';
@@ -67,17 +67,17 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
   const [addPlayerName, setAddPlayerName] = useState('');
   const [isAddingPlayer, setIsAddingPlayer] = useState(false);
 
-  const ts = (value: any): number => {
+  const ts = useCallback((value: any): number => {
     if (!value) return 0;
     if (typeof value === 'number') return value;
     if (typeof value?.toMillis === 'function') return value.toMillis();
     if (typeof value?.seconds === 'number') return value.seconds * 1000;
     const parsed = Date.parse(String(value));
     return Number.isNaN(parsed) ? 0 : parsed;
-  };
+  }, []);
 
   // Fetch community members
-  const fetchCommunity = async () => {
+  const fetchCommunity = useCallback(async () => {
     try {
       const res = await fetch('/api/discord/members', { cache: 'no-store' });
       if (res.ok) {
@@ -91,13 +91,13 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
         }));
         setCommunityPlayers(playerList);
       }
-    } catch (e) {
-      console.error('Failed to fetch community', e);
+    } catch (error) {
+      console.error('Failed to fetch community', error);
     }
-  };
+  }, []);
 
   // Fetch shared state
-  const fetchState = async () => {
+  const fetchState = useCallback(async () => {
     try {
       const res = await fetch('/api/tag', { cache: 'no-store' });
       if (res.ok) {
@@ -138,10 +138,10 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
           monthlyWinners: data.monthlyWinners || [],
         });
       }
-    } catch (e) {
-      console.error('Failed to fetch tag state', e);
+    } catch (error) {
+      console.error('Failed to fetch tag state', error);
     }
-  };
+  }, [ts]);
 
   useEffect(() => {
     fetchCommunity();
@@ -155,7 +155,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, []);
+  }, [fetchCommunity, fetchState]);
 
   // Mock players if none provided (fallback)
   const fallbackPlayers: GamePlayer[] =
@@ -230,7 +230,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
       
       toast({ title: 'Tagged!', description: `${taggedPlayer.username} is now "It"!` });
       setTimeout(fetchState, 500);
-    } catch (error) {
+    } catch {
       toast({ variant: 'destructive', title: 'Failed', description: 'Could not process tag.' });
     }
   };
@@ -253,7 +253,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
         setTimeout(fetchState, 500);
         toast({ title: '"It" has been randomized!', description: `${randomPlayer.username} is the new "It".` });
       }
-    } catch (error) {
+    } catch {
       toast({ variant: 'destructive', title: 'Failed to randomize' });
     }
   };
@@ -299,7 +299,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
       toast({ title: 'Joined Game', description: 'You have joined the game of Tag!' });
       
       setTimeout(fetchState, 1000);
-    } catch (error) {
+    } catch {
       toast({ variant: 'destructive', title: 'Join Failed', description: 'Could not join the game.' });
     }
   };
@@ -329,7 +329,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
       
       fetchState();
       toast({ title: 'Left Game', description: 'You have left the game of Tag.' });
-    } catch (error) {
+    } catch {
       toast({ variant: 'destructive', title: 'Leave Failed', description: 'Could not leave the game.' });
     }
   };
@@ -471,7 +471,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                 
                 setTimeout(fetchState, 500);
                 toast({ title: 'You are now It!' });
-              } catch (e) {
+              } catch {
                 toast({ variant: 'destructive', title: 'Failed to set It' });
               }
             }}>
@@ -505,7 +505,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                   title: isSleeping ? 'You are Awake' : 'You are Sleeping', 
                   description: isSleeping ? 'You can be tagged again' : 'You are now immune from tags' 
                 });
-              } catch (e) {
+              } catch {
                 toast({ variant: 'destructive', title: 'Failed to toggle immunity' });
               }
             }}>
@@ -532,7 +532,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                 });
                 setTimeout(fetchState, 500);
                 toast({ title: 'Timeout Triggered', description: 'FREE FOR ALL MODE! Anyone can tag for double points!' });
-              } catch (e) {
+              } catch {
                 toast({ variant: 'destructive', title: 'Failed to trigger timeout' });
               }
             }}>
@@ -550,7 +550,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                 });
                 setTimeout(fetchState, 500);
                 toast({ title: 'Scores Reset', description: 'All points and tag history have been cleared.' });
-              } catch (e) {
+              } catch {
                 toast({ variant: 'destructive', title: 'Failed to reset scores' });
               }
             }}>
@@ -665,7 +665,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                             
                             setTimeout(fetchState, 500);
                             toast({ title: 'Set as It', description: `${player.username} is now It!` });
-                          } catch (e) {
+                          } catch {
                             toast({ variant: 'destructive', title: 'Failed to set It' });
                           }
                         }}
@@ -722,7 +722,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                                 ? `${player.username} can be tagged again`
                                 : `${player.username} is now away/immune`,
                             });
-                          } catch (e) {
+                          } catch {
                             toast({ variant: 'destructive', title: 'Failed to update away status' });
                           }
                         }}
@@ -750,7 +750,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                               toast({ title: "Winner Set!", description: `${player.username} is #${nextPlace} winner` });
                             }
                             setTimeout(fetchState, 500);
-                          } catch (e) { toast({ variant: "destructive", title: "Failed to update winner" }); }
+                          } catch { toast({ variant: "destructive", title: "Failed to update winner" }); }
                         }}
                       >
                         👑
@@ -770,7 +770,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
                             });
                             toast({ title: 'Points Awarded', description: `Gave ${points} points to ${player.username}` });
                             setTimeout(fetchState, 500);
-                          } catch (e) {
+                          } catch {
                             toast({ variant: 'destructive', title: 'Failed to award points' });
                           }
                         }}

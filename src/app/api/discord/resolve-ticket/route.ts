@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { updateAppState } from '@/lib/volume-store';
 
 export async function POST(req: NextRequest) {
   try {

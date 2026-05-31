@@ -55,7 +55,7 @@ async function removeIfExists(filePath: string) {
   await fs.rm(filePath, { force: true }).catch(() => {});
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const appState = await readAppState();
   const manifest = manifestFromState(appState);
   return NextResponse.json({

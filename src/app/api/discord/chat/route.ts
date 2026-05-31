@@ -242,12 +242,10 @@ export async function POST(req: NextRequest) {
     // Support Kite/root-wrapped payloads, direct payloads, and older field names.
     const data = body?.root || body || {};
     const discordUserId = data.userId || data.discordUserId;
-    const guildId = data.guildId || data.serverId;
     const message = data.message || data.content || '';
     const rawUserName = data.userName || data.displayName || data.username;
     const channelId = data.channelId || '';
     const messageId = data.messageId || data.userMessageId || '';
-    const userAvatar = data.userAvatar || data.avatarUrl || '';
     const userName = rawUserName || 'Unknown';
 
     if (!message && channelId) {

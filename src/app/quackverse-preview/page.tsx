@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -150,7 +151,7 @@ export default function QuackversePreviewPage() {
                 onMouseLeave={hideAnimatedArt}
               >
                 {src ? (
-                  <img src={src} alt={card.name} className="aspect-[5/3] w-full object-cover" />
+                  <Image src={src} alt={card.name} width={1280} height={768} unoptimized className="aspect-[5/3] w-full object-cover" />
                 ) : (
                   <div className="flex aspect-[5/3] items-center justify-center text-slate-400">No art loaded</div>
                 )}
@@ -200,7 +201,6 @@ export default function QuackversePreviewPage() {
                 {board.map((value, index) => {
                   const isOccupied = value === card.id;
                   const row = Math.floor(index / boardSize);
-                  const col = index % boardSize;
                   const isBackRow = row === 0 || row === boardSize - 1;
                   return (
                     <button
@@ -225,22 +225,25 @@ export default function QuackversePreviewPage() {
                             <span className="rounded bg-black/45 px-1.5 py-0.5 text-cyan-100">drag me</span>
                           </div>
                           <div className="relative flex-1">
-                            <img
-                              draggable
-                              onDragStart={() => {
-                                clearHoverResetTimer();
+                  <Image
+                            draggable
+                            onDragStart={() => {
+                              clearHoverResetTimer();
                                 setDragging(true);
                                 showAnimatedArt();
                               }}
                               onDragEnd={() => {
                                 setDragging(false);
                                 hideAnimatedArt();
-                              }}
-                              src={src}
-                              alt={card.name}
-                              className="h-full w-full object-cover"
-                              onMouseEnter={showAnimatedArt}
-                              onMouseLeave={hideAnimatedArt}
+                            }}
+                            src={src}
+                            alt={card.name}
+                            width={1280}
+                            height={768}
+                            unoptimized
+                            className="h-full w-full object-cover"
+                            onMouseEnter={showAnimatedArt}
+                            onMouseLeave={hideAnimatedArt}
                             />
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent p-2">
                               {showBoardStats ? (

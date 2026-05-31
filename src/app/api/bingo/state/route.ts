@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
-import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { makeId, readAppState, updateAppState } from '@/lib/volume-store';
+import { getScoringSettings } from '@/lib/scoring';
 import { postOrUpdateChatTagEmbed } from '@/lib/chat-tag-discord';
 
 async function refreshChatTagEmbed() {

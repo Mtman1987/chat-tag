@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, useContext } from 'react';
+import Image from 'next/image';
 import {
   BadgePlus,
   BookOpen,
@@ -202,7 +203,6 @@ const makePiece = (owner: PlayerId, card: QuackverseCard, instanceId = makeInsta
   fatigue: 0,
   statModifiers: { atk: 0, def: 0, spd: 0, spc: 0 },
 });
-const squadsLabel = (cards: QuackverseCard[]) => cards.map((card) => card.name).join(', ');
 const rowOf = (index: number) => Math.floor(index / gridSize);
 const colOf = (index: number) => index % gridSize;
 const isAdjacent = (from: number, to: number) => {
@@ -211,9 +211,6 @@ const isAdjacent = (from: number, to: number) => {
 
   return rowDistance + colDistance === 1;
 };
-
-const victoryTarget = 6;
-const formationVpLimit = 3;
 
 function getEffectiveStats(piece: GridPiece) {
   const equipment = piece.equipmentIds
@@ -232,10 +229,6 @@ function getEffectiveStats(piece: GridPiece) {
 
 function getSpecialMax(piece: GridPiece) {
   return Math.max(10, 10 + (piece.card.spc || 0) * 2 + Number(piece.statModifiers.spc || 0) * 2);
-}
-
-function getSpecialGain(piece: GridPiece) {
-  return Math.max(0, 4 + (piece.card.spc || 0) + Number(piece.statModifiers.spc || 0) - piece.fatigue);
 }
 
 function getGearHealPerTurn(piece: GridPiece) {
@@ -472,17 +465,19 @@ function AnimatedCardArt({
   }
 
   if (!art.hasHoverArt) {
-    return <img src={art.staticUrl || art.hoverUrl} alt={card.name} className={className} />;
+    return <Image src={art.staticUrl || art.hoverUrl} alt={card.name} width={512} height={512} unoptimized className={className} />;
   }
 
   return (
     <div className="relative h-full w-full">
-      <img src={art.staticUrl} alt={card.name} className={cn(className, 'absolute inset-0')} />
-      <img
+      <Image src={art.staticUrl} alt={card.name} fill unoptimized className={cn(className, 'absolute inset-0')} />
+      <Image
         key={`${art.hoverUrl}-${art.animationKey}`}
         src={art.hoverUrl}
         alt=""
         aria-hidden="true"
+        fill
+        unoptimized
         className={cn(className, 'absolute inset-0 transition-opacity duration-150', art.isAnimated ? 'opacity-100' : 'opacity-0')}
       />
     </div>
@@ -620,48 +615,6 @@ function CardFace({
   );
 }
 
-function SquadSlot({
-  card,
-  owner,
-  index,
-  selected,
-  onSelect,
-  onRemove,
-}: {
-  card?: QuackverseCard;
-  owner: PlayerId;
-  index: number;
-  selected: boolean;
-  onSelect: () => void;
-  onRemove: () => void;
-}) {
-  if (!card) {
-    return (
-      <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.03] text-xs text-slate-500">
-        Slot {index + 1}
-      </div>
-    );
-  }
-  return (
-    <div className="relative min-h-24">
-      <CardFace card={card} compact selected={selected} onClick={onSelect} />
-      <Button
-        type="button"
-        size="icon"
-        variant="secondary"
-        className="absolute right-1 top-1 h-7 w-7 bg-black/60"
-        onClick={onRemove}
-        aria-label={`Remove ${card.name}`}
-      >
-        <Minus className="h-3.5 w-3.5" />
-      </Button>
-      <div className={cn('absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[0.63rem]', players[owner].accent)}>
-        {players[owner].short}
-      </div>
-    </div>
-  );
-}
-
 function BoardPieceCard({
   slot,
   index,
@@ -780,14 +733,6 @@ type DetectedFormation = {
   key: string;
   indices: number[];
   healerCount: number;
-};
-
-const formationPriority: Record<string, number> = {
-  'Eclipse Cross': 5,
-  'Cosmic Diamond': 5,
-  'Flying V': 4,
-  'Medic Sanctuary': 4,
-  'Battle Line': 1,
 };
 
 function detectFormations(grid: GridSlot[]): DetectedFormation[] {
@@ -1333,37 +1278,40 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     };
   }, [applySharedState, quackverseUrl, savedState, saveRequestVersion]);
 
-  const sendQuackverseAction = async (action: Record<string, unknown>) => {
-    if (actionRequestPendingRef.current) return;
-    actionRequestPendingRef.current = true;
-    hasPendingSharedWriteRef.current = true;
-    setIsActionPending(true);
-    try {
-      const response = await fetch(quackverseUrl('/api/quackverse/action'), {
-        method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(action),
-      });
-      const data = await response.json().catch(() => null);
-      if (data?.viewer !== undefined) setViewer(data.viewer || null);
-      if (data?.state) {
-        applySharedState(data.state as QuackverseSavedState);
+  const sendQuackverseAction = useCallback(
+    async (action: Record<string, unknown>) => {
+      if (actionRequestPendingRef.current) return;
+      actionRequestPendingRef.current = true;
+      hasPendingSharedWriteRef.current = true;
+      setIsActionPending(true);
+      try {
+        const response = await fetch(quackverseUrl('/api/quackverse/action'), {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(action),
+        });
+        const data = await response.json().catch(() => null);
+        if (data?.viewer !== undefined) setViewer(data.viewer || null);
+        if (data?.state) {
+          applySharedState(data.state as QuackverseSavedState);
+        }
+        if (!response.ok || data?.error) {
+          setActionError(String(data?.error || `Action failed (${response.status})`));
+        } else {
+          setActionError('');
+          void refreshCollection();
+        }
+      } catch (error) {
+        setActionError('Action failed. Try again.');
+        console.warn('[Quackverse] Failed to apply action', error);
+      } finally {
+        actionRequestPendingRef.current = false;
+        setIsActionPending(false);
+        hasPendingSharedWriteRef.current = false;
       }
-      if (!response.ok || data?.error) {
-        setActionError(String(data?.error || `Action failed (${response.status})`));
-      } else {
-        setActionError('');
-        void refreshCollection();
-      }
-    } catch (error) {
-      setActionError('Action failed. Try again.');
-      console.warn('[Quackverse] Failed to apply action', error);
-    } finally {
-      actionRequestPendingRef.current = false;
-      setIsActionPending(false);
-      hasPendingSharedWriteRef.current = false;
-    }
-  };
+    },
+    [applySharedState, quackverseUrl, refreshCollection],
+  );
 
   useEffect(() => {
     refreshCollection()
@@ -1421,23 +1369,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     loadTestPlayers();
   }, []);
 
-  const addToSquad = (card: QuackverseCard, owner = activePlayer) => {
-    if (card.type !== 'Duck') return;
-    requestSharedSave();
-    setSquads((current) => {
-      if (current[owner].some((squadCard) => squadCard.id === card.id) || current[owner].length >= squadSize) return current;
-      return { ...current, [owner]: [...current[owner], card] };
-    });
-    setSelectedSquadCard({ owner, cardId: card.id });
-  };
-
   const addLog = (entry: string) => {
     setMatchLog((current) => [`Turn ${turnNumber}: ${entry}`, ...current].slice(0, 12));
-  };
-
-  const updateClaimedPlayer = (playerId: PlayerId, playerProfileId: string) => {
-    setClaimedPlayers((current) => ({ ...current, [playerId]: playerProfileId }));
-    void sendQuackverseAction({ type: 'setClaimedPlayer', playerId, userId: playerProfileId });
   };
 
   const claimSeat = (playerId: PlayerId) => {
@@ -1517,38 +1450,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     };
   };
 
-  const moveBattleCardToDiscard = (owner: PlayerId, instanceId: string) => {
-    setBattlePiles((current) => {
-      const pile = current[owner];
-      const handEntry = pile.hand.find((entry) => entry.instanceId === instanceId);
-      if (!handEntry) return current;
-      return {
-        ...current,
-        [owner]: {
-          ...pile,
-          hand: pile.hand.filter((entry) => entry.instanceId !== instanceId),
-          discardPile: [...pile.discardPile, handEntry],
-        },
-      };
-    });
-    setSelectedBattleCard((current) => (current?.owner === owner && current.instanceId === instanceId ? null : current));
-  };
-
-  const removeBattleCardFromHand = (owner: PlayerId, instanceId: string) => {
-    setBattlePiles((current) => {
-      const pile = current[owner];
-      if (!pile.hand.some((entry) => entry.instanceId === instanceId)) return current;
-      return {
-        ...current,
-        [owner]: {
-          ...pile,
-          hand: pile.hand.filter((entry) => entry.instanceId !== instanceId),
-          },
-      };
-    });
-    setSelectedBattleCard((current) => (current?.owner === owner && current.instanceId === instanceId ? null : current));
-  };
-
   const drawBattleCards = (owner: PlayerId, count = 1) => {
     if (count <= 0) return;
     setBattlePiles((current) => {
@@ -1594,36 +1495,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           discardPile: [...pile.discardPile, discardTarget],
         },
       };
-    });
-  };
-
-  const discardBoardPiece = (piece: GridPiece) => {
-    setBattlePiles((current) => {
-      const pile = current[piece.owner];
-      const discardEntries = [
-        { instanceId: piece.instanceId, cardId: piece.card.id },
-        ...piece.equipmentIds.map((cardId) => makeCardInstance(piece.owner, cardId)),
-      ];
-      return {
-        ...current,
-        [piece.owner]: {
-          ...pile,
-          discardPile: [...pile.discardPile, ...discardEntries],
-        },
-      };
-    });
-  };
-
-  const markTurnAction = (playerId: PlayerId, action: keyof QuackverseTurnActions, key?: string) => {
-    setTurnActions((current) => {
-      const playerActions = current[playerId];
-      if (action === 'deployedOrMoved') {
-        return { ...current, [playerId]: { ...playerActions, deployedOrMoved: true } };
-      }
-      if (!key) return current;
-      const actionList = playerActions[action] as string[];
-      if (actionList.includes(key)) return current;
-      return { ...current, [playerId]: { ...playerActions, [action]: [...actionList, key] } };
     });
   };
 
@@ -1683,100 +1554,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     setTurnNumber((current) => current + 1);
   };
   const passTurn = () => endTurn(`${displayPlayers[activePlayer].short} passed.`);
-
-  const removeFromSquad = (owner: PlayerId, cardId: number) => {
-    requestSharedSave();
-    setSquads((current) => ({ ...current, [owner]: current[owner].filter((card) => card.id !== cardId) }));
-    setGrid((current) => current.map((slot) => (slot?.owner === owner && slot.card.id === cardId ? null : slot)));
-    setSelectedSquadCard((current) => (current?.owner === owner && current.cardId === cardId ? null : current));
-    setSelectedBoardIndex(null);
-  };
-
-  const scoreNewFormations = (owner: PlayerId, nextGrid: GridSlot[]) => {
-    const detected = detectFormations(nextGrid).filter((formation) => formation.owner === owner);
-    const fresh = detected
-      .filter((formation) => !scoredFormationKeys.includes(formation.key))
-      .sort((a, b) => b.indices.length - a.indices.length || (formationPriority[b.name] || 0) - (formationPriority[a.name] || 0))[0];
-    if (!fresh) return;
-
-    const earnsVp =
-      fresh.name === 'Medic Sanctuary'
-        ? formationVp[owner] < formationVpLimit && fresh.healerCount >= 2
-        : formationVp[owner] < formationVpLimit;
-    const nextScore = score[owner] + (earnsVp ? 1 : 0);
-    setScoredFormationKeys((current) => [...current, fresh.key]);
-    setFormationVp((current) => ({ ...current, [owner]: current[owner] + (earnsVp ? 1 : 0) }));
-    const indexSet = new Set(fresh.indices);
-    const isCross = fresh.name === 'Eclipse Cross';
-    const isFlyingV = fresh.name === 'Flying V';
-    const isBattleLine = fresh.name === 'Battle Line';
-    const isCosmicDiamond = fresh.name === 'Cosmic Diamond';
-    const isMedicSanctuary = fresh.name === 'Medic Sanctuary';
-    const battleLineAtkBonus = isBattleLine ? Math.max(0, fresh.indices.length - 3) : 0;
-    const battleLineDefBonus = isBattleLine ? 1 : 0;
-    const flyingVAtkBonus = isFlyingV ? (fresh.indices.length >= 5 ? 2 : 1) : 0;
-    const diamondSpcBonus = isCosmicDiamond ? 1 : 0;
-    const medicDefBonus = isMedicSanctuary ? 1 : 0;
-
-    setGrid(
-      nextGrid.map((slot, index) => {
-        if (!slot || !indexSet.has(index)) return slot;
-        const nextModifiers = {
-          atk: Number(slot.statModifiers?.atk || 0),
-          def: Number(slot.statModifiers?.def || 0),
-          spd: Number(slot.statModifiers?.spd || 0),
-          spc: Number(slot.statModifiers?.spc || 0),
-        };
-        if (battleLineDefBonus > 0 && isBattleLine) nextModifiers.def += battleLineDefBonus;
-        if (battleLineAtkBonus > 0) nextModifiers.atk += battleLineAtkBonus;
-        if (flyingVAtkBonus > 0 && isFlyingV) nextModifiers.atk += flyingVAtkBonus;
-        if (diamondSpcBonus > 0 && isCosmicDiamond) nextModifiers.spc += diamondSpcBonus;
-        if (medicDefBonus > 0 && isMedicSanctuary) nextModifiers.def += medicDefBonus;
-        return {
-          ...slot,
-          fatigue: slot.fatigue + 1,
-          currentHp: isCross ? Math.min(slot.maxHp, slot.currentHp + 3) : slot.currentHp + 1,
-          maxHp: slot.maxHp + 1,
-          statModifiers: nextModifiers,
-        };
-      }),
-    );
-
-    if (earnsVp) {
-      setScore((current) => ({ ...current, [owner]: current[owner] + 1 }));
-    }
-
-    if (earnsVp && nextScore >= victoryTarget) {
-      setWinner(owner);
-      addLog(`${displayPlayers[owner].short} formed ${fresh.name} for +1 VP and wins the match. Formation ducks gain +1 HP and +1 Fatigue${isCross ? ' and Cross heals 3 HP.' : '.'}`);
-      return;
-    }
-
-    addLog(
-      `${displayPlayers[owner].short} formed ${fresh.name}${earnsVp ? ' for +1 VP' : ' with no VP because the formation cap is reached'}. Formation ducks gain +1 HP and +1 Fatigue${isCross ? ' and Cross heals 3 HP' : ''}.`,
-    );
-  };
-
-  const loadQuickStart = (owner: PlayerId, cardIds: number[]) => {
-    const cardsToLoad = cardIds
-      .map((cardId) => quackverseDucks.find((card) => card.id === cardId))
-      .filter(Boolean) as QuackverseCard[];
-    const battleDeck = buildBattlePile(owner, [...cardIds, ...starterBattleDecks[owner].filter((id) => !cardIds.includes(id))]);
-
-    forceNextSharedWriteRef.current = true;
-    pushUndoSnapshot();
-    setSquads((current) => ({ ...current, [owner]: cardsToLoad }));
-    setGrid((current) => current.map((slot) => (slot?.owner === owner ? null : slot)));
-    setSelectedSquadCard({ owner, cardId: cardsToLoad[0].id });
-    setSelectedBattleCard(battleDeck.hand[0] ? { owner, instanceId: battleDeck.hand[0].instanceId } : null);
-    setBattlePiles((current) => ({ ...current, [owner]: battleDeck }));
-    setActivePlayer(owner);
-    setWinner(null);
-    setFormationVp({ playerOne: 0, playerTwo: 0 });
-    setScoredFormationKeys([]);
-    setTurnActions(emptyTurnActionState());
-    setMatchLog((current) => [`Loaded ${squadsLabel(cardsToLoad)} for ${displayPlayers[owner].label}.`, ...current].slice(0, 12));
-  };
 
   const loadMockGame = () => {
     void sendQuackverseAction({ type: 'loadMockGame' });
@@ -2090,10 +1867,10 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     }
   };
 
-  const runNpcTurn = (playerId: PlayerId = activePlayer) => {
+  const runNpcTurn = useCallback((playerId: PlayerId = activePlayer) => {
     if (!npcPlayersRef.current[playerId] || activePlayer !== playerId || winner) return;
     void sendQuackverseAction({ type: 'pass' });
-  };
+  }, [activePlayer, sendQuackverseAction, winner]);
 
   const handleUseAbility = (ability = selectedPiece?.card.abilities[0]) => {
     if (selectedBoardIndex === null || !canActWithSelected || !selectedPiece || !ability) return;
@@ -2119,26 +1896,6 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
 
     void sendQuackverseAction({ type: 'attachGear', targetIndex, instanceId: selectedBattleCardData.instanceId });
   };
-
-  const toggleNpcPlayer = (playerId: PlayerId) => {
-    setNpcPlayers((current) => ({ ...current, [playerId]: !current[playerId] }));
-    void sendQuackverseAction({ type: 'toggleNpc', playerId });
-  };
-
-  const npcControlButtons = (
-    <div className="grid grid-cols-2 gap-2">
-      {(Object.keys(displayPlayers) as PlayerId[]).map((playerId) => (
-        <button
-          key={playerId}
-          type="button"
-          className="rounded-md bg-white/[0.05] p-2 text-left hover:bg-white/[0.08]"
-          onClick={() => toggleNpcPlayer(playerId)}
-        >
-          NPC {displayPlayers[playerId].short}: {npcPlayers[playerId] ? 'On' : 'Off'}
-        </button>
-      ))}
-    </div>
-  );
 
   const seatControlPanel = (
     <div className="rounded-lg border border-white/10 bg-black/20 p-4">
@@ -2399,7 +2156,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     }, 900);
 
     return () => clearTimeout(timeout);
-  }, [activePlayer, npcPlayers, turnNumber, winner]);
+  }, [activePlayer, npcPlayers, runNpcTurn, turnNumber, winner]);
 
   if (!isCommandLayout) {
     return (
@@ -2468,7 +2225,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                   <div key={playerId} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-slate-900">
                       {display.avatarUrl ? (
-                        <img src={display.avatarUrl} alt="" className="h-full w-full object-cover" />
+                        <Image src={display.avatarUrl} alt="" width={48} height={48} unoptimized className="h-full w-full object-cover" />
                       ) : (
                         <span className="text-sm font-semibold text-slate-300">{display.short}</span>
                       )}
@@ -3198,7 +2955,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                       return (
                         <div key={playerId} className="flex items-center gap-2 rounded-md bg-white/[0.05] p-2">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-slate-900">
-                            {display.avatarUrl ? <img src={display.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-xs text-slate-300">{display.short}</span>}
+                            {display.avatarUrl ? <Image src={display.avatarUrl} alt="" width={36} height={36} unoptimized className="h-full w-full object-cover" /> : <span className="text-xs text-slate-300">{display.short}</span>}
                           </div>
                           <div className="h-8 min-w-0 flex-1 truncate rounded-md border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-white">
                             {display.profile?.twitchUsername || display.label}
@@ -3324,7 +3081,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
             <div key={playerId} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-slate-900">
                 {display.avatarUrl ? (
-                  <img src={display.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  <Image src={display.avatarUrl} alt="" width={48} height={48} unoptimized className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-sm font-semibold text-slate-300">{display.short}</span>
                 )}
