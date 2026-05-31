@@ -286,7 +286,36 @@ function statLabel(label: string) {
 
 export default function QuackverseGuidePage() {
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-white">
+    <main className="cosmic-page text-white">
+      <section className="cosmic-hero">
+        <div className="cosmic-card space-y-4">
+          <div className="cosmic-status">Production Layout</div>
+          <h1 className="cosmic-title">Quackverse Guide</h1>
+          <p className="cosmic-subtitle">
+            The schema, family map, and production notes now live inside the same shell as the rest of Chat Tag. The data below is still the real set structure and card taxonomy.
+          </p>
+          <div className="cosmic-note">
+            This route stays focused on deck structure, trunks, subclasses, and card families. Only the presentation layer changed.
+          </div>
+        </div>
+        <div className="cosmic-panel">
+          <h2 className="mb-4 font-headline text-2xl text-white">Guide Snapshot</h2>
+          <div className="mock-window">
+            <div className="mock-head">
+              <span className="mock-dot mock-dot-red" />
+              <span className="mock-dot mock-dot-amber" />
+              <span className="mock-dot mock-dot-green" />
+            </div>
+            <div className="mock-body">
+              <div className="mock-row"><span>App</span><span>Chat-Tag</span></div>
+              <div className="mock-row"><span>Page</span><span>quackverse-guide</span></div>
+              <div className="mock-row"><span>Ducks</span><span>{duckCards.length}</span></div>
+              <div className="mock-row"><span>Families</span><span>{familyMeta.length}</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="mx-auto max-w-7xl space-y-6">
         <section className="rounded-xl border border-white/10 bg-black/30 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

@@ -100,7 +100,36 @@ export default function QuackversePreviewPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 text-white">
+    <main className="cosmic-page text-white">
+      <section className="cosmic-hero">
+        <div className="cosmic-card space-y-4">
+          <div className="cosmic-status">Production Layout</div>
+          <h1 className="cosmic-title">Quackverse Preview</h1>
+          <p className="cosmic-subtitle">
+            The preview sandbox now matches the suite shell while keeping the current hover-GIF behavior, board drag interactions, and public card demo flow intact.
+          </p>
+          <div className="cosmic-note">
+            This remains the public sample board for card art behavior. It still uses the live Quackverse card data and family mapping.
+          </div>
+        </div>
+        <div className="cosmic-panel">
+          <h2 className="mb-4 font-headline text-2xl text-white">Preview Snapshot</h2>
+          <div className="mock-window">
+            <div className="mock-head">
+              <span className="mock-dot mock-dot-red" />
+              <span className="mock-dot mock-dot-amber" />
+              <span className="mock-dot mock-dot-green" />
+            </div>
+            <div className="mock-body">
+              <div className="mock-row"><span>App</span><span>Chat-Tag</span></div>
+              <div className="mock-row"><span>Page</span><span>quackverse-preview</span></div>
+              <div className="mock-row"><span>Card</span><span>#{card.id}</span></div>
+              <div className="mock-row"><span>Mode</span><span>{artVisible || dragging ? 'Animated preview' : 'Static preview'}</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/30 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
