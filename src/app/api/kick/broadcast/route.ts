@@ -5,6 +5,30 @@ import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 export const dynamic = 'force-dynamic';
 
 const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || 'https://streamweaver-new.fly.dev';
+const RETRYABLE_STREAMWEAVER_STATUSES = new Set([502, 503, 504, 522, 524]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function postWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const response = await fetch(url, init);
+    lastResponse = response;
+    if (response.ok) return response;
+
+    await response.text().catch(() => '');
+    if (!RETRYABLE_STREAMWEAVER_STATUSES.has(response.status) || attempt === attempts) {
+      return response;
+    }
+
+    await sleep(250 * attempt);
+  }
+
+  return lastResponse ?? new Response('', { status: 503 });
+}
 
 /**
  * POST /api/kick/broadcast
@@ -14,7 +38,24 @@ const STREAMWEAVER_API = process.env.STREAMWEAVER_API_BASE || 'https://streamwea
 export async function POST(req: NextRequest) {
   const STREAMWEAVER_SECRET = getStreamweaverSecret();
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    let body: any = {};
+    if (rawBody.trim()) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch (jsonError) {
+        const cleaned = rawBody.replace(/[\u0000-\u001F\u007F]/g, '');
+        try {
+          body = JSON.parse(cleaned);
+        } catch (parseError) {
+          console.warn('[Kick Broadcast] Invalid JSON payload from caller:', {
+            preview: rawBody.slice(0, 500),
+            error: parseError instanceof Error ? parseError.message : String(parseError),
+          });
+          return NextResponse.json({ error: 'invalid JSON payload' }, { status: 400 });
+        }
+      }
+    }
     const { message, channel, secret } = body;
 
     if (secret !== STREAMWEAVER_SECRET) {
@@ -55,7 +96,7 @@ export async function POST(req: NextRequest) {
     // Forward to Streamweaver's Kick send endpoint. Kick delivery is best-effort so
     // Streamweaver outages do not make the chat-tag broadcast look like a Discord failure.
     try {
-      const res = await fetch(`${STREAMWEAVER_API}/api/kick/chat-tag-broadcast`, {
+      const res = await postWithRetry(`${STREAMWEAVER_API}/api/kick/chat-tag-broadcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, channels, secret: STREAMWEAVER_SECRET }),

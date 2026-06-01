@@ -167,7 +167,24 @@ async function announceTagEvent(req: NextRequest, body: any) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    let body: any = {};
+    if (rawBody.trim()) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        const cleaned = rawBody.replace(/[\u0000-\u001F\u007F]/g, '');
+        try {
+          body = JSON.parse(cleaned);
+        } catch (parseError) {
+          console.warn('[Discord Chat] Invalid JSON payload', {
+            preview: rawBody.slice(0, 500),
+            error: parseError instanceof Error ? parseError.message : String(parseError),
+          });
+          return NextResponse.json({ error: 'invalid JSON payload' }, { status: 400 });
+        }
+      }
+    }
     if (debugEnabled('discord-chat') || debugEnabled('discord')) {
       console.log('[Discord Chat] Raw payload keys', {
         keys: Object.keys(body || {}),
