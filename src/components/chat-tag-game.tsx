@@ -23,7 +23,7 @@ import {
 import { useState, useEffect, useCallback } from 'react';
 import { useLiveStreamers } from '@/contexts/live-streamers-context';
 import { useSession } from '@/contexts/session-context';
-import { isAdminUsername } from '@/lib/admin';
+import { isClientAdminUsername } from '@/lib/client-admin';
 import { getAuthHeaders } from '@/lib/client-auth';
 import type { Player as FirestorePlayer } from '@/lib/types';
 
@@ -51,7 +51,7 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
   const { liveStreamers } = useLiveStreamers();
   const { user } = useSession();
   const sessionUsername = user?.twitchUsername || '';
-  const isAdmin = isAdminUsername(sessionUsername);
+  const isAdmin = isClientAdminUsername(sessionUsername);
   const showAdminControls = isAdmin && adminMode;
   const [gameState, setGameState] = useState({
     currentIt: null as string | null,

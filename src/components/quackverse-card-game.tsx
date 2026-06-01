@@ -27,7 +27,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
-import { isAdminUsername } from '@/lib/admin';
+import { isClientAdminUsername } from '@/lib/client-admin';
 import { getAuthHeaders } from '@/lib/client-auth';
 import {
   quackverseCards,
@@ -859,7 +859,7 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
 export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'command' } = {}) {
   const isCommandLayout = layout === 'command';
   const { user } = useSession();
-  const isAdmin = isAdminUsername(user?.twitchUsername);
+  const isAdmin = isClientAdminUsername(user?.twitchUsername);
   const [artManifest, setArtManifest] = useState<QuackverseArtManifest>({});
   const hasLoadedSharedState = useRef(false);
   const hasLoadedCollectionLab = useRef(false);

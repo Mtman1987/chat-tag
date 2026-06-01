@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, Trash2, Image as ImageIcon, Trash, Download } from "lucide-react";
 import { useSession } from "@/contexts/session-context";
-import { isAdminUsername } from "@/lib/admin";
+import { isClientAdminUsername } from "@/lib/client-admin";
 import { getAuthHeaders } from "@/lib/client-auth";
 
 const SettingsSchema = z.object({
@@ -30,7 +30,7 @@ type SettingsForm = z.infer<typeof SettingsSchema>;
 
 export default function SettingsPage() {
   const { user, isUserLoading } = useSession();
-  const isAdmin = isAdminUsername(user?.twitchUsername);
+  const isAdmin = isClientAdminUsername(user?.twitchUsername);
   const [isLoading, setIsLoading] = useState(true);
   const [isClearingAway, setIsClearingAway] = useState(false);
   const [isFixingPlayers, setIsFixingPlayers] = useState(false);

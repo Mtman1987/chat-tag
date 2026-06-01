@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import type { Player } from '@/lib/types';
-import { isAdminUsername } from '@/lib/admin';
+import { isClientAdminUsername } from '@/lib/client-admin';
 import { useSession } from '@/contexts/session-context';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ModActivityLog } from '@/components/mod-activity-log';
@@ -16,7 +16,7 @@ import { Card } from '@/components/ui/card';
 
 export function MainDashboard() {
   const { user, isUserLoading } = useSession();
-  const isAdmin = isAdminUsername(user?.twitchUsername);
+  const isAdmin = isClientAdminUsername(user?.twitchUsername);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(true);
 
