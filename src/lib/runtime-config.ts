@@ -86,6 +86,12 @@ export function getRuntimePublicValueWithDevFallback(
   const configured = getRuntimePublicValue(key);
   if (configured) return configured;
 
+  for (const envName of devEnvNames) {
+    if (!envName.startsWith('NEXT_PUBLIC_')) continue;
+    const value = String(process.env[envName] || '').trim();
+    if (value) return value;
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     for (const envName of devEnvNames) {
       const value = String(process.env[envName] || '').trim();
