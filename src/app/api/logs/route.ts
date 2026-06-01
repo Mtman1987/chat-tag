@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
+import { getRuntimePublicUrl } from '@/lib/runtime-config';
 import { readAppState } from '@/lib/volume-store';
 
-const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot-new.fly.dev';
+const BOT_URL = getRuntimePublicUrl('botUrl', 'https://chat-tag-bot-new.fly.dev');
 
 export async function GET(req: NextRequest) {
   const auth = requireAdminRequest(req);

@@ -110,6 +110,11 @@ TWITCH_BOT_TOKEN=
 DISCORD_WEBHOOK_URL=
 ```
 
+### Public URL
+- The public app origin is not an env var anymore.
+- It is stored in `data/runtime-config.json` on the shared volume as `publicUrls.appOrigin`.
+- You can set it with `POST /api/runtime-config` after deploy.
+
 ## Getting Credentials
 
 ### Firebase
@@ -149,9 +154,9 @@ http://localhost:9002
 1. Deploy app to Firebase
 2. Deploy bot to Railway/Render
 3. Test commands in Twitch chat:
-   - `@spmt join`
-   - `@spmt status`
-   - `@spmt help`
+   - `spmt join`
+   - `spmt status`
+   - `spmt help`
 
 ## Monitoring
 

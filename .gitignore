@@ -65,3 +65,4 @@ pnpm-debug.log*
 
 # Volume-backed runtime state
 data/app-state.json
+data/runtime-config.json

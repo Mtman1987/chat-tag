@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { getAuthHeaders } from '@/lib/client-auth';
 import { quackverseCards, type QuackverseCard } from '@/lib/quackverse-data';
 
 type QuackverseArtAsset = {
@@ -126,6 +127,7 @@ export function QuackverseArtManager() {
         formData.set('file', file);
         const response = await fetch('/api/quackverse/art', {
           method: 'POST',
+          headers: getAuthHeaders(),
           body: formData,
         });
         const data = await response.json().catch(() => null);
@@ -229,7 +231,7 @@ export function QuackverseArtManager() {
                 <div className="text-sm font-semibold text-white">Hover GIF</div>
                 <input
                   type="file"
-                  accept="image/gif,image/*"
+                  accept="image/gif,video/mp4,video/webm,image/*"
                   disabled={loading}
                   onChange={(event) => {
                     const file = event.target.files?.[0] || null;

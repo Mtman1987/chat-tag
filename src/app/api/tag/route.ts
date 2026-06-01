@@ -18,8 +18,45 @@ interface TagPlayer {
   [key: string]: any;
 }
 
+const TAG_IMMUNITY_MS = 20 * 60 * 1000;
+
 function normalizeUsername(value: string | undefined | null): string {
   return String(value || '').trim().toLowerCase().replace(/^@+/, '');
+}
+
+function playerNames(player: TagPlayer | undefined): Set<string> {
+  const names = new Set<string>();
+  if (!player) return names;
+  for (const value of [player.id, player.twitchUsername, player.username, player.displayName, player.discordUsername, player.kickUsername]) {
+    const normalized = normalizeUsername(value);
+    if (normalized) names.add(normalized);
+  }
+  return names;
+}
+
+function samePlayerReference(state: any, reference: string | undefined, player: TagPlayer | undefined): boolean {
+  const normalizedReference = normalizeUsername(reference);
+  if (!normalizedReference || !player) return false;
+  if (playerNames(player).has(normalizedReference)) return true;
+
+  const referencedPlayer = state.tagPlayers?.[reference || ''] as TagPlayer | undefined;
+  if (!referencedPlayer) return false;
+  const candidateNames = playerNames(player);
+  for (const name of playerNames(referencedPlayer)) {
+    if (candidateNames.has(name)) return true;
+  }
+  return false;
+}
+
+function recentSuccessfulTagByPlayer(state: any, player: TagPlayer | undefined): any | null {
+  const now = Date.now();
+  const history = [...(state.tagHistory || [])].reverse();
+  return history.find((entry: any) => {
+    if (!entry || entry.blocked) return false;
+    const timestamp = toMillis(entry.timestamp);
+    if (typeof timestamp !== 'number' || now - timestamp >= TAG_IMMUNITY_MS) return false;
+    return samePlayerReference(state, entry.taggerId || entry.from, player);
+  }) || null;
 }
 
 function replacePlayerReferences(state: any, oldId: string, newId: string): void {
@@ -82,12 +119,13 @@ function migrateManualPlayer(state: any, realUserId: string, username: string): 
   return realUserId;
 }
 
-function isPlayerImmune(player: TagPlayer | undefined, taggerId: string): { immune: boolean; reason?: string } {
+function isPlayerImmune(state: any, player: TagPlayer | undefined, taggerId: string): { immune: boolean; reason?: string } {
   if (!player) return { immune: true, reason: 'player-not-found' };
   if (player.sleepingImmunity) return { immune: true, reason: 'sleeping' };
   if (player.offlineImmunity) return { immune: true, reason: 'offline' };
   if (player.noTagbackFrom === taggerId) return { immune: true, reason: 'no-tagback' };
   if (isTimedImmune(player)) return { immune: true, reason: 'timed' };
+  if (recentSuccessfulTagByPlayer(state, player)) return { immune: true, reason: 'timed' };
   return { immune: false };
 }
 
@@ -254,7 +292,7 @@ export async function POST(req: NextRequest) {
         if (tagger.passCount <= 0) return { status: 400, error: 'You don\'t have a pass! Earn one by gifting a sub, cheering 100+ bits, or joining a hype train.' };
         if (resolvedUserId === targetUserId) return { status: 400, error: 'You can\'t pass to yourself!' };
         
-        const immuneCheck = isPlayerImmune(target, resolvedUserId);
+        const immuneCheck = isPlayerImmune(state, target, resolvedUserId);
         if (immuneCheck.immune) {
           let errorMsg = 'Target is immune';
           if (immuneCheck.reason === 'sleeping') errorMsg = `${target.twitchUsername || 'Target'} is immune (sleeping)`;
@@ -492,7 +530,7 @@ export async function POST(req: NextRequest) {
           return { status: 400, error: `You are not it! ${whoIsIt?.twitchUsername || whoIsIt?.id || 'Unknown'} is it.` };
         }
 
-        const immuneCheck = isPlayerImmune(target, resolvedUserId);
+        const immuneCheck = isPlayerImmune(state, target, resolvedUserId);
         if (immuneCheck.immune) {
           state.tagHistory = state.tagHistory || [];
           state.tagHistory.push({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 import { createSessionToken } from '@/lib/session';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -59,7 +60,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const twitchClientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID || process.env.TWITCH_CLIENT_ID;
+    const twitchClientId = getRuntimePublicValueWithDevFallback('twitchClientId', [
+      'NEXT_PUBLIC_TWITCH_CLIENT_ID',
+      'TWITCH_CLIENT_ID',
+    ]);
     const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET;
     if (!twitchClientId || !twitchClientSecret) {
       throw new Error('Twitch client ID or secret is not configured.');

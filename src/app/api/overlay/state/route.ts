@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
-import { getPublicAppOrigin } from '@/lib/public-origin';
+import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,19 +77,9 @@ export async function GET(req: NextRequest) {
 
   if (trackedChannels.length > 0) {
     try {
-      const baseUrl = getPublicAppOrigin(req);
-      const liveResponse = await fetch(`${baseUrl}/api/twitch/live`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames: trackedChannels }),
-        cache: 'no-store',
-      });
-
-      if (liveResponse.ok) {
-        const liveData = await liveResponse.json();
-        liveCount = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.length : 0;
-        liveUsers = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.slice(0, 12) : [];
-      }
+      const liveData = await fetchTwitchLiveData(trackedChannels);
+      liveCount = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.length : 0;
+      liveUsers = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.slice(0, 12) : [];
     } catch {}
   }
 

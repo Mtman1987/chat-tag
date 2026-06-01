@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
-import { getPublicAppOrigin } from '@/lib/public-origin';
+import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
 
 export async function GET(_request: NextRequest) {
   try {
@@ -13,18 +13,7 @@ export async function GET(_request: NextRequest) {
       if (channels.length === 0) {
         return { liveMembers: [], allMembers: [] };
       }
-
-      const liveResponse = await fetch(`${getPublicAppOrigin(_request)}/api/twitch/live`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames: channels }),
-      });
-
-      if (!liveResponse.ok) {
-        return { status: 500, error: 'Failed to check live status' };
-      }
-
-      const { liveUsers, allUsers } = await liveResponse.json();
+      const { liveUsers, allUsers } = await fetchTwitchLiveData(channels);
 
       const liveMembers = (liveUsers || []).map((user: any, index: number) => ({
         discordId: user.id || `live-${index}`,

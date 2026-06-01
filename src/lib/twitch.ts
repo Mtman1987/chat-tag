@@ -1,10 +1,16 @@
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
+
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const TWITCH_USERS_URL = 'https://api.twitch.tv/helix/users';
 
 let cachedAppToken: { token: string; expiresAt: number } | null = null;
 
 function getClientId(): string {
-  return process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID || process.env.TWITCH_CLIENT_ID || '';
+  return getRuntimePublicValueWithDevFallback('twitchClientId', [
+    'NEXT_PUBLIC_TWITCH_CLIENT_ID',
+    'TWITCH_CLIENT_ID',
+    'TWITCH_OAUTH_CLIENT_ID',
+  ]);
 }
 
 function getClientSecret(): string {

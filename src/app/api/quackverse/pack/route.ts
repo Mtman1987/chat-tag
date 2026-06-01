@@ -4,6 +4,7 @@ import { isAdminUsername } from '@/lib/admin';
 import { getCollectionForUser, normalizeQuackverseUserId, quackverseUserIdFromSession } from '@/lib/quackverse-access';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { openQuackverseBoosterPack } from '@/lib/quackverse-packs';
+import { lookupTwitchUser } from '@/lib/twitch';
 import { makeId, updateAppState, readAppState } from '@/lib/volume-store';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import {
@@ -107,12 +108,26 @@ export async function POST(req: NextRequest) {
   const action = String(body?.action || 'open');
   const { userId, twitchUsername } = resolveRequestUser(req, body);
   if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  const normalizedUsername = String(twitchUsername || '').trim().toLowerCase();
+  const twitchProfile = normalizedUsername ? await lookupTwitchUser(normalizedUsername).catch(() => null) : null;
+  const userRecordId = String(body?.twitchUserId || twitchProfile?.id || userId.replace(/^user_/, '') || '').trim();
 
   const result = await updateAppState((appState) => {
     // Packs/collection are not room-based; keep them on the legacy `quackverse` state.
     const state = normalizeQuackverseState(appState.quackverse as Partial<QuackverseSavedState>);
+    const rootState = appState as any;
 
     const collection = getCollectionForUser(state, userId);
+    if (normalizedUsername && userRecordId) {
+      rootState.users = rootState.users || {};
+      rootState.users[userRecordId] = {
+        ...(rootState.users[userRecordId] || {}),
+        id: userRecordId,
+        twitchUsername: normalizedUsername,
+        avatarUrl: twitchProfile?.profile_image_url || body?.avatarUrl || body?.avatar || rootState.users[userRecordId]?.avatarUrl || '',
+      };
+    }
+
     const today = quackverseDayKey();
     if (collection.openedAtDay !== today) {
       collection.openedAtDay = today;

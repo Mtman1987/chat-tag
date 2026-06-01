@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRuntimePublicUrl } from '@/lib/runtime-config';
 
-const BOT_URL = process.env.BOT_URL || 'https://chat-tag-bot-new.fly.dev';
+const BOT_URL = getRuntimePublicUrl('botUrl', 'https://chat-tag-bot-new.fly.dev');
 
 export async function POST(req: NextRequest) {
   try {

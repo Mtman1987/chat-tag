@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
 
 export async function POST() {
   try {
     const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-    const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
+    const DISCORD_GUILD_ID = getRuntimePublicValueWithDevFallback(
+      'discordGuildId',
+      ['DISCORD_GUILD_ID'],
+      ''
+    );
 
     if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID) {
       return NextResponse.json({ error: 'Discord credentials not configured' }, { status: 500 });

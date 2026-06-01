@@ -17,8 +17,8 @@ for (let i = 0; i < lines.length; i++) {
     lines[i] = "        { name: '📺 Overlay', value: '[Add to OBS](https://tinyurl.com/spmt-overlay)', inline: true },";
     changes++;
   }
-  if (lines[i].includes("Type @spmt help for commands")) {
-    lines[i] = lines[i].replace("Type @spmt help", "Type spmt help");
+  if (lines[i].includes("Type spmt help for commands")) {
+    lines[i] = lines[i].replace("Type spmt help", "Type spmt help");
     changes++;
   }
   if (lines[i].includes("label: 'Sleep / Wake'")) {

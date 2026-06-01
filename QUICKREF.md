@@ -71,10 +71,10 @@ DISCORD_WEBHOOK_URL=
 
 | Command | Description |
 |---------|-------------|
-| `@spmt join` | Join the tag game |
-| `@spmt tag @user` | Tag another player (when you're "it") |
-| `@spmt status` | Check who is currently "it" |
-| `@spmt help` | Show available commands |
+| `spmt join` | Join the tag game |
+| `spmt tag @user` | Tag another player (when you're "it") |
+| `spmt status` | Check who is currently "it" |
+| `spmt help` | Show available commands |
 
 ## File Structure
 

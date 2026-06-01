@@ -90,7 +90,7 @@ export default function SettingsPage() {
 
   const fetchSupportTickets = async () => {
     try {
-      const response = await fetch('/api/bot/state');
+      const response = await fetch('/api/bot/state', { headers: getAuthHeaders() });
       const data = await response.json();
       const tickets = data.supportTickets || {};
       setSupportTickets(Object.values(tickets).filter((t: any) => !t.resolved));
@@ -105,7 +105,7 @@ export default function SettingsPage() {
     try {
       const response = await fetch('/api/discord/resolve-ticket', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ messageId })
       });
       if (!response.ok) throw new Error('Failed to resolve ticket');

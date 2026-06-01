@@ -1,3 +1,5 @@
+import { getRuntimePublicValueWithDevFallback } from './runtime-config';
+
 const DEFAULT_ADMIN_USERNAMES = ['mtman1987', 'lovesnightmare'];
 
 function parseAdminUsernames(source?: string | null): string[] {
@@ -9,7 +11,11 @@ function parseAdminUsernames(source?: string | null): string[] {
 
 export function getAdminUsernames(): string[] {
   const configured = parseAdminUsernames(
-    process.env.ADMIN_USERNAMES || process.env.NEXT_PUBLIC_ADMIN_USERNAMES
+    getRuntimePublicValueWithDevFallback(
+      'adminUsernames',
+      ['ADMIN_USERNAMES', 'NEXT_PUBLIC_ADMIN_USERNAMES'],
+      ''
+    )
   );
   return configured.length > 0 ? configured : DEFAULT_ADMIN_USERNAMES;
 }

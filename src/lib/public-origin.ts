@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { readRuntimeConfig, updateRuntimeConfig } from '@/lib/runtime-config';
 
 function isLocalOrigin(value: string) {
   try {
@@ -10,23 +11,36 @@ function isLocalOrigin(value: string) {
 }
 
 export function getPublicAppOrigin(req?: NextRequest) {
-  const configured = process.env.CHAT_TAG_PUBLIC_URL || process.env.NEXT_PUBLIC_APP_URL;
+  const configured = String(readRuntimeConfig().publicUrls?.appOrigin || '').trim();
   if (configured && !isLocalOrigin(configured)) {
     return configured.replace(/\/$/, '');
   }
 
   const requestOrigin = req?.nextUrl?.origin || req?.headers?.get('origin') || '';
   if (requestOrigin && !isLocalOrigin(requestOrigin)) {
+    if (!configured || isLocalOrigin(configured)) {
+      try {
+        updateRuntimeConfig({
+          publicUrls: {
+            appOrigin: requestOrigin.replace(/\/$/, ''),
+          },
+        });
+      } catch {
+        // Fall back to the request origin even if the volume write fails.
+      }
+    }
     return requestOrigin.replace(/\/$/, '');
   }
 
-  if (configured) {
-    return configured.replace(/\/$/, '');
+  if (process.env.NODE_ENV !== 'production') {
+    if (configured) {
+      return configured.replace(/\/$/, '');
+    }
+    if (requestOrigin) {
+      return requestOrigin.replace(/\/$/, '');
+    }
+    return 'http://localhost:9002';
   }
 
-  if (requestOrigin) {
-    return requestOrigin.replace(/\/$/, '');
-  }
-
-  return 'http://localhost:9002';
+  return '';
 }

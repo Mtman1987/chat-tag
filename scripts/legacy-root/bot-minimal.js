@@ -41,9 +41,9 @@ client.on('message', (channel, tags, message, self) => {
   if (self) return;
   
   const msg = message.toLowerCase().trim();
-  if (!msg.startsWith('@spmt ')) return;
+  if (!/^@?spmt\s+/.test(msg)) return;
   
-  const args = msg.split(/\s+/).slice(1);
+  const args = msg.replace(/^@?spmt\s+/, '').split(/\s+/);
   const command = args[0];
   const user = tags['display-name'] || tags['username'];
   

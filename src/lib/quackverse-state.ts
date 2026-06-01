@@ -10,6 +10,7 @@ export type QuackverseSavedPiece = {
   equipmentIds?: number[];
   fatigued?: boolean;
   fatigue?: number;
+  stunnedTurns?: number;
   statModifiers?: {
     atk?: number;
     def?: number;
@@ -80,9 +81,30 @@ export type QuackverseSavedDeck = {
   updatedAt: string;
 };
 
-export const quackverseDailyPackLimit = 3;
+export const quackverseDailyPackLimit = 4;
 export const quackverseGridSize = 7;
 export const quackverseSquadSize = 5;
+export const quackverseStatCap = 20;
+
+const clampStat = (value: unknown, minimum = 0) => Math.min(quackverseStatCap, Math.max(minimum, Number(value || 0)));
+const normalizePiece = (piece: QuackverseSavedPiece | null): QuackverseSavedPiece | null => {
+  if (!piece) return null;
+  const maxHp = clampStat(piece.maxHp, 1);
+  return {
+    ...piece,
+    currentHp: Math.min(maxHp, clampStat(piece.currentHp, 0)),
+    maxHp,
+    specialCurrent: clampStat(piece.specialCurrent),
+    fatigue: Math.max(0, Number(piece.fatigue ?? (piece.fatigued ? 1 : 0))),
+    stunnedTurns: Math.max(0, Number(piece.stunnedTurns || 0)),
+    statModifiers: {
+      atk: Number(piece.statModifiers?.atk || 0),
+      def: Number(piece.statModifiers?.def || 0),
+      spd: Number(piece.statModifiers?.spd || 0),
+      spc: Number(piece.statModifiers?.spc || 0),
+    },
+  };
+};
 
 export const defaultQuackverseState = (): QuackverseSavedState => ({
   gridSize: quackverseGridSize,
@@ -162,7 +184,7 @@ export function normalizeQuackverseState(value: Partial<QuackverseSavedState> | 
   const fallback = defaultQuackverseState();
   const grid =
     Array.isArray(value?.grid) && value.grid.length === quackverseGridSize * quackverseGridSize
-      ? value.grid
+      ? value.grid.map((piece) => normalizePiece(piece))
       : fallback.grid;
 
   return {

@@ -17,4 +17,4 @@ for (let row = 0; row < 5; row++) {
 const output = rows.join(' ');
 console.log(output);
 console.log('\nFull message:');
-console.log(`@User Bingo Card: ${output} | Use "@spmt claim [0-24]" to mark. X=claimed`);
+console.log(`@User Bingo Card: ${output} | Use "spmt claim [0-24]" to mark. X=claimed`);

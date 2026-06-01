@@ -20,6 +20,7 @@ export type AppState = {
     mutedChannels: { channels: string[] };
     blacklistedChannels: { channels: string[] };
   };
+  discordWebhooks: Record<string, JsonObject>;
   settings: {
     botCommands?: { commands: JsonObject[] };
   };
@@ -31,6 +32,7 @@ export type AppState = {
   };
   discordMessages: {
     lastTagAnnouncement?: JsonObject;
+    history?: JsonObject[];
     chatTagPersistentEmbed?: JsonObject;
   };
   overlayMessages: Record<string, JsonObject[]>;
@@ -67,10 +69,13 @@ const DEFAULT_STATE: AppState = {
     mutedChannels: { channels: [] },
     blacklistedChannels: { channels: [] },
   },
+  discordWebhooks: {},
   settings: {},
   gameSettings: { default: {} },
   pinTags: { pinscorpion6521: { counts: {} } },
-  discordMessages: {},
+  discordMessages: {
+    history: [],
+  },
   overlayMessages: {},
   modLog: [],
   quackverseRooms: {},

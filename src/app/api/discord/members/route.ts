@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
+const DISCORD_GUILD_ID = getRuntimePublicValueWithDevFallback(
+  'discordGuildId',
+  ['DISCORD_GUILD_ID'],
+  ''
+);
 
 export async function GET() {
   if (!DISCORD_BOT_TOKEN) {
