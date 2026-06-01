@@ -3,4 +3,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 COPY bot.js ./
+COPY src/lib/chat-tag-command-text.js ./src/lib/chat-tag-command-text.js
+COPY src/lib/chat-tag-player-lookup.js ./src/lib/chat-tag-player-lookup.js
 CMD ["node", "bot.js"]
