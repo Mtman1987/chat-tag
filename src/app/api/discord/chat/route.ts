@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { appendAdminHistory } from '@/lib/audit';
+import { sendDiscordMessage, type DiscordSendResult } from '@/lib/discord-webhooks';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getPublicAppOrigin } from '@/lib/public-origin';
@@ -11,13 +12,7 @@ import { getBotSecret } from '@/lib/runtime-secrets';
 export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
-const DISCORD_WEBHOOK_URL =
-  process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || '';
 const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
-const CHAT_TAG_AVATAR_URL =
-  process.env.CHAT_TAG_AVATAR_URL ||
-  process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
-  '';
 const CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 
@@ -30,40 +25,6 @@ function debugEnabled(scope: string) {
 
 function getInternalAppOrigin() {
   return process.env.INTERNAL_APP_ORIGIN || `http://127.0.0.1:${process.env.PORT || 3000}`;
-}
-
-function getWebhookMessageUrl(messageId: string) {
-  const url = new URL(DISCORD_WEBHOOK_URL);
-  url.search = '';
-  url.hash = '';
-  return `${url.toString()}/messages/${messageId}`;
-}
-
-async function recordDiscordSendFailure(
-  channelId: string,
-  transport: 'webhook' | 'bot',
-  status: number | string,
-  detail = ''
-) {
-  await updateAppState((state) => {
-    appendAdminHistory(state, {
-      action: 'discord-send-failed',
-      performedBy: 'discord-chat-route',
-      targetUser: channelId || 'unknown-channel',
-      details: `transport=${transport}; status=${status}; detail=${String(detail || '').slice(0, 180)}`,
-    });
-  }).catch((error) => {
-    console.error('[Discord Chat] Failed to record send failure:', error);
-  });
-}
-
-function parseJsonText(text: string) {
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
 }
 
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
@@ -79,69 +40,26 @@ async function deleteDiscordMessage(channelId: string, messageId?: string) {
   }
 }
 
-async function sendDiscordPayload(channelId: string, payload: any) {
-  if (CHAT_TAG_AVATAR_URL && !payload.avatar_url) payload.avatar_url = CHAT_TAG_AVATAR_URL;
+async function cleanupSentDiscordMessage(channelId: string, result: DiscordSendResult | null) {
+  if (!result || !result.ok || !result.messageId) return;
 
-  if (DISCORD_WEBHOOK_URL) {
-    const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
-    webhookUrl.searchParams.set('wait', 'true');
-    try {
-      const webhookRes = await fetch(webhookUrl.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const text = await webhookRes.text().catch(() => '');
-      if (!webhookRes.ok) {
-        console.error(`[Discord Chat] Failed to send webhook reply: ${webhookRes.status} ${text}`);
-        await recordDiscordSendFailure(channelId, 'webhook', webhookRes.status, text);
-      }
-      const sent = parseJsonText(text);
-      if (sent?.id) {
-        setTimeout(() => {
-          fetch(getWebhookMessageUrl(sent.id), { method: 'DELETE' }).catch(() => {});
-        }, CLEANUP_DELAY_MS);
-      }
-      return webhookRes;
-    } catch (error: any) {
-      console.error('[Discord Chat] Failed to send webhook reply:', error);
-      await recordDiscordSendFailure(channelId, 'webhook', 'network', error?.message || String(error));
-      throw error;
+  setTimeout(() => {
+    if (result.via === 'webhook' && result.webhook?.id && result.webhook?.token) {
+      fetch(`https://discord.com/api/v10/webhooks/${result.webhook.id}/${result.webhook.token}/messages/${result.messageId}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+      return;
     }
-  }
 
-  try {
-    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    const text = await res.text().catch(() => '');
-    if (!res.ok) {
-      console.error(`[Discord Chat] Failed to send reply: ${res.status} ${text}`);
-      await recordDiscordSendFailure(channelId, 'bot', res.status, text);
-    }
-    const sent = parseJsonText(text);
-    if (sent?.id) {
-      setTimeout(() => {
-        deleteDiscordMessage(channelId, sent.id).catch(() => {});
-      }, CLEANUP_DELAY_MS);
-    }
-    return res;
-  } catch (error: any) {
-    console.error('[Discord Chat] Failed to send reply:', error);
-    await recordDiscordSendFailure(channelId, 'bot', 'network', error?.message || String(error));
-    throw error;
-  }
+    deleteDiscordMessage(channelId, result.messageId).catch(() => {});
+  }, CLEANUP_DELAY_MS);
 }
 
 async function sendDiscordReply(channelId: string, content: string) {
-  return sendDiscordPayload(channelId, {
+  const result = await sendDiscordMessage({
+    channelId,
+    content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
-    allowed_mentions: { parse: [] },
     embeds: [
       {
         title: 'Chat Tag',
@@ -151,7 +69,14 @@ async function sendDiscordReply(channelId: string, content: string) {
         timestamp: new Date().toISOString(),
       },
     ],
+    allowedMentions: { parse: [] },
+    botToken: DISCORD_BOT_TOKEN,
+    recordHistorySource: 'discord/chat',
   });
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result;
 }
 
 function crownPlayerName(name: string, winners: any[] = []) {
@@ -182,7 +107,6 @@ async function sendDiscordPackReply(
 ) {
   const packCards = Array.isArray(packData.pack) ? packData.pack : [];
   const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
-  const packIds = packCards.map((card: any) => Number(card?.id)).filter((id: number) => Number.isFinite(id) && id > 0).slice(0, 5);
   const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
   const uniqueCards = new Set(collectionIds).size;
   const previewUrl = typeof packData.packImageUrl === 'string' && packData.packImageUrl
@@ -217,11 +141,20 @@ async function sendDiscordPackReply(
   };
   if (previewUrl) embed.image = { url: previewUrl };
 
-  return sendDiscordPayload(channelId, {
+  const result = await sendDiscordMessage({
+    channelId,
+    content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
-    allowed_mentions: { parse: [] },
     embeds: [embed],
+    allowedMentions: { parse: [] },
+    botToken: DISCORD_BOT_TOKEN,
+    recordHistorySource: 'discord/chat-pack',
   });
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  await cleanupSentDiscordMessage(channelId, result);
+  return result;
 }
 
 async function announceTagEvent(req: NextRequest, body: any) {
@@ -330,7 +263,11 @@ export async function POST(req: NextRequest) {
     const displayName = player?.twitchUsername || userName;
 
     // Helper to reply
-    const reply = (text: string) => sendDiscordReply(channelId, text);
+    const reply = async (text: string) => {
+      const result = await sendDiscordReply(channelId, text);
+      await cleanupSentDiscordMessage(channelId, result);
+      return result;
+    };
 
     // Capture away state before any mutations (needed for away toggle)
     const wasAway = player ? (player.sleepingImmunity || player.offlineImmunity) : false;
