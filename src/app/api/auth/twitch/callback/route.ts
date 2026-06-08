@@ -4,6 +4,31 @@ import { createSessionToken } from '@/lib/session';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
+function getConfiguredAppUrl(req: NextRequest) {
+  const candidates = [
+    process.env.CHAT_TAG_PUBLIC_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.PUBLIC_APP_URL,
+    process.env.APP_URL,
+  ];
+
+  for (const value of candidates) {
+    const normalized = String(value || '').trim().replace(/\/$/, '');
+    if (normalized) return normalized;
+  }
+
+  const fallback = getPublicAppOrigin(req);
+  if (fallback) return fallback.replace(/\/$/, '');
+
+  throw new Error('Public app URL is not configured.');
+}
+
+function getTwitchRedirectUri(req: NextRequest) {
+  const explicit = String(process.env.TWITCH_OAUTH_REDIRECT_URI || '').trim();
+  if (explicit) return explicit;
+  return `${getConfiguredAppUrl(req)}/api/auth/twitch/callback`;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const success = searchParams.get('success');
@@ -14,7 +39,7 @@ export async function GET(req: NextRequest) {
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
 
-  const appUrl = getPublicAppOrigin(req);
+  const appUrl = getConfiguredAppUrl(req);
   const callbackUrl = new URL('/auth/callback', appUrl);
 
   if (success === 'true' && bridgedUserId && bridgedUsername) {
@@ -67,9 +92,7 @@ export async function GET(req: NextRequest) {
         'TWITCH_CLIENT_ID',
       ]);
     const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET;
-    const twitchRedirectUri =
-      process.env.TWITCH_OAUTH_REDIRECT_URI ||
-      new URL('/api/auth/twitch/callback', appUrl).toString();
+    const twitchRedirectUri = getTwitchRedirectUri(req);
     if (!twitchClientId || !twitchClientSecret) {
       throw new Error('Twitch client ID or secret is not configured.');
     }

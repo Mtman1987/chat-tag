@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
+
+function getConfiguredAppUrl() {
+  const candidates = [
+    process.env.CHAT_TAG_PUBLIC_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.PUBLIC_APP_URL,
+    process.env.APP_URL,
+  ];
+
+  for (const value of candidates) {
+    const normalized = String(value || '').trim().replace(/\/$/, '');
+    if (normalized) return normalized;
+  }
+
+  throw new Error('Public app URL is not configured.');
+}
+
+function getTwitchRedirectUri() {
+  const explicit = String(process.env.TWITCH_OAUTH_REDIRECT_URI || '').trim();
+  if (explicit) return explicit;
+  return `${getConfiguredAppUrl()}/api/auth/twitch/callback`;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,10 +35,7 @@ export async function GET(req: NextRequest) {
       throw new Error('Twitch Client ID is not configured.');
     }
 
-    const appUrl = getPublicAppOrigin(req);
-    const redirectUri =
-      process.env.TWITCH_OAUTH_REDIRECT_URI ||
-      new URL('/api/auth/twitch/callback', appUrl).toString();
+    const redirectUri = getTwitchRedirectUri();
 
     const authUrl = new URL('https://id.twitch.tv/oauth2/authorize');
     authUrl.searchParams.set('client_id', twitchClientId);
