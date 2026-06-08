@@ -7,7 +7,7 @@ export function getSessionUserFromRequest(req: NextRequest): SessionUser | null 
   const authHeader = req.headers.get('authorization');
   const bearerToken = authHeader?.replace(/^Bearer\s+/i, '').trim();
   const cookieToken = req.cookies.get('session')?.value;
-  const token = bearerToken || cookieToken;
+  const token = cookieToken || bearerToken;
   if (!token) return null;
   return verifySessionToken(token);
 }
