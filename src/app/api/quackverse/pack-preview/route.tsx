@@ -106,7 +106,7 @@ function PackCard({ card }: { card: any }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 12, fontSize: 25, fontWeight: 900, lineHeight: 1.08 }}>
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', fontSize: 25, fontWeight: 900, lineHeight: 1.08 }}>
         {wrapText(card.name, 20, 3).map((line) => <div key={line}>{line}</div>)}
       </div>
       <div style={{ marginTop: 10, fontSize: 17, fontWeight: 700, color: '#bae6fd' }}>{card.role || card.type}</div>

@@ -24,20 +24,52 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [isUserLoading, setIsUserLoading] = useState(true);
 
   useEffect(() => {
-    function loadSession() {
+    let cancelled = false;
+
+    async function loadSession() {
       const username = localStorage.getItem('twitchUsername');
       const avatar = localStorage.getItem('twitchAvatar');
       if (username) {
-        setUser({ twitchUsername: username, avatarUrl: avatar || '' });
-      } else {
-        setUser(null);
+        if (!cancelled) {
+          setUser({ twitchUsername: username, avatarUrl: avatar || '' });
+          setIsUserLoading(false);
+        }
+        return;
       }
-      setIsUserLoading(false);
+
+      try {
+        const response = await fetch('/api/user-profile', { credentials: 'same-origin' });
+        const data = response.ok ? await response.json() : null;
+        const twitch = data?.twitch;
+
+        if (twitch?.name) {
+          localStorage.setItem('twitchUsername', twitch.name);
+          localStorage.setItem('twitchAvatar', twitch.avatar || '');
+          if (!cancelled) {
+            setUser({ twitchUsername: twitch.name, avatarUrl: twitch.avatar || '' });
+          }
+          return;
+        }
+      } catch {
+        // Ignore hydration failures and fall back to signed-out state.
+      }
+
+      if (!cancelled) {
+        setUser(null);
+        setIsUserLoading(false);
+      }
     }
 
-    loadSession();
+    void loadSession().finally(() => {
+      if (!cancelled) {
+        setIsUserLoading(false);
+      }
+    });
     window.addEventListener('storage', loadSession);
-    return () => window.removeEventListener('storage', loadSession);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('storage', loadSession);
+    };
   }, []);
 
   const logout = () => {

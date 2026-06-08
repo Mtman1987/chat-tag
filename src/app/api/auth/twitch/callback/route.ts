@@ -60,11 +60,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const twitchClientId = getRuntimePublicValueWithDevFallback('twitchClientId', [
-      'NEXT_PUBLIC_TWITCH_CLIENT_ID',
-      'TWITCH_CLIENT_ID',
-    ]);
+    const twitchClientId =
+      process.env.TWITCH_OAUTH_CLIENT_ID ||
+      getRuntimePublicValueWithDevFallback('twitchClientId', [
+        'NEXT_PUBLIC_TWITCH_CLIENT_ID',
+        'TWITCH_CLIENT_ID',
+      ]);
     const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET;
+    const twitchRedirectUri =
+      process.env.TWITCH_OAUTH_REDIRECT_URI ||
+      new URL('/api/auth/twitch/callback', appUrl).toString();
     if (!twitchClientId || !twitchClientSecret) {
       throw new Error('Twitch client ID or secret is not configured.');
     }
@@ -77,7 +82,7 @@ export async function GET(req: NextRequest) {
         client_secret: twitchClientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: `${appUrl}/api/auth/twitch/callback`,
+        redirect_uri: twitchRedirectUri,
       }),
     });
 
