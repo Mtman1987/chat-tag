@@ -1,4 +1,4 @@
-import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 type SharedSessionResponse = {
   data?: Array<{

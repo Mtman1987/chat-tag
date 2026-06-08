@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 export async function GET(req: NextRequest) {
   try {
     const twitchClientId =
       process.env.TWITCH_OAUTH_CLIENT_ID ||
-      process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID ||
-      process.env.TWITCH_CLIENT_ID;
+      getRuntimePublicValueWithDevFallback('twitchClientId', [
+        'NEXT_PUBLIC_TWITCH_CLIENT_ID',
+        'TWITCH_CLIENT_ID',
+      ]);
     if (!twitchClientId) {
       throw new Error('Twitch Client ID is not configured.');
     }

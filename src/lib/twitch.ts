@@ -1,4 +1,4 @@
-import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const TWITCH_USERS_URL = 'https://api.twitch.tv/helix/users';

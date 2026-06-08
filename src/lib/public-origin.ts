@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { readRuntimeConfig, updateRuntimeConfig } from '@/lib/runtime-config';
+import { readRuntimeConfig, updateRuntimeConfig } from '@/lib/runtime-config.server';
 
 function isLocalOrigin(value: string) {
   try {

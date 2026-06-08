@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRuntimePublicUrl } from '@/lib/runtime-config';
+import { getRuntimePublicUrl } from '@/lib/runtime-config.server';
 
 const BOT_URL = getRuntimePublicUrl('botUrl', 'https://chat-tag-bot-new.fly.dev');
 

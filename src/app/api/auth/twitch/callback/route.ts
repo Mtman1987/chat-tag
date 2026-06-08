@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 import { createSessionToken } from '@/lib/session';
 import { getPublicAppOrigin } from '@/lib/public-origin';
-import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);

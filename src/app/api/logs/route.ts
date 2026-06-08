@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
-import { getRuntimePublicUrl } from '@/lib/runtime-config';
+import { getRuntimePublicUrl } from '@/lib/runtime-config.server';
 import { readAppState } from '@/lib/volume-store';
 
 const BOT_URL = getRuntimePublicUrl('botUrl', 'https://chat-tag-bot-new.fly.dev');

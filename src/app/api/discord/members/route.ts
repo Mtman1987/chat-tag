@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = getRuntimePublicValueWithDevFallback(

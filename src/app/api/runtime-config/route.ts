@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
-import { readRuntimeConfig, updateRuntimeConfig } from '@/lib/runtime-config';
+import { readRuntimeConfig, updateRuntimeConfig } from '@/lib/runtime-config.server';
 
 export const dynamic = 'force-dynamic';
 

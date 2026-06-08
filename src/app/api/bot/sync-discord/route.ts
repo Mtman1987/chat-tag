@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
-import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config';
+import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 export async function POST() {
   try {

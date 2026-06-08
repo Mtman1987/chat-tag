@@ -1,4 +1,4 @@
-import { getRuntimePublicValueWithDevFallback } from './runtime-config';
+import { getRuntimePublicValueWithDevFallback } from './runtime-config.server';
 
 const DEFAULT_ADMIN_USERNAMES = ['mtman1987', 'lovesnightmare'];
 
