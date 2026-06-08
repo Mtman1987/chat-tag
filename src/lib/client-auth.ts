@@ -4,10 +4,5 @@ export function getSessionToken(): string | null {
 }
 
 export function getAuthHeaders(init?: HeadersInit): Headers {
-  const headers = new Headers(init);
-  const token = getSessionToken();
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  return headers;
+  return new Headers(init);
 }
