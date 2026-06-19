@@ -1,6 +1,7 @@
 'use client';
 
-import { Rocket, Orbit, Settings, Info, LogIn, LogOut } from 'lucide-react';
+import { Orbit, Settings, Info, LogIn, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from './ui/button';
@@ -29,8 +30,8 @@ export function Header() {
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 px-4 py-5 md:px-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent)))] shadow-[0_10px_30px_rgba(34,211,238,0.2)]">
-              <Rocket className="h-5 w-5 text-slate-950" />
+            <div className="relative h-16 w-44 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-[0_10px_30px_rgba(34,211,238,0.2)]">
+              <Image src="/brand/chat-tag-logo.png" alt="Chat Tag" fill priority className="object-contain p-1.5" />
             </div>
             <div>
               <div className="flex items-center gap-2">

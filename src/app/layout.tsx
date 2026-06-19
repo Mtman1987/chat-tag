@@ -19,8 +19,13 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: 'Astro Twitch Clash',
-  description: 'Quackverse Space-Force and Chat Tag for Twitch Streams',
+  title: 'Chat Tag',
+  description: 'Game system and community tools for Twitch streams.',
+  icons: {
+    icon: '/brand/chat-tag-icon-192.png',
+    apple: '/brand/chat-tag-icon-192.png',
+    shortcut: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
