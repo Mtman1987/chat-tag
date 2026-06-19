@@ -21,11 +21,16 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: 'Chat Tag',
   description: 'Game system and community tools for Twitch streams.',
+  manifest: '/manifest.json',
   icons: {
     icon: '/brand/chat-tag-icon-192.png',
     apple: '/brand/chat-tag-icon-192.png',
     shortcut: '/favicon.ico',
   },
+};
+
+export const viewport = {
+  themeColor: '#8ac84a',
 };
 
 export default function RootLayout({

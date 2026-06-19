@@ -1,0 +1,26 @@
+{
+  "name": "Chat Tag",
+  "short_name": "Chat Tag",
+  "description": "Game system and community tools for Twitch streams.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#182019",
+  "theme_color": "#8ac84a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/brand/chat-tag-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/chat-tag-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment", "social"]
+}
