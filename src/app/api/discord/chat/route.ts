@@ -248,6 +248,7 @@ export async function POST(req: NextRequest) {
     const discordUserId = data.userId || data.discordUserId;
     const message = data.message || data.content || '';
     const rawUserName = data.userName || data.displayName || data.username;
+    const mentions = Array.isArray(data.mentions) ? data.mentions : [];
     const channelId = data.channelId || '';
     const messageId = data.messageId || data.userMessageId || '';
     const userName = rawUserName || 'Unknown';
@@ -407,7 +408,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
       // Resolve target
-      const targetPlayer = findTargetPlayer(players, args[1]);
+      const targetPlayer = findTargetPlayer(players, args[1], mentions);
       if (!targetPlayer) {
         await reply(`@${userName} Player "${target}" not found!`);
         return NextResponse.json({ success: true });
@@ -433,7 +434,7 @@ export async function POST(req: NextRequest) {
         await reply(`@${userName} Usage: "spmt pass @username" — Use your pass to tag someone for DOUBLE POINTS!`);
         return NextResponse.json({ success: true });
       }
-      const targetPlayer = findTargetPlayer(players, args[1]);
+      const targetPlayer = findTargetPlayer(players, args[1], mentions);
       if (!targetPlayer) {
         await reply(`@${userName} Player "${target}" not found!`);
         return NextResponse.json({ success: true });
@@ -710,7 +711,7 @@ export async function POST(req: NextRequest) {
         await reply(`@${userName} Usage: "spmt givepass @username"`);
         return NextResponse.json({ success: true });
       }
-      const targetPlayer = findTargetPlayer(players, args[1]);
+      const targetPlayer = findTargetPlayer(players, args[1], mentions);
       if (!targetPlayer) {
         await reply(`@${userName} Player "${target}" not found!`);
         return NextResponse.json({ success: true });

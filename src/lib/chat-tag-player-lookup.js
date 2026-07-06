@@ -6,9 +6,26 @@ function normalizeChatHandle(value) {
     .replace(/[^a-z0-9_]/g, '');
 }
 
+function compactChatHandle(value) {
+  return normalizeChatHandle(value).replace(/_/g, '');
+}
+
 function parseDiscordMention(value) {
   const match = String(value || '').trim().match(/^<@!?(\d+)>$/);
   return match?.[1] || '';
+}
+
+function getMentionLookupNames(mentions, mentionId) {
+  if (!Array.isArray(mentions) || !mentionId) return [];
+  const mention = mentions.find((entry) => String(entry?.id || entry?.userId || '') === String(mentionId));
+  if (!mention) return [];
+  return [
+    mention.username,
+    mention.global_name,
+    mention.globalName,
+    mention.displayName,
+    mention.name,
+  ].filter(Boolean);
 }
 
 function getPlayerDisplayName(player, fallback = '') {
@@ -28,14 +45,30 @@ function getPlayerLookupKeys(player) {
     .filter(Boolean);
 }
 
-function resolvePlayerTarget(players, rawTarget) {
+function findUniqueCompactMatch(list, target) {
+  const compactTarget = compactChatHandle(target);
+  if (!compactTarget) return null;
+  const matches = list.filter((player) =>
+    getPlayerLookupKeys(player).some((key) => key.replace(/_/g, '') === compactTarget)
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function resolvePlayerTarget(players, rawTarget, mentions) {
   const list = Array.isArray(players) ? players : [];
   const mentionId = parseDiscordMention(rawTarget);
   if (mentionId) {
     const player = list.find((candidate) => String(candidate?.discordId || '') === mentionId);
-    return player
-      ? { target: mentionId, player, matchType: 'discord-mention' }
-      : { target: mentionId, error: 'not-found' };
+    if (player) return { target: mentionId, player, matchType: 'discord-mention' };
+
+    for (const name of getMentionLookupNames(mentions, mentionId)) {
+      const resolved = resolvePlayerTarget(list, name);
+      if (resolved.player) {
+        return { target: mentionId, player: resolved.player, matchType: `discord-mention-${resolved.matchType}` };
+      }
+    }
+
+    return { target: mentionId, error: 'not-found' };
   }
 
   const target = normalizeChatHandle(rawTarget);
@@ -43,6 +76,9 @@ function resolvePlayerTarget(players, rawTarget) {
 
   const exact = list.find((player) => getPlayerLookupKeys(player).includes(target));
   if (exact) return { target, player: exact, matchType: 'exact' };
+
+  const compact = findUniqueCompactMatch(list, target);
+  if (compact) return { target, player: compact, matchType: 'compact' };
 
   if (target.length >= 4) {
     const prefixMatches = list.filter((player) =>
@@ -59,8 +95,8 @@ function resolvePlayerTarget(players, rawTarget) {
   return { target, error: 'not-found' };
 }
 
-function findTargetPlayer(players, rawTarget) {
-  return resolvePlayerTarget(players, rawTarget).player;
+function findTargetPlayer(players, rawTarget, mentions) {
+  return resolvePlayerTarget(players, rawTarget, mentions).player;
 }
 
 function findPlayerForDiscordUser(players, discordUserId, userName) {
@@ -75,6 +111,7 @@ function findPlayerForDiscordUser(players, discordUserId, userName) {
 
 module.exports = {
   normalizeChatHandle,
+  compactChatHandle,
   parseDiscordMention,
   getPlayerDisplayName,
   getPlayerLookupKeys,
