@@ -31,6 +31,78 @@ function publicCollection(collection: ReturnType<typeof getCollectionForUser>) {
   };
 }
 
+const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
+
+function absoluteUrl(origin: string, value: string) {
+  try {
+    return new URL(value, origin).toString();
+  } catch {
+    return value;
+  }
+}
+
+function resolvePublicOrigin(req: NextRequest, body?: any) {
+  const fromBody = String(body?.publicOrigin || '').trim();
+  if (fromBody) {
+    try {
+      const url = new URL(fromBody);
+      if (url.protocol === 'https:' || url.protocol === 'http:') {
+        return url.toString().replace(/\/$/, '');
+      }
+    } catch {
+      // Ignore malformed caller hints and use the normal public-origin resolver.
+    }
+  }
+  return getPublicAppOrigin(req);
+}
+
+function quackverseOverlayCard(card: any, origin: string) {
+  const artUrl = card?.artUrl || card?.artHoverUrl || '';
+  return {
+    id: `qv-${card.id}`,
+    number: String(card.id),
+    name: card.name,
+    rarity: card.rarity || 'Unknown',
+    setCode: 'QV',
+    imageUrl: artUrl ? absoluteUrl(origin, artUrl) : `${origin}/api/quackverse/pack/image?packId=__PACK_ID__`,
+  };
+}
+
+async function notifyStreamWeaverPackOverlay(input: {
+  origin: string;
+  username: string;
+  packId: string;
+  pack: any[];
+}) {
+  const secret = String(process.env.BOT_SECRET_KEY || process.env.CHAT_TAG_BOT_SECRET || '').trim();
+  if (!secret || !STREAMWEAVER_URL || !input.origin) return;
+
+  const packImageUrl = `${input.origin}/api/quackverse/pack/image?packId=${encodeURIComponent(input.packId)}&t=${Date.now()}`;
+  const pack = input.pack.map((card) => {
+    const normalized = quackverseOverlayCard(card, input.origin);
+    return {
+      ...normalized,
+      imageUrl: normalized.imageUrl.includes('__PACK_ID__')
+        ? normalized.imageUrl.replace('__PACK_ID__', encodeURIComponent(input.packId))
+        : normalized.imageUrl,
+    };
+  });
+
+  await fetch(`${STREAMWEAVER_URL}/api/quackverse/pack-overlay`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify({
+      username: input.username,
+      setName: 'Quackverse',
+      pack,
+      packImageUrl,
+    }),
+  }).catch((error) => console.warn('[Quackverse] StreamWeaver overlay notify failed:', error));
+}
+
 function summarizePackAudit(events: any[]) {
   const rarityCounts: Record<string, number> = {};
   const cardCounts: Record<string, number> = {};
@@ -79,6 +151,24 @@ function resolveRequestUser(req: NextRequest, body?: any) {
 }
 
 export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get('recent') === '1') {
+    const limit = Math.max(1, Math.min(12, Number(req.nextUrl.searchParams.get('limit') || 5) || 5));
+    const origin = getPublicAppOrigin(req);
+    const appState = await readAppState();
+    const events = Array.isArray(appState.quackversePackOpens) ? appState.quackversePackOpens : [];
+    return NextResponse.json({
+      events: events.slice(0, limit).map((event: any) => ({
+        id: String(event?.id || ''),
+        at: String(event?.at || ''),
+        twitchUsername: String(event?.twitchUsername || ''),
+        packNumberToday: Number(event?.packNumberToday || 0),
+        packsRemaining: Number(event?.packsRemaining || 0),
+        cards: Array.isArray(event?.cards) ? event.cards.slice(0, 5) : [],
+        packImageUrl: origin && event?.id ? `${origin}/api/quackverse/pack/image?packId=${encodeURIComponent(String(event.id))}` : '',
+      })).filter((event: any) => event.id),
+    });
+  }
+
   if (req.nextUrl.searchParams.get('audit') === '1') {
     const sessionUser = getSessionUserFromRequest(req);
     if (!isAdminUsername(sessionUser?.twitchUsername)) {
@@ -105,6 +195,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
+  const publicOrigin = resolvePublicOrigin(req, body);
   const action = String(body?.action || 'open');
   const { userId, twitchUsername } = resolveRequestUser(req, body);
   if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
@@ -235,12 +326,20 @@ export async function POST(req: NextRequest) {
     ...publicCollection((result as any).collection),
     pack: Array.isArray((result as any).pack) ? (result as any).pack : undefined,
     packId: typeof (result as any).packId === 'string' ? (result as any).packId : undefined,
-    packImageUrl: typeof (result as any).packId === 'string'
-      ? `${getPublicAppOrigin(req)}/api/quackverse/pack/image?packId=${encodeURIComponent((result as any).packId)}`
+    packImageUrl: publicOrigin && typeof (result as any).packId === 'string'
+      ? `${publicOrigin}/api/quackverse/pack/image?packId=${encodeURIComponent((result as any).packId)}`
       : undefined,
   };
   if ((result as any).error) {
     return NextResponse.json({ ...payload, error: (result as any).error }, { status: (result as any).status || 400 });
+  }
+  if (payload.packId && Array.isArray(payload.pack)) {
+    notifyStreamWeaverPackOverlay({
+      origin: publicOrigin,
+      username: normalizedUsername || userRecordId || userId,
+      packId: payload.packId,
+      pack: payload.pack,
+    }).catch(() => {});
   }
   return NextResponse.json(payload);
 }

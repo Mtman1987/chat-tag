@@ -7,6 +7,7 @@ import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getPlayerHelpText, getRulesText, getModHelpText } from '@/lib/chat-tag-command-text';
 import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser } from '@/lib/chat-tag-player-lookup';
 import { getBotSecret } from '@/lib/runtime-secrets';
+import { parseDiscordChatPayload } from '@/lib/discord-chat-payload';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,23 @@ function debugEnabled(scope: string) {
 
 function getInternalAppOrigin() {
   return process.env.INTERNAL_APP_ORIGIN || `http://127.0.0.1:${process.env.PORT || 3000}`;
+}
+
+function absolutePublicUrl(req: NextRequest, value: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : '';
+  } catch {
+    const origin = getPublicAppOrigin(req);
+    if (!origin) return '';
+    try {
+      return new URL(raw, origin).toString();
+    } catch {
+      return '';
+    }
+  }
 }
 
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
@@ -108,11 +126,14 @@ async function sendDiscordPackReply(
   const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
   const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
   const uniqueCards = new Set(collectionIds).size;
-  const previewUrl = typeof packData.packImageUrl === 'string' && packData.packImageUrl
-    ? packData.packImageUrl
-    : typeof packData.packId === 'string' && packData.packId
-      ? `${getPublicAppOrigin(req)}/api/quackverse/pack/image?packId=${encodeURIComponent(packData.packId)}&t=${Date.now()}`
-      : '';
+  const previewUrl = absolutePublicUrl(
+    req,
+    typeof packData.packImageUrl === 'string' && packData.packImageUrl
+      ? packData.packImageUrl
+      : typeof packData.packId === 'string' && packData.packId
+        ? `/api/quackverse/pack/image?packId=${encodeURIComponent(packData.packId)}&t=${Date.now()}`
+        : '',
+  );
 
   const embed: any = {
     title: 'Quackverse Pack Opened',
@@ -162,70 +183,6 @@ async function announceTagEvent(req: NextRequest, body: any) {
     headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
     body: JSON.stringify(body),
   }).catch((error) => console.error('[Discord Chat] Announce failed:', error));
-}
-
-function extractJsonStringField(source: string, key: string, nextKeys: string[] = []) {
-  const simple = source.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`, 's'))?.[1];
-  if (simple !== undefined) return simple;
-
-  const marker = `"${key}"`;
-  const keyIndex = source.indexOf(marker);
-  if (keyIndex < 0) return '';
-  const colonIndex = source.indexOf(':', keyIndex + marker.length);
-  if (colonIndex < 0) return '';
-  const firstQuoteIndex = source.indexOf('"', colonIndex + 1);
-  if (firstQuoteIndex < 0) return '';
-
-  let endIndex = -1;
-  for (const nextKey of nextKeys) {
-    const nextMarker = new RegExp(`"\\s*,\\s*"${nextKey}"\\s*:`, 's');
-    const match = nextMarker.exec(source.slice(firstQuoteIndex + 1));
-    if (match?.index !== undefined) {
-      const candidate = firstQuoteIndex + 1 + match.index;
-      if (endIndex < 0 || candidate < endIndex) endIndex = candidate;
-    }
-  }
-
-  if (endIndex < 0) return '';
-  return source.slice(firstQuoteIndex + 1, endIndex);
-}
-
-function parseDiscordChatPayload(rawBody: string) {
-  const raw = rawBody.trim();
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const cleaned = raw.replace(/[\u0000-\u001F\u007F]/g, '');
-    try {
-      return JSON.parse(cleaned);
-    } catch (parseError) {
-      const salvaged = {
-        userId: extractJsonStringField(raw, 'userId', ['guildId', 'message', 'dispatch', 'userName', 'channelId', 'messageId', 'userAvatar']),
-        guildId: extractJsonStringField(raw, 'guildId', ['message', 'dispatch', 'userName', 'channelId', 'messageId', 'userAvatar']),
-        message: extractJsonStringField(raw, 'message', ['dispatch', 'userName', 'channelId', 'messageId', 'userAvatar']),
-        userName: extractJsonStringField(raw, 'userName', ['channelId', 'messageId', 'userAvatar']),
-        channelId: extractJsonStringField(raw, 'channelId', ['messageId', 'userAvatar']),
-        messageId: extractJsonStringField(raw, 'messageId', ['userAvatar']),
-        userAvatar: extractJsonStringField(raw, 'userAvatar', []),
-      };
-
-      if (salvaged.message && salvaged.channelId) {
-        console.warn('[Discord Chat] Salvaged malformed JSON payload', {
-          keys: Object.keys(salvaged).filter((key) => Boolean((salvaged as any)[key])),
-          error: parseError instanceof Error ? parseError.message : String(parseError),
-        });
-        return salvaged;
-      }
-
-      console.warn('[Discord Chat] Invalid JSON payload', {
-        preview: raw.slice(0, 500),
-        error: parseError instanceof Error ? parseError.message : String(parseError),
-      });
-      return null;
-    }
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -540,6 +497,7 @@ export async function POST(req: NextRequest) {
           action: 'open',
           userId: gameUserId,
           twitchUsername: player.twitchUsername || player.username || userName,
+          publicOrigin: getPublicAppOrigin(req),
           source: 'discord',
           channelId,
           messageId,

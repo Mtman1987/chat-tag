@@ -88,6 +88,7 @@ export function QuackverseArtManager() {
   const [selectedCardId, setSelectedCardId] = useState<number>(quackverseCards[0]?.id ?? 1);
   const [manifest, setManifest] = useState<Record<string, QuackverseArtEntry>>({});
   const [loading, setLoading] = useState(false);
+  const [generationMessage, setGenerationMessage] = useState('');
 
   const selectedCard = useMemo(
     () => quackverseCards.find((card) => card.id === selectedCardId) || quackverseCards[0],
@@ -140,6 +141,41 @@ export function QuackverseArtManager() {
       }
     },
     [refresh, selectedCard],
+  );
+
+  const generateAsset = useCallback(
+    async (variant: 'static' | 'hover', cardIds: number[]) => {
+      if (!cardIds.length) return;
+      setLoading(true);
+      setGenerationMessage(`Generating ${variant} art for ${cardIds.length} card${cardIds.length === 1 ? '' : 's'}...`);
+      try {
+        const response = await fetch('/api/quackverse/art/generate', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            variant,
+            cardIds,
+            limit: cardIds.length,
+            missingOnly: false,
+          }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.error || `Generation failed (${response.status})`);
+        }
+        const successCount = Array.isArray(data?.results)
+          ? data.results.filter((item: any) => item?.success).length
+          : 0;
+        const failedCount = Math.max(0, Number(data?.count || 0) - successCount);
+        setGenerationMessage(`Generated ${successCount} ${variant} asset${successCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed` : ''}.`);
+        await refresh();
+      } catch (error: any) {
+        setGenerationMessage(error?.message || 'Generation failed');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [refresh],
   );
 
   const selectedEntry = manifest[String(selectedCard.id)] || null;
@@ -211,7 +247,49 @@ export function QuackverseArtManager() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <AssetPreview card={selectedCard} entry={selectedEntry} />
 
-            <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="space-y-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3">
+                <div className="text-sm font-semibold text-white">Generate with StreamWeaver SeaArt</div>
+                <div className="grid gap-2">
+                  <Button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void generateAsset('static', [selectedCard.id])}
+                    className="justify-start"
+                  >
+                    Generate Static Art
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={loading}
+                    onClick={() => void generateAsset('hover', [selectedCard.id])}
+                    className="justify-start"
+                  >
+                    Generate Hover Still
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loading}
+                    onClick={() => {
+                      const missing = quackverseCards
+                        .filter((card) => !manifest[String(card.id)]?.static)
+                        .slice(0, 5)
+                        .map((card) => card.id);
+                      void generateAsset('static', missing);
+                    }}
+                    className="justify-start"
+                  >
+                    Fill Next 5 Missing
+                  </Button>
+                </div>
+                {generationMessage && <div className="text-xs text-cyan-100">{generationMessage}</div>}
+                <div className="text-xs text-slate-400">
+                  Hover stills are saved in the hover slot now; true GIF/video hover generation can be swapped in once StreamWeaver exposes a video generation route.
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-white">Static image</div>
                 <input

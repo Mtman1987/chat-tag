@@ -126,6 +126,46 @@ function buildCardFrameSvg(card: any, index: number, rarity: string) {
   `);
 }
 
+function buildFallbackCardArtSvg(card: any, index: number, rarity: string) {
+  const x = START_X + index * (CARD_WIDTH + CARD_GAP) + 14;
+  const y = START_Y + 14;
+  const accent = rarityColor(card.rarity || rarity);
+  const name = truncate(card.name || `Card ${card.id}`, 24);
+  const type = truncate(card.type || 'Quackverse', 22);
+
+  return Buffer.from(`
+    <svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="cardBg${index}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#020617"/>
+          <stop offset="45%" stop-color="#172554"/>
+          <stop offset="100%" stop-color="#312e81"/>
+        </linearGradient>
+        <radialGradient id="cardGlow${index}" cx="50%" cy="38%" r="58%">
+          <stop offset="0%" stop-color="${accent}" stop-opacity="0.42"/>
+          <stop offset="55%" stop-color="${accent}" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect x="${x}" y="${y}" width="${CARD_WIDTH - 28}" height="${CARD_ART_HEIGHT}" rx="18" fill="url(#cardBg${index})"/>
+      <rect x="${x}" y="${y}" width="${CARD_WIDTH - 28}" height="${CARD_ART_HEIGHT}" rx="18" fill="url(#cardGlow${index})"/>
+      <circle cx="${x + (CARD_WIDTH - 28) / 2}" cy="${y + 112}" r="58" fill="${accent}" fill-opacity="0.18" stroke="${accent}" stroke-opacity="0.55" stroke-width="4"/>
+      <text x="${x + (CARD_WIDTH - 28) / 2}" y="${y + 103}" text-anchor="middle" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="800">
+        DUCK
+      </text>
+      <text x="${x + (CARD_WIDTH - 28) / 2}" y="${y + 142}" text-anchor="middle" fill="#c4b5fd" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">
+        #${escapeXml(String(card.id || '?'))}
+      </text>
+      <text x="${x + (CARD_WIDTH - 28) / 2}" y="${y + 238}" text-anchor="middle" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700">
+        ${escapeXml(name)}
+      </text>
+      <text x="${x + (CARD_WIDTH - 28) / 2}" y="${y + 270}" text-anchor="middle" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="16">
+        ${escapeXml(type)}
+      </text>
+    </svg>
+  `);
+}
+
 export async function GET(req: NextRequest) {
   const packId = String(req.nextUrl.searchParams.get('packId') || '').trim();
   if (!packId) {
@@ -152,7 +192,13 @@ export async function GET(req: NextRequest) {
 
       const artUrl = buildCardArtUrl(cardId, origin, manifest);
       const buffer = await fetchImageBuffer(artUrl);
-      if (!buffer) return null;
+      if (!buffer) {
+        return {
+          input: buildFallbackCardArtSvg(card, index, card.rarity),
+          left: 0,
+          top: 0,
+        };
+      }
 
       const x = START_X + index * (CARD_WIDTH + CARD_GAP) + 14;
       const y = START_Y + 14;

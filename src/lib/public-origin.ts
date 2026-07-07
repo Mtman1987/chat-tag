@@ -11,6 +11,16 @@ function isLocalOrigin(value: string) {
 }
 
 export function getPublicAppOrigin(req?: NextRequest) {
+  const envOrigin = [
+    process.env.CHAT_TAG_PUBLIC_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.PUBLIC_APP_URL,
+    process.env.APP_URL,
+  ].map((value) => String(value || '').trim()).find((value) => value && !isLocalOrigin(value));
+  if (envOrigin) {
+    return envOrigin.replace(/\/$/, '');
+  }
+
   const configured = String(readRuntimeConfig().publicUrls?.appOrigin || '').trim();
   if (configured && !isLocalOrigin(configured)) {
     return configured.replace(/\/$/, '');

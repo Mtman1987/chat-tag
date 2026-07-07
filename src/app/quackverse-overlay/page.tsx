@@ -11,6 +11,15 @@ import {
 import { quackverseRoomIdFromParams, quackverseRoomLabel, quackverseScopeFromParams } from '@/lib/quackverse-rooms';
 import { cn } from '@/lib/utils';
 
+type RecentPackEvent = {
+  id: string;
+  at: string;
+  twitchUsername: string;
+  packsRemaining: number;
+  cards: Array<{ id: number; name: string; rarity?: string }>;
+  packImageUrl: string;
+};
+
 const players = {
   playerOne: { label: 'Player 1', short: 'P1', accent: 'border-cyan-300 bg-cyan-400/15 text-cyan-50' },
   playerTwo: { label: 'Player 2', short: 'P2', accent: 'border-rose-300 bg-rose-400/15 text-rose-50' },
@@ -42,6 +51,7 @@ export default function QuackverseOverlayPage() {
   const [state, setState] = useState<QuackverseSavedState>(defaultQuackverseState);
   const [roomScope, setRoomScope] = useState('');
   const [roomId, setRoomId] = useState('default');
+  const [recentPack, setRecentPack] = useState<RecentPackEvent | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +80,43 @@ export default function QuackverseOverlayPage() {
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let lastSeenPackId = '';
+
+    async function loadRecentPack() {
+      try {
+        const response = await fetch('/api/quackverse/pack?recent=1&limit=1', { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        const event = Array.isArray(data.events) ? data.events[0] as RecentPackEvent | undefined : undefined;
+        if (!event?.id || cancelled) return;
+        if (!lastSeenPackId) {
+          lastSeenPackId = event.id;
+          setRecentPack(event);
+          return;
+        }
+        if (event.id !== lastSeenPackId) {
+          lastSeenPackId = event.id;
+          setRecentPack(event);
+        }
+      } catch {}
+    }
+
+    loadRecentPack();
+    const interval = setInterval(loadRecentPack, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!recentPack) return;
+    const timer = window.setTimeout(() => setRecentPack(null), 15000);
+    return () => window.clearTimeout(timer);
+  }, [recentPack]);
 
   return (
     <main className="h-dvh w-dvw overflow-hidden bg-transparent p-[min(1.5vw,1rem)] text-white">
@@ -204,6 +251,33 @@ export default function QuackverseOverlayPage() {
           </aside>
         </div>
       </div>
+
+      {recentPack && (
+        <aside className="pointer-events-none fixed bottom-[min(3vw,2rem)] left-1/2 w-[min(92vw,54rem)] -translate-x-1/2 overflow-hidden rounded-2xl border border-cyan-200/50 bg-slate-950/90 shadow-[0_0_60px_rgba(34,211,238,0.35)] backdrop-blur-md">
+          <div className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_15rem] sm:items-center">
+            <div className="min-w-0">
+              <div className="text-[0.7rem] uppercase tracking-normal text-cyan-100/80">Quackverse pack opened</div>
+              <div className="truncate font-headline text-[clamp(1rem,2vw,1.65rem)] text-white">
+                @{recentPack.twitchUsername || 'player'}
+              </div>
+              <div className="mt-1 line-clamp-2 text-sm text-slate-200">
+                {recentPack.cards.map((card) => card.name).filter(Boolean).join(' · ') || 'New cards revealed'}
+              </div>
+              <div className="mt-2 text-xs text-slate-400">{recentPack.packsRemaining}/3 packs left today</div>
+            </div>
+            {recentPack.packImageUrl && (
+              <Image
+                src={`${recentPack.packImageUrl}${recentPack.packImageUrl.includes('?') ? '&' : '?'}overlay=1`}
+                alt=""
+                width={480}
+                height={270}
+                unoptimized
+                className="h-auto w-full rounded-xl border border-white/10 object-cover"
+              />
+            )}
+          </div>
+        </aside>
+      )}
     </main>
   );
 }
