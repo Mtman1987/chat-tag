@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { updateAppState } from '@/lib/volume-store';
 import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const result = await updateAppState(async (state) => {
       const blacklisted = new Set(

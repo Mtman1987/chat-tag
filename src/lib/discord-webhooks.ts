@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readAppState, updateAppState, type JsonObject } from '@/lib/volume-store';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 export type DiscordWebhookRecord = {
   id: string;
@@ -33,6 +34,53 @@ function timeoutSignal(milliseconds: number) {
   const controller = new AbortController();
   setTimeout(() => controller.abort(), milliseconds);
   return controller.signal;
+}
+
+function normalizeDiscordUrl(value: unknown): string | undefined {
+  const raw = String(value || '').trim();
+  if (!raw) return undefined;
+
+  try {
+    return new URL(raw).toString();
+  } catch {}
+
+  if (raw.startsWith('/')) {
+    const origin = getPublicAppOrigin();
+    if (origin) {
+      try {
+        return new URL(raw, origin).toString();
+      } catch {}
+    }
+  }
+
+  return undefined;
+}
+
+function sanitizeDiscordEmbeds(embeds: JsonObject[] | undefined): JsonObject[] | undefined {
+  if (!Array.isArray(embeds)) return embeds;
+
+  return embeds.map((embed) => {
+    const next: any = { ...embed };
+    for (const key of ['image', 'thumbnail'] as const) {
+      if (next[key]?.url) {
+        const url = normalizeDiscordUrl(next[key].url);
+        if (url) next[key] = { ...next[key], url };
+        else delete next[key];
+      }
+    }
+    for (const key of ['author', 'footer'] as const) {
+      if (next[key]?.icon_url) {
+        const iconUrl = normalizeDiscordUrl(next[key].icon_url);
+        if (iconUrl) next[key] = { ...next[key], icon_url: iconUrl };
+        else {
+          const copy = { ...next[key] };
+          delete copy.icon_url;
+          next[key] = copy;
+        }
+      }
+    }
+    return next;
+  });
 }
 
 function normalizeWebhookRecord(channelId: string, webhook: any, fallbackName: string): DiscordWebhookRecord {
@@ -128,6 +176,7 @@ export async function getOrCreateDiscordWebhook(
 }
 
 async function sendDiscordViaBot(channelId: string, payload: DiscordSendPayload, botToken: string): Promise<DiscordSendResult> {
+  const embeds = sanitizeDiscordEmbeds(payload.embeds);
   const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
     method: 'POST',
     headers: {
@@ -136,7 +185,7 @@ async function sendDiscordViaBot(channelId: string, payload: DiscordSendPayload,
     },
     body: JSON.stringify({
       content: payload.content,
-      embeds: payload.embeds,
+      embeds,
       components: payload.components,
       allowed_mentions: payload.allowedMentions || { parse: [] },
     }),
@@ -157,7 +206,7 @@ async function sendDiscordViaBot(channelId: string, payload: DiscordSendPayload,
       username: payload.username || null,
       avatarUrl: payload.avatarUrl || null,
       content: payload.content,
-      embeds: payload.embeds || [],
+      embeds: embeds || [],
       components: payload.components || [],
     });
   }
@@ -184,6 +233,7 @@ export async function sendDiscordMessage(payload: DiscordSendPayload): Promise<D
   }
 
   try {
+    const embeds = sanitizeDiscordEmbeds(payload.embeds);
     const webhook = await getOrCreateDiscordWebhook(channelId, botToken, payload.webhookName || 'Chat Tag');
     const res = await fetch(`https://discord.com/api/v10/webhooks/${webhook.id}/${webhook.token}?wait=true`, {
       method: 'POST',
@@ -192,7 +242,7 @@ export async function sendDiscordMessage(payload: DiscordSendPayload): Promise<D
         content: payload.content,
         username: payload.username || 'Chat Tag',
         avatar_url: payload.avatarUrl || undefined,
-        embeds: payload.embeds,
+        embeds,
         components: payload.components,
         allowed_mentions: payload.allowedMentions || { parse: [] },
       }),

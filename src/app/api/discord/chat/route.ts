@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
-import { appendAdminHistory } from '@/lib/audit';
 import { sendDiscordMessage, type DiscordSendResult } from '@/lib/discord-webhooks';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { quackverseCards } from '@/lib/quackverse-data';

@@ -19,7 +19,7 @@ async function postWithRetry(url: string, init: RequestInit, attempts = 3): Prom
     lastResponse = response;
     if (response.ok) return response;
 
-    await response.text().catch(() => '');
+    await response.clone().text().catch(() => '');
     if (!RETRYABLE_STREAMWEAVER_STATUSES.has(response.status) || attempt === attempts) {
       return response;
     }
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     if (rawBody.trim()) {
       try {
         body = JSON.parse(rawBody);
-      } catch (jsonError) {
+      } catch {
         const cleaned = rawBody.replace(/[\u0000-\u001F\u007F]/g, '');
         try {
           body = JSON.parse(cleaned);

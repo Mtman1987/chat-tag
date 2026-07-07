@@ -13,6 +13,10 @@ export async function GET() {
     console.error('[Discord Members] No bot token configured');
     return NextResponse.json({ members: [] });
   }
+  if (!/^\d{17,20}$/.test(DISCORD_GUILD_ID)) {
+    console.error('[Discord Members] Invalid or missing Discord guild id:', DISCORD_GUILD_ID || '(empty)');
+    return NextResponse.json({ members: [], error: 'Discord guild id is not configured correctly' });
+  }
 
   try {
     const response = await fetch(
