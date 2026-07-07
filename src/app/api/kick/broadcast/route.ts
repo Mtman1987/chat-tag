@@ -98,7 +98,11 @@ export async function POST(req: NextRequest) {
     try {
       const res = await postWithRetry(`${STREAMWEAVER_API}/api/kick/chat-tag-broadcast`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${STREAMWEAVER_SECRET}`,
+          'x-bot-secret': STREAMWEAVER_SECRET,
+        },
         body: JSON.stringify({ message, channels, secret: STREAMWEAVER_SECRET }),
       });
 

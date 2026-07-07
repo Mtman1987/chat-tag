@@ -14,6 +14,13 @@ export async function POST() {
     if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID) {
       return NextResponse.json({ error: 'Discord credentials not configured' }, { status: 500 });
     }
+    if (!/^\d{17,20}$/.test(DISCORD_GUILD_ID)) {
+      return NextResponse.json({
+        success: true,
+        synced: 0,
+        warning: 'Discord guild id is not configured correctly',
+      });
+    }
 
     const response = await fetch(
       `https://discord.com/api/v10/guilds/${DISCORD_GUILD_ID}/members?limit=1000`,
