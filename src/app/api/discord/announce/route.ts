@@ -59,11 +59,63 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
         ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
         ...payload,
       };
-      const response = await fetch(webhookUrl.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(webhookPayload),
-      });
+      // If payload contains an image URL, fetch it and upload as an attachment so
+      // Discord will reliably render the image inside the embed (use attachment:// filename).
+      let response: Response;
+      const embedImageUrl = (webhookPayload.embeds && Array.isArray(webhookPayload.embeds) && webhookPayload.embeds[0]?.image?.url) || (webhookPayload.imageUrl as string) || (webhookPayload.thumbnailUrl as string);
+      if (embedImageUrl) {
+        try {
+          const imgRes = await fetch(String(embedImageUrl));
+          if (imgRes.ok) {
+            const contentType = imgRes.headers.get("content-type") || "application/octet-stream";
+            const arrayBuffer = await imgRes.arrayBuffer();
+            const filename = `attachment-${Date.now()}${contentType.includes("png") ? ".png" : contentType.includes("gif") ? ".gif" : contentType.includes("jpeg") || contentType.includes("jpg") ? ".jpg" : ".bin"}`;
+
+            // Update embed to reference attachment
+            if (webhookPayload.embeds && Array.isArray(webhookPayload.embeds) && webhookPayload.embeds[0]) {
+              if (webhookPayload.embeds[0].image && webhookPayload.embeds[0].image.url) {
+                webhookPayload.embeds[0].image.url = `attachment://${filename}`;
+              }
+              if (webhookPayload.embeds[0].thumbnail && webhookPayload.embeds[0].thumbnail.url) {
+                webhookPayload.embeds[0].thumbnail.url = `attachment://${filename}`;
+              }
+            } else {
+              if (webhookPayload.imageUrl) webhookPayload.imageUrl = `attachment://${filename}`;
+              if (webhookPayload.thumbnailUrl) webhookPayload.thumbnailUrl = `attachment://${filename}`;
+            }
+
+            const form = new FormData();
+            const blob = new Blob([arrayBuffer], { type: contentType });
+            form.append("file", blob as any, filename);
+            form.append("payload_json", JSON.stringify(webhookPayload));
+
+            response = await fetch(webhookUrl.toString(), {
+              method: "POST",
+              body: form as any,
+            });
+          } else {
+            // fallback to JSON if image fetch failed
+            response = await fetch(webhookUrl.toString(), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(webhookPayload),
+            });
+          }
+        } catch (err) {
+          console.error("[Announce] failed to fetch/embed image, sending JSON fallback:", err);
+          response = await fetch(webhookUrl.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(webhookPayload),
+          });
+        }
+      } else {
+        response = await fetch(webhookUrl.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(webhookPayload),
+        });
+      }
 
       if (response.ok) {
         const sentMessage = await response.json().catch(() => null);
