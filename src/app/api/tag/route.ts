@@ -3,6 +3,7 @@ import { isBotRequest, requireAdminRequest } from '@/lib/auth';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { publishSpmtEvent } from '@/lib/spmt-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,26 @@ const TAG_IMMUNITY_MS = 20 * 60 * 1000;
 
 function normalizeUsername(value: string | undefined | null): string {
   return String(value || '').trim().toLowerCase().replace(/^@+/, '');
+}
+
+function publishGameEvent(type: string, input: {
+  userId?: string;
+  username?: string;
+  summary: string;
+  payload?: Record<string, unknown>;
+}) {
+  void publishSpmtEvent({
+    type,
+    visibility: 'community',
+    actor: input.userId
+      ? { userId: input.userId, username: input.username || input.userId, displayName: input.username || input.userId }
+      : undefined,
+    payload: {
+      summary: input.summary,
+      source: 'chat-tag-game',
+      ...(input.payload || {}),
+    },
+  });
 }
 
 function playerNames(player: TagPlayer | undefined): Set<string> {
@@ -275,6 +296,14 @@ export async function POST(req: NextRequest) {
         player.passReason = body.reason || 'unknown';
         return { granted: true, passCount: player.passCount };
       });
+      if ((result as any).granted) {
+        publishGameEvent('game.pass_granted', {
+          userId,
+          username: twitchUsername || username || userId,
+          summary: `${twitchUsername || username || userId} received an SPMT pass.`,
+          payload: { userId, twitchUsername, reason: body.reason || 'unknown', passCount: (result as any).passCount },
+        });
+      }
       return NextResponse.json({ success: true, ...result });
     }
 
@@ -355,6 +384,12 @@ export async function POST(req: NextRequest) {
       if ((result as any).error) {
         return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
       }
+      publishGameEvent('game.pass_used', {
+        userId,
+        username: twitchUsername || username || userId,
+        summary: `${twitchUsername || username || userId} used an SPMT pass to tag ${targetUserId}.`,
+        payload: { userId, twitchUsername, targetUserId, streamerId, doublePoints: true },
+      });
       return NextResponse.json(result);
     }
 
@@ -444,6 +479,12 @@ export async function POST(req: NextRequest) {
       if ((result as any).error) {
         return NextResponse.json({ error: (result as any).error }, { status: 400 });
       }
+      publishGameEvent('game.player_joined', {
+        userId: resolvedUserId,
+        username: normalizedUsername,
+        summary: `${normalizedUsername} joined Chat Tag.`,
+        payload: { userId: resolvedUserId, twitchUsername: normalizedUsername },
+      });
       return NextResponse.json({ success: true });
     }
 
@@ -491,6 +532,12 @@ export async function POST(req: NextRequest) {
           id: makeId('admin'), action: 'leave', performedBy: performedBy || playerName,
           details: `${playerName} left the game${wasIt ? ' (was it — now free-for-all)' : ''}`, timestamp: Date.now(),
         });
+      });
+      publishGameEvent('game.player_left', {
+        userId,
+        username: twitchUsername || username || userId,
+        summary: `${twitchUsername || username || userId} left Chat Tag.`,
+        payload: { userId, twitchUsername, performedBy },
       });
       return NextResponse.json({ success: true });
     }
@@ -607,6 +654,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
       }
 
+      publishGameEvent('game.player_tagged', {
+        userId,
+        username: twitchUsername || username || userId,
+        summary: `${twitchUsername || username || userId} tagged ${targetUserId}.`,
+        payload: { userId, twitchUsername, targetUserId, streamerId, doublePoints: (result as any).doublePoints },
+      });
       return NextResponse.json(result);
     }
 
@@ -778,6 +831,12 @@ export async function POST(req: NextRequest) {
           timestamp: Date.now(),
         });
       });
+      publishGameEvent('game.free_for_all_started', {
+        userId: performedBy || 'discord-admin',
+        username: performedBy || 'discord-admin',
+        summary: 'Chat Tag free-for-all was triggered.',
+        payload: { performedBy: performedBy || 'discord-admin' },
+      });
       return NextResponse.json({ success: true });
     }
 
@@ -911,6 +970,12 @@ export async function POST(req: NextRequest) {
           targetUser: target?.twitchUsername || userId,
           timestamp: Date.now(),
         });
+      });
+      publishGameEvent('game.current_it_set', {
+        userId,
+        username: twitchUsername || username || userId,
+        summary: `${twitchUsername || username || userId} was set as it.`,
+        payload: { userId, performedBy: performedBy || 'unknown' },
       });
       return NextResponse.json({ success: true });
     }

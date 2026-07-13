@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readAppState } from "@/lib/volume-store";
 import { buildGameStatePayload, postOrUpdateChatTagEmbed } from "@/lib/chat-tag-discord";
+import { getRuntimePublicUrl } from "@/lib/runtime-config.server";
 
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || "";
@@ -11,6 +12,14 @@ const CHAT_TAG_AVATAR_URL =
   "";
 const DISCORD_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const TAG_EVENT_DELETE_DELAY_MS = 5 * 60 * 1000;
+const PUBLIC_APP_ORIGIN = getRuntimePublicUrl(
+  "appOrigin",
+  process.env.CHAT_TAG_PUBLIC_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    "https://chat-tag-new.fly.dev",
+);
 
 type DiscordWebhookResult = {
   ok: boolean;
@@ -36,6 +45,18 @@ function getRetryDelayMs(response: Response, attempt: number) {
   return Math.min(500 * 2 ** attempt, 3000);
 }
 
+function resolveDiscordAssetUrl(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).toString();
+  } catch {}
+  if (raw.startsWith("/") && PUBLIC_APP_ORIGIN) {
+    return `${PUBLIC_APP_ORIGIN.replace(/\/$/, "")}${raw}`;
+  }
+  return raw;
+}
+
 async function postDiscordWebhook(payload: Record<string, unknown>): Promise<DiscordWebhookResult> {
   if (!DISCORD_WEBHOOK_URL) {
     console.warn(
@@ -54,7 +75,7 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
     try {
       const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
       webhookUrl.searchParams.set("wait", "true");
-      const webhookPayload = {
+      const webhookPayload: Record<string, any> = {
         username: CHAT_TAG_WEBHOOK_NAME,
         ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
         ...payload,
@@ -62,7 +83,20 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
       // If payload contains an image URL, fetch it and upload as an attachment so
       // Discord will reliably render the image inside the embed (use attachment:// filename).
       let response: Response;
-      const embedImageUrl = (webhookPayload.embeds && Array.isArray(webhookPayload.embeds) && webhookPayload.embeds[0]?.image?.url) || (webhookPayload.imageUrl as string) || (webhookPayload.thumbnailUrl as string);
+      const embedImageUrl = resolveDiscordAssetUrl(
+        (webhookPayload.embeds && Array.isArray(webhookPayload.embeds) && webhookPayload.embeds[0]?.image?.url) ||
+          webhookPayload.imageUrl ||
+          webhookPayload.thumbnailUrl,
+      );
+      if (embedImageUrl) {
+        if (webhookPayload.embeds && Array.isArray(webhookPayload.embeds) && webhookPayload.embeds[0]) {
+          if (webhookPayload.embeds[0].image?.url) webhookPayload.embeds[0].image.url = embedImageUrl;
+          if (webhookPayload.embeds[0].thumbnail?.url) webhookPayload.embeds[0].thumbnail.url = embedImageUrl;
+        } else {
+          if (webhookPayload.imageUrl) webhookPayload.imageUrl = embedImageUrl;
+          if (webhookPayload.thumbnailUrl) webhookPayload.thumbnailUrl = embedImageUrl;
+        }
+      }
       if (embedImageUrl) {
         try {
           const imgRes = await fetch(String(embedImageUrl));
