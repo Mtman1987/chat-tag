@@ -15,6 +15,7 @@ const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
 const CLEANUP_DELAY_MS = 5 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
+const SUPPORT_TICKET_COMMANDS = new Set(['support', 'ticket', 'doctor']);
 
 function debugEnabled(scope: string) {
   const value = String(process.env.DEBUG || '').toLowerCase();
@@ -314,6 +315,36 @@ export async function POST(req: NextRequest) {
           }
         }
       });
+    }
+
+    if (SUPPORT_TICKET_COMMANDS.has(cmd || '')) {
+      const note = args.slice(1).join(' ').trim();
+      if (!note) {
+        await reply(`@${userName} Please describe what is going on so I can open a useful ticket. Type: "spmt ${cmd} <description>". Include what broke, where it happened, and what you expected.`);
+        return NextResponse.json({ success: true, reply: 'ticket-needs-description' });
+      }
+
+      const requester = displayName || userName || 'Discord user';
+      const requesterId = gameUserId || discordUserId || requester;
+      const ticketRes = await fetch(`${getInternalAppOrigin()}/api/discord/help-ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
+        body: JSON.stringify({
+          requester,
+          requesterId,
+          channel: 'discord',
+          note,
+        }),
+      }).catch((error) => {
+        console.error('[Discord Chat] Support ticket failed:', error);
+        return null;
+      });
+      if (!ticketRes?.ok) {
+        await reply(`@${userName} Could not create a support ticket right now.`);
+        return NextResponse.json({ success: true, reply: 'ticket-failed' });
+      }
+      await reply(`@${userName} Support ticket created.`);
+      return NextResponse.json({ success: true });
     }
 
     // Process commands
@@ -632,33 +663,6 @@ export async function POST(req: NextRequest) {
 
     if (cmd === 'admin' || cmd === 'mod') {
       await reply(`@${userName} ${getModHelpText('spmt', 'discord')}`);
-      return NextResponse.json({ success: true });
-    }
-
-    if (cmd === 'support' || cmd === 'ticket') {
-      const note = args.slice(1).join(' ').trim();
-      if (!note) {
-        await reply(`@${userName} Please describe what is going on so I can open a useful ticket. Type: "spmt ${cmd} <description>". Include what broke, where it happened, and what you expected.`);
-        return NextResponse.json({ success: true, reply: 'ticket-needs-description' });
-      }
-      const ticketRes = await fetch(`${getInternalAppOrigin()}/api/discord/help-ticket`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
-        body: JSON.stringify({
-          requester: displayName,
-          requesterId: gameUserId,
-          channel: 'discord',
-          note,
-        }),
-      }).catch((error) => {
-        console.error('[Discord Chat] Support ticket failed:', error);
-        return null;
-      });
-      if (!ticketRes?.ok) {
-        await reply(`@${userName} Could not create a support ticket right now.`);
-        return NextResponse.json({ success: true, reply: 'ticket-failed' });
-      }
-      await reply(`@${userName} Support ticket created.`);
       return NextResponse.json({ success: true });
     }
 

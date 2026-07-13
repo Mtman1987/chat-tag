@@ -17,6 +17,7 @@ function getPlayerHelpText(prefix = 'spmt') {
     `${quoted(`${prefix} live`)} = Live`,
     `${quoted(`${prefix} away`)} = Toggle immunity`,
     `${quoted(`${prefix} rules`)} = Rules`,
+    `${quoted(`${prefix} doctor <issue>`)} = Help ticket`,
     `Mods: ${quoted(`${prefix} mod`)}`,
   ].join(' | ');
 }

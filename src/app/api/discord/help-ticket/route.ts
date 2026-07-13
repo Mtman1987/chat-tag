@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
 
     const appUrl = getPublicAppOrigin(req);
     const ticketNum = totalTickets + 1;
+    const channelLabel = String(channel || '').toLowerCase() === 'discord' ? 'Discord' : `twitch.tv/${channel}`;
     
     // Truncate long values to fit Discord limits
     const truncate = (str: string, max: number) => str.length > max ? str.substring(0, max - 3) + '...' : str;
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
             { name: 'User', value: `${requester} (Rank #${requesterRank}/${totalPlayers})`, inline: true },
             { name: 'Score', value: `${requesterScore} pts`, inline: true },
             { name: 'Status', value: requesterStatus, inline: true },
-            { name: 'Channel', value: `twitch.tv/${channel}`, inline: false },
+            { name: 'Channel', value: channelLabel, inline: false },
             { name: 'Current It', value: `${itName} (${itDuration}m)`, inline: true },
             { name: 'Ticket History', value: `${totalTickets} total (${resolvedTickets.length} resolved)`, inline: true },
             lastResolvedText ? { name: 'Last Resolved', value: lastResolvedText, inline: false } : null,
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
               { name: 'User', value: `${requester} (Rank #${requesterRank}/${totalPlayers})`, inline: true },
               { name: 'Score', value: `${requesterScore} pts`, inline: true },
               { name: 'Status', value: requesterStatus, inline: true },
-              { name: 'Channel', value: `twitch.tv/${channel}`, inline: false },
+              { name: 'Channel', value: channelLabel, inline: false },
               { name: 'Current It', value: `${itName} (${itDuration}m)`, inline: true },
               { name: 'Ticket History', value: `${totalTickets} total (${resolvedTickets.length} resolved)`, inline: true },
               lastResolvedText ? { name: 'Last Resolved', value: lastResolvedText, inline: false } : null,
