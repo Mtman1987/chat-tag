@@ -24,6 +24,46 @@ export function isSpmtEnabled() {
   return Boolean(SPMT_API_KEY);
 }
 
+export type GrandfatheredSpmtIdentity = {
+  user: { id: string; username: string };
+  accessToken?: string;
+};
+
+export async function grandfatherSpmtIdentity(input: {
+  twitchId: string;
+  twitchUsername: string;
+  displayName?: string;
+  issueSession?: boolean;
+}): Promise<GrandfatheredSpmtIdentity | null> {
+  if (!SPMT_API_KEY) return null;
+
+  try {
+    const response = await fetch(`${SPMT_BASE_URL.replace(/\/$/, '')}/api/platform/identity/grandfather`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SPMT_API_KEY}`,
+      },
+      body: JSON.stringify({
+        provider: 'twitch',
+        providerUserId: input.twitchId,
+        providerUsername: input.twitchUsername,
+        username: input.twitchUsername,
+        displayName: input.displayName || input.twitchUsername,
+        issueSession: input.issueSession === true,
+      }),
+    });
+    if (!response.ok) {
+      console.warn('[SPMT] identity grandfather failed', { status: response.status });
+      return null;
+    }
+    return await response.json() as GrandfatheredSpmtIdentity;
+  } catch (error) {
+    console.warn('[SPMT] identity grandfather error', error);
+    return null;
+  }
+}
+
 export async function publishSpmtEvent(event: SpmtEventInput) {
   if (!SPMT_API_KEY) return { skipped: true, reason: 'SPMT_API_KEY not configured' };
 

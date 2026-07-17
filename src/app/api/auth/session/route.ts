@@ -9,5 +9,12 @@ export async function DELETE() {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   });
+  response.cookies.set('chat_tag_spmt_session', '', {
+    path: '/',
+    maxAge: 0,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
   return response;
 }

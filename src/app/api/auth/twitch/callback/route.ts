@@ -1,8 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { updateAppState } from '@/lib/volume-store';
 import { createSessionToken } from '@/lib/session';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
+import { grandfatherSpmtIdentity } from '@/lib/spmt-client';
+
+function verifyDshBridge(searchParams: URLSearchParams) {
+  const signature = String(searchParams.get('signature') || '');
+  const issuedAt = Number(searchParams.get('issued_at') || 0);
+  const bridgeSecret = process.env.BOT_SECRET_KEY;
+  if (!signature || !issuedAt || !bridgeSecret || Math.abs(Date.now() - issuedAt) > 5 * 60 * 1000) return false;
+  const canonical = [
+    searchParams.get('user_id') || '',
+    searchParams.get('username') || '',
+    searchParams.get('display_name') || '',
+    searchParams.get('photo_url') || '',
+    String(issuedAt),
+  ].join('|');
+  const expected = crypto.createHmac('sha256', bridgeSecret).update(canonical).digest('hex');
+  const supplied = Buffer.from(signature, 'hex');
+  const wanted = Buffer.from(expected, 'hex');
+  return supplied.length === wanted.length && crypto.timingSafeEqual(supplied, wanted);
+}
+
+function setSpmtSessionCookie(response: NextResponse, accessToken: string | undefined, secure: boolean) {
+  if (!accessToken) return;
+  response.cookies.set('chat_tag_spmt_session', accessToken, {
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure,
+  });
+}
 
 function getConfiguredAppUrl(req: NextRequest) {
   const candidates = [
@@ -43,6 +74,11 @@ export async function GET(req: NextRequest) {
   const callbackUrl = new URL('/auth/callback', appUrl);
 
   if (success === 'true' && bridgedUserId && bridgedUsername) {
+    if (!verifyDshBridge(searchParams)) {
+      callbackUrl.searchParams.set('error', 'invalid_identity_bridge');
+      callbackUrl.searchParams.set('error_description', 'The cross-app login handoff could not be verified. Please use Twitch sign-in directly.');
+      return NextResponse.redirect(callbackUrl);
+    }
     await updateAppState((draft) => {
       draft.users[bridgedUserId] = {
         ...(draft.users[bridgedUserId] || {}),
@@ -69,6 +105,13 @@ export async function GET(req: NextRequest) {
       sameSite: 'lax',
       secure: appUrl.startsWith('https://'),
     });
+    const grandfathered = await grandfatherSpmtIdentity({
+      twitchId: bridgedUserId,
+      twitchUsername: bridgedUsername,
+      displayName: searchParams.get('display_name') || bridgedUsername,
+      issueSession: true,
+    });
+    setSpmtSessionCookie(response, grandfathered?.accessToken, appUrl.startsWith('https://'));
     return response;
   }
 
@@ -81,6 +124,14 @@ export async function GET(req: NextRequest) {
   if (!code) {
     callbackUrl.searchParams.set('error', 'missing_auth_code');
     callbackUrl.searchParams.set('error_description', 'The Twitch authorization code was not found.');
+    return NextResponse.redirect(callbackUrl);
+  }
+
+  const expectedState = req.cookies.get('chat_tag_oauth_state')?.value;
+  const returnedState = searchParams.get('state');
+  if (!expectedState || !returnedState || expectedState !== returnedState) {
+    callbackUrl.searchParams.set('error', 'invalid_oauth_state');
+    callbackUrl.searchParams.set('error_description', 'The Twitch login state expired or did not match. Please try again.');
     return NextResponse.redirect(callbackUrl);
   }
 
@@ -158,6 +209,15 @@ export async function GET(req: NextRequest) {
       sameSite: 'lax',
       secure: appUrl.startsWith('https://'),
     });
+
+    response.cookies.set('chat_tag_oauth_state', '', { path: '/', maxAge: 0 });
+    const grandfathered = await grandfatherSpmtIdentity({
+      twitchId: twitchUser.id,
+      twitchUsername: twitchUser.login || twitchUser.display_name,
+      displayName: twitchUser.display_name,
+      issueSession: true,
+    });
+    setSpmtSessionCookie(response, grandfathered?.accessToken, appUrl.startsWith('https://'));
 
     return response;
   } catch (err: any) {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 
 function getConfiguredAppUrl() {
@@ -42,10 +43,19 @@ export async function GET(req: NextRequest) {
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', 'user:read:email');
-    authUrl.searchParams.set('state', 'chat-tag');
+    const state = crypto.randomBytes(24).toString('base64url');
+    authUrl.searchParams.set('state', state);
     authUrl.searchParams.set('force_verify', 'true');
 
-    return NextResponse.redirect(authUrl.toString());
+    const response = NextResponse.redirect(authUrl.toString());
+    response.cookies.set('chat_tag_oauth_state', state, {
+      path: '/',
+      maxAge: 10 * 60,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: redirectUri.startsWith('https://'),
+    });
+    return response;
   } catch (error: any) {
     const homeUrl = new URL('/', req.url);
     homeUrl.searchParams.set('error', 'auth_start_failed');
