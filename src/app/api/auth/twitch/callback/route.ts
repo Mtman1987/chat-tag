@@ -58,7 +58,6 @@ export async function GET(req: NextRequest) {
       avatarUrl: bridgedAvatarUrl,
     });
 
-    callbackUrl.searchParams.set('session', sessionToken);
     callbackUrl.searchParams.set('twitchUsername', bridgedUsername);
     if (bridgedAvatarUrl) callbackUrl.searchParams.set('avatarUrl', bridgedAvatarUrl);
 
@@ -66,6 +65,7 @@ export async function GET(req: NextRequest) {
     response.cookies.set('session', sessionToken, {
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
+      httpOnly: true,
       sameSite: 'lax',
       secure: appUrl.startsWith('https://'),
     });
@@ -147,7 +147,6 @@ export async function GET(req: NextRequest) {
       avatarUrl: twitchUser.profile_image_url,
     });
 
-    callbackUrl.searchParams.set('session', sessionToken);
     callbackUrl.searchParams.set('twitchUsername', twitchUser.display_name);
     callbackUrl.searchParams.set('avatarUrl', twitchUser.profile_image_url);
 
@@ -155,6 +154,7 @@ export async function GET(req: NextRequest) {
     response.cookies.set('session', sessionToken, {
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
+      httpOnly: true,
       sameSite: 'lax',
       secure: appUrl.startsWith('https://'),
     });

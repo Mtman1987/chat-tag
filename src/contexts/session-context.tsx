@@ -10,13 +10,13 @@ interface SessionUser {
 interface SessionContextState {
   user: SessionUser | null;
   isUserLoading: boolean;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextState>({
   user: null,
   isUserLoading: true,
-  logout: () => {},
+  logout: async () => {},
 });
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -27,16 +27,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function loadSession() {
-      const username = localStorage.getItem('twitchUsername');
-      const avatar = localStorage.getItem('twitchAvatar');
-      if (username) {
-        if (!cancelled) {
-          setUser({ twitchUsername: username, avatarUrl: avatar || '' });
-          setIsUserLoading(false);
-        }
-        return;
-      }
-
       try {
         const response = await fetch('/api/user-profile', { credentials: 'same-origin' });
         const data = response.ok ? await response.json() : null;
@@ -51,10 +41,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return;
         }
       } catch {
-        // Ignore hydration failures and fall back to signed-out state.
+        // A cached profile may keep the shell readable during a short outage,
+        // but it is never treated as authentication authority.
+        const username = localStorage.getItem('twitchUsername');
+        const avatar = localStorage.getItem('twitchAvatar');
+        if (username && !cancelled) {
+          setUser({ twitchUsername: username, avatarUrl: avatar || '' });
+          return;
+        }
       }
 
       if (!cancelled) {
+        localStorage.removeItem('session');
+        localStorage.removeItem('twitchUsername');
+        localStorage.removeItem('twitchAvatar');
         setUser(null);
         setIsUserLoading(false);
       }
@@ -72,11 +72,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const logout = () => {
+  const logout = async () => {
+    await fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
     localStorage.removeItem('session');
     localStorage.removeItem('twitchUsername');
     localStorage.removeItem('twitchAvatar');
-    document.cookie = 'session=; Max-Age=0; path=/; SameSite=Lax';
     setUser(null);
     window.dispatchEvent(new Event('storage'));
   };

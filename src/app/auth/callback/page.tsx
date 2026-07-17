@@ -10,7 +10,6 @@ function AuthCallbackContent() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const session = searchParams.get('session');
     const twitchUsername = searchParams.get('twitchUsername');
     const avatarUrl = searchParams.get('avatarUrl');
     const error = searchParams.get('error');
@@ -26,8 +25,7 @@ function AuthCallbackContent() {
       return;
     }
 
-    if (session && twitchUsername) {
-      localStorage.setItem('session', session);
+    if (twitchUsername) {
       localStorage.setItem('twitchUsername', twitchUsername);
       if (avatarUrl) localStorage.setItem('twitchAvatar', avatarUrl);
       toast({
@@ -37,11 +35,11 @@ function AuthCallbackContent() {
       // Trigger storage event for other tabs/components
       window.dispatchEvent(new Event('storage'));
       router.replace('/');
-    } else if (!session && !error) {
+    } else if (!error) {
       toast({
         variant: "destructive",
         title: "Authentication Error",
-        description: "The session token was missing. Please try logging in again.",
+        description: "The signed-in profile was missing. Please try logging in again.",
       });
       router.replace('/');
     }
