@@ -273,8 +273,10 @@ async function apiCall(endpoint, options = {}) {
     const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
-    if (!res.ok) {
+    if (!res.ok && !isExpectedApiResponse(endpoint, res.status, data)) {
       console.error(`[API Error] ${endpoint}: ${res.status} ${text.slice(0, 300)}`);
+    } else if (!res.ok) {
+      console.log(`[API Notice] ${endpoint}: expected user-state response (${res.status})`);
     }
     if (data && typeof data === 'object') {
       data.__ok = res.ok;
@@ -285,6 +287,12 @@ async function apiCall(endpoint, options = {}) {
     console.error(`[API Error] ${endpoint}:`, e.message);
     return null;
   }
+}
+
+function isExpectedApiResponse(endpoint, status, data) {
+  if (endpoint !== '/api/tag' || status < 400 || status >= 500) return false;
+  const message = String(data?.error || '');
+  return /You are not in the game!|Already in game|You are not it!|is immune \((?:20-min cooldown|no-tagback)\)|is away\/offline|You don't have a pass!/i.test(message);
 }
 
 async function recordBotEvent(action, target = '', detail = '', channel = 'system') {
@@ -1921,10 +1929,13 @@ console.log = (...args) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'tag', userId, twitchUsername: senderLogin, targetUserId: targetPlayer.id, streamerId: channelName })
       });
-      console.log(`[Bot] Tag API response: ${JSON.stringify(res)}`);
+      const expectedUserState = res?.error && isExpectedApiResponse('/api/tag', Number(res.__status || 400), res);
+      console.log(expectedUserState
+        ? `[Bot] Tag API notice: expected user-state response (${res.__status || 'unknown'})`
+        : `[Bot] Tag API response: ${JSON.stringify(res)}`);
       
       if (res?.error) {
-        console.log(`[Bot] Tag error: ${res.error}`);
+        console.log(expectedUserState ? `[Bot] Tag notice: ${res.error}` : `[Bot] Tag error: ${res.error}`);
         reply( `@${user} ${publicTagError(res.error)}`);
         return;
       } else {
