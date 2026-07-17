@@ -75,10 +75,11 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
     try {
       const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
       webhookUrl.searchParams.set("wait", "true");
+      const freshPayload = JSON.parse(JSON.stringify(payload)) as Record<string, any>;
       const webhookPayload: Record<string, any> = {
         username: CHAT_TAG_WEBHOOK_NAME,
         ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
-        ...payload,
+        ...freshPayload,
       };
       // If payload contains an image URL, fetch it and upload as an attachment so
       // Discord will reliably render the image inside the embed (use attachment:// filename).
@@ -178,11 +179,14 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
         text.slice(0, 300) ||
         response.statusText ||
         "Discord webhook request failed";
-      console.error(
-        `[Announce] Discord webhook failed (attempt ${attempt + 1}/3): ${response.status} ${lastError}`,
-      );
+      const willRetry = DISCORD_RETRY_STATUSES.has(response.status) && attempt < 2;
+      if (willRetry) {
+        console.warn(`[Announce] Discord webhook transient response (attempt ${attempt + 1}/3): ${response.status}; retrying`);
+      } else {
+        console.error(`[Announce] Discord webhook failed (attempt ${attempt + 1}/3): ${response.status} ${lastError}`);
+      }
 
-      if (!DISCORD_RETRY_STATUSES.has(response.status) || attempt === 2) {
+      if (!willRetry) {
         return {
           ok: false,
           configured: true,
@@ -194,12 +198,11 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
       await sleep(getRetryDelayMs(response, attempt));
     } catch (error: any) {
       lastError = error?.message || "Discord webhook request failed";
-      console.error(
-        `[Announce] Discord webhook error (attempt ${attempt + 1}/3): ${lastError}`,
-      );
       if (attempt === 2) {
+        console.error(`[Announce] Discord webhook error (attempt ${attempt + 1}/3): ${lastError}`);
         return { ok: false, configured: true, status: 0, error: lastError };
       }
+      console.warn(`[Announce] Discord webhook request issue (attempt ${attempt + 1}/3); retrying`);
       await sleep(500 * 2 ** attempt);
     }
   }
