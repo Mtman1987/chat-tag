@@ -1047,6 +1047,10 @@ console.log = (...args) => {
     try {
       console.log('[Bot] Running periodic check...');
       const data = await apiCall('/api/tag');
+      if (!data || !Array.isArray(data.players)) {
+        console.warn(`[Bot] Periodic check skipped: /api/tag returned no player state (status=${data?.__status || 'unavailable'})`);
+        return;
+      }
       updateWinnersCache(data);
       
       if (data?.currentIt && data?.lastTagTime) {
