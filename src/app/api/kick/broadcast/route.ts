@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState } from '@/lib/volume-store';
-import { getStreamweaverSecret } from '@/lib/runtime-secrets';
+import { getBotSecret, getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +37,7 @@ async function postWithRetry(url: string, init: RequestInit, attempts = 3): Prom
  */
 export async function POST(req: NextRequest) {
   const STREAMWEAVER_SECRET = getStreamweaverSecret();
+  const BOT_SECRET = getBotSecret();
   try {
     const rawBody = await req.text();
     let body: any = {};
@@ -58,10 +59,9 @@ export async function POST(req: NextRequest) {
     }
     const { message, channel, secret } = body;
 
-    if (secret !== STREAMWEAVER_SECRET) {
-      // Also accept bot secret from internal calls
+    if (secret !== BOT_SECRET) {
       const botSecret = req.headers.get('x-bot-secret');
-      if (botSecret !== STREAMWEAVER_SECRET) {
+      if (botSecret !== BOT_SECRET) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
     }
