@@ -4,12 +4,13 @@ import { updateAppState } from '@/lib/volume-store';
 import { createSessionToken } from '@/lib/session';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
+import { getBotSecret } from '@/lib/runtime-secrets';
 import { grandfatherSpmtIdentity } from '@/lib/spmt-client';
 
 function verifyDshBridge(searchParams: URLSearchParams) {
   const signature = String(searchParams.get('signature') || '');
   const issuedAt = Number(searchParams.get('issued_at') || 0);
-  const bridgeSecret = process.env.BOT_SECRET_KEY;
+  const bridgeSecret = getBotSecret();
   if (!signature || !issuedAt || !bridgeSecret || Math.abs(Date.now() - issuedAt) > 5 * 60 * 1000) return false;
   const canonical = [
     searchParams.get('user_id') || '',

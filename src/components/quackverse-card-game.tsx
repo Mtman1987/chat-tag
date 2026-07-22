@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, useContext } from 'react';
 import Image from 'next/image';
@@ -631,6 +631,7 @@ function BoardPieceCard({
   onClear: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const cardArt = useAnimatedCardArt(slot.card, selected || showDetails);
   const familyLabel = getQuackverseFamilyGroup(slot.card.id)?.label || slot.card.role || slot.card.type;
   const stats = [
@@ -689,17 +690,34 @@ function BoardPieceCard({
           <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, (slot.currentHp / slot.maxHp) * 100)}%` }} />
         </div>
       </button>
-      <button
-        type="button"
-        className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[0.56rem] text-slate-200 hover:bg-black/80"
-        onClick={(event) => {
-          event.stopPropagation();
-          onClear();
-        }}
-        aria-label={`Clear square ${index + 1}`}
-      >
-        Clear
-      </button>
+      {confirmClear ? (
+        <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-1 rounded bg-slate-900/95 px-1.5 py-1 shadow-lg">
+          <span className="text-[0.54rem] text-slate-200">Sure?</span>
+          <button
+            type="button"
+            className="rounded bg-red-500/80 px-1.5 py-0.5 text-[0.54rem] text-white hover:bg-red-500"
+            onClick={(event) => { event.stopPropagation(); onClear(); }}
+          >
+            Yes
+          </button>
+          <button
+            type="button"
+            className="rounded bg-black/60 px-1.5 py-0.5 text-[0.54rem] text-slate-200 hover:bg-black/80"
+            onClick={(event) => { event.stopPropagation(); setConfirmClear(false); }}
+          >
+            No
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[0.56rem] text-slate-200 hover:bg-black/80"
+          onClick={(event) => { event.stopPropagation(); setConfirmClear(true); }}
+          aria-label={`Clear square ${index + 1}`}
+        >
+          Clear
+        </button>
+      )}
     </div>
   );
 }
@@ -918,6 +936,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
   const [undoVersion, setUndoVersion] = useState(0);
   const [actionPanelPosition, setActionPanelPosition] = useState<ActionPanelPosition>('east');
   const [saveRequestVersion, setSaveRequestVersion] = useState(0);
+  const [confirmClearBoard, setConfirmClearBoard] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
   const [actionError, setActionError] = useState('');
   const [inspectedCardId, setInspectedCardId] = useState<number | null>(null);
@@ -2387,11 +2406,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                       <h3 className="font-headline text-lg text-white">Tactical Card Board</h3>
                       <p className="text-sm text-slate-400">Select a duck from the hand, then place it on an entry row or move it by clicking a highlighted square.</p>
                     </div>
-                    <Button type="button" variant="secondary" onClick={resetTable}>
-                      <RotateCcw className="mr-2 h-4 w-4" />
-                      Clear Board
-                    </Button>
-                  </div>
+                      {confirmClearBoard ? (<div className="flex items-center gap-1"><span className="text-xs text-slate-300">Sure?</span><Button type="button" size="sm" variant="destructive" onClick={() => { resetTable(); setConfirmClearBoard(false); }}>Yes</Button><Button type="button" size="sm" variant="secondary" onClick={() => setConfirmClearBoard(false)}>No</Button></div>) : (<Button type="button" variant="secondary" onClick={() => setConfirmClearBoard(true)}><RotateCcw className="mr-2 h-4 w-4" />Clear Board</Button>)}
+                    </div>
 
                   <div className="mx-auto max-w-[64rem] rounded-lg border border-white/5 bg-transparent p-3">
                     <div className="grid grid-cols-7 gap-2">
@@ -2890,10 +2906,18 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                 <div className={cn('rounded-md border px-2 py-1 text-xs font-semibold', displayPlayers[activePlayer].accent)}>
                   {displayPlayers[activePlayer].short} turn
                 </div>
-                <Button type="button" size="sm" variant="secondary" onClick={resetTable}>
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                  Clear
-                </Button>
+                {confirmClearBoard ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-300">Sure?</span>
+                    <Button type="button" size="sm" variant="destructive" onClick={() => { resetTable(); setConfirmClearBoard(false); }}>Yes</Button>
+                    <Button type="button" size="sm" variant="secondary" onClick={() => setConfirmClearBoard(false)}>No</Button>
+                  </div>
+                ) : (
+                  <Button type="button" size="sm" variant="secondary" onClick={() => setConfirmClearBoard(true)}>
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    Clear
+                  </Button>
+                )}
               </div>
               <div className="grid grid-cols-7 gap-1">
                 {grid.map((slot, index) => {
@@ -3239,7 +3263,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
                     Select a duck from the hand, then place it on an entry row or move it by clicking a highlighted square.
                   </p>
                 </div>
-              <Button type="button" variant="secondary" onClick={resetTable}>
+              <Button type="button" variant="secondary" onClick={() => setConfirmClearBoard(true)}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Clear Board
               </Button>
