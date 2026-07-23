@@ -28,10 +28,11 @@ jobs:
           fi
       - name: Deploy chat-tag-new
         run: flyctl deploy --remote-only --config fly.toml --ha=false
-      - name: Scale chat-tag-new to one machine
+      - name: Verify chat-tag-new
         run: |
-          flyctl scale count 1 --app chat-tag-new --yes
-          flyctl machines list --app chat-tag-new
+          flyctl status --app chat-tag-new
+          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            https://chat-tag-new.fly.dev/api/health
 
   deploy-bot:
     name: Deploy bot app
@@ -51,7 +52,8 @@ jobs:
           fi
       - name: Deploy chat-tag-bot-new
         run: flyctl deploy --remote-only --config fly-bot.toml --ha=false
-      - name: Scale chat-tag-bot-new to one machine
+      - name: Verify chat-tag-bot-new
         run: |
-          flyctl scale count 1 --app chat-tag-bot-new --yes
-          flyctl machines list --app chat-tag-bot-new
+          flyctl status --app chat-tag-bot-new
+          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            https://chat-tag-bot-new.fly.dev/health

@@ -2661,13 +2661,13 @@ console.log = (...args) => {
   const httpServer = http.createServer((req, res) => {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       const payload = {
-        ok: true,
+        ok: isIrcConnected,
         botUser: username,
         connected: isIrcConnected,
         joinedChannels: client.getChannels().length,
         uptimeSec: Math.floor(process.uptime())
       };
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.writeHead(isIrcConnected ? 200 : 503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(payload));
       return;
     }
