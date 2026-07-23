@@ -15,17 +15,48 @@ function parseDiscordMention(value) {
   return match?.[1] || '';
 }
 
+function getMentionEntries(mentions) {
+  if (!mentions) return [];
+  if (Array.isArray(mentions)) return mentions;
+  if (typeof mentions !== 'object') return [];
+
+  const directEntries = Object.entries(mentions)
+    .filter(([key]) => key !== 'users' && key !== 'members')
+    .map(([id, entry]) => ({ id, ...entry }));
+  const userEntries = Array.isArray(mentions.users)
+    ? mentions.users
+    : Object.entries(mentions.users || {}).map(([id, entry]) => ({ id, ...entry }));
+  const memberEntries = Array.isArray(mentions.members)
+    ? mentions.members
+    : Object.entries(mentions.members || {}).map(([id, entry]) => ({ id, ...entry }));
+
+  return [...directEntries, ...userEntries, ...memberEntries];
+}
+
 function getMentionLookupNames(mentions, mentionId) {
-  if (!Array.isArray(mentions) || !mentionId) return [];
-  const mention = mentions.find((entry) => String(entry?.id || entry?.userId || '') === String(mentionId));
-  if (!mention) return [];
-  return [
+  if (!mentionId) return [];
+  const matches = getMentionEntries(mentions).filter((entry) =>
+    String(entry?.id || entry?.userId || entry?.user?.id || '') === String(mentionId)
+  );
+  return matches.flatMap((mention) => [
     mention.username,
     mention.global_name,
     mention.globalName,
     mention.displayName,
+    mention.display_name,
+    mention.nick,
     mention.name,
-  ].filter(Boolean);
+    mention.user?.username,
+    mention.user?.global_name,
+    mention.user?.globalName,
+  ]).filter(Boolean);
+}
+
+function replaceDiscordUserMentions(text, mentions) {
+  return String(text || '').replace(/<@!?(\d+)>/g, (mention, mentionId) => {
+    const displayName = getMentionLookupNames(mentions, mentionId)[0];
+    return displayName ? `@${displayName}` : mention;
+  });
 }
 
 function getPlayerDisplayName(player, fallback = '') {
@@ -113,6 +144,7 @@ module.exports = {
   normalizeChatHandle,
   compactChatHandle,
   parseDiscordMention,
+  replaceDiscordUserMentions,
   getPlayerDisplayName,
   getPlayerLookupKeys,
   resolvePlayerTarget,

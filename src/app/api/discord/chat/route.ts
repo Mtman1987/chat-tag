@@ -5,7 +5,7 @@ import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getPlayerHelpText, getRulesText, getModHelpText } from '@/lib/chat-tag-command-text';
-import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser } from '@/lib/chat-tag-player-lookup';
+import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser, replaceDiscordUserMentions } from '@/lib/chat-tag-player-lookup';
 import { getBotSecret } from '@/lib/runtime-secrets';
 import { parseDiscordChatPayload } from '@/lib/discord-chat-payload';
 
@@ -203,9 +203,10 @@ export async function POST(req: NextRequest) {
     // Support Kite/root-wrapped payloads, direct payloads, and older field names.
     const data = body?.root || body || {};
     const discordUserId = data.userId || data.discordUserId;
-    const message = data.message || data.content || '';
+    const rawMessage = data.message || data.content || '';
     const rawUserName = data.userName || data.displayName || data.username;
-    const mentions = Array.isArray(data.mentions) ? data.mentions : [];
+    const mentions = data.mentions || [];
+    const message = replaceDiscordUserMentions(rawMessage, mentions);
     const channelId = data.channelId || '';
     const messageId = data.messageId || data.userMessageId || '';
     const userName = rawUserName || 'Unknown';
@@ -224,8 +225,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if it's an spmt command
-    const rawMessage = message.trim();
-    const msg = rawMessage.toLowerCase();
+    const commandMessage = message.trim();
+    const msg = commandMessage.toLowerCase();
     if (debugEnabled('discord-chat') || debugEnabled('discord')) {
       console.log('[Discord Chat] Received message', {
         command: msg.startsWith('spmt ') || msg.startsWith('@spmt '),
