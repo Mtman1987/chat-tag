@@ -94,3 +94,41 @@ export async function publishSpmtEvent(event: SpmtEventInput) {
     return { skipped: false, ok: false };
   }
 }
+
+export type SpmtXpAwardInput = {
+  userId: string;
+  eventType: string;
+  idempotencyKey: string;
+  delta: number;
+  sourceApp?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export async function awardSpmtXp(input: SpmtXpAwardInput) {
+  if (!SPMT_API_KEY) return { skipped: true, reason: 'SPMT_API_KEY not configured' };
+
+  try {
+    const response = await fetch(`${SPMT_BASE_URL.replace(/\/$/, '')}/api/platform/xp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SPMT_API_KEY}`,
+      },
+      body: JSON.stringify({
+        sourceApp: 'chat-tag',
+        ...input,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.warn('[SPMT] XP award failed', { status: response.status, body });
+      return { skipped: false, ok: false, status: response.status };
+    }
+
+    return { skipped: false, ok: true, result: await response.json().catch(() => null) };
+  } catch (error) {
+    console.warn('[SPMT] XP award error', error);
+    return { skipped: false, ok: false };
+  }
+}

@@ -3,7 +3,7 @@ import { isBotRequest, requireAdminRequest } from '@/lib/auth';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
-import { publishSpmtEvent } from '@/lib/spmt-client';
+import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +43,57 @@ function publishGameEvent(type: string, input: {
       ...(input.payload || {}),
     },
   });
+}
+
+function twitchIdFromPlayerId(value: unknown): string {
+  return String(value || '').replace(/^user_/, '').trim();
+}
+
+async function awardChatTagXp(input: {
+  localUserId: string;
+  twitchUsername?: string;
+  displayName?: string;
+  mappedEventType: 'chat-tag.tag' | 'chat-tag.pass';
+  upstreamEventId: string;
+  delta: number;
+  metadata?: Record<string, unknown>;
+}) {
+  try {
+    let twitchId = twitchIdFromPlayerId(input.localUserId);
+    let twitchUsername = normalizeUsername(input.twitchUsername);
+    if (!/^\d+$/.test(twitchId) && twitchUsername) {
+      const twitchUser = await lookupTwitchUser(twitchUsername).catch(() => null);
+      if (twitchUser?.id) twitchId = twitchUser.id;
+      if (twitchUser?.login) twitchUsername = twitchUser.login;
+    }
+    if (!/^\d+$/.test(twitchId) || !twitchUsername) return;
+
+    const identity = await grandfatherSpmtIdentity({
+      twitchId,
+      twitchUsername,
+      displayName: input.displayName || twitchUsername,
+      issueSession: false,
+    });
+    const spmtUserId = identity?.user?.id;
+    if (!spmtUserId) return;
+
+    await awardSpmtXp({
+      userId: spmtUserId,
+      eventType: input.mappedEventType,
+      idempotencyKey: ['chat-tag', input.mappedEventType, input.upstreamEventId, spmtUserId].join(':').slice(0, 200),
+      delta: input.delta,
+      metadata: {
+        schemaVersion: 1,
+        upstreamEventId: input.upstreamEventId,
+        localUserId: input.localUserId,
+        twitchId,
+        twitchUsername,
+        ...(input.metadata || {}),
+      },
+    });
+  } catch (error) {
+    console.warn('[ChatTag] SPMT XP award skipped', error);
+  }
 }
 
 function playerNames(player: TagPlayer | undefined): Set<string> {
@@ -337,21 +388,25 @@ export async function POST(req: NextRequest) {
         tagger.passUsedAt = Date.now();
         
         // Record in history
+        const historyId = makeId('hist');
+        const tagId = makeId('tag');
+        const timestamp = Date.now();
+
         state.tagHistory.push({
-          id: makeId('hist'),
+          id: historyId,
           taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
-          timestamp: Date.now(),
+          timestamp,
           doublePoints: true,
           passUsed: true,
         });
         state.chatTags.push({
-          id: makeId('tag'),
+          id: tagId,
           taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
-          timestamp: Date.now(),
+          timestamp,
           doublePoints: true,
           passUsed: true,
         });
@@ -367,7 +422,8 @@ export async function POST(req: NextRequest) {
         state.tagGame.state.lastTagTime = Date.now();
         
         const scoring = getScoringSettings(state);
-        tagger.score = (tagger.score || 0) + scoring.tagSuccessPoints * 2; // always double
+        const scoreDelta = scoring.tagSuccessPoints * 2;
+        tagger.score = (tagger.score || 0) + scoreDelta; // always double
         tagger.tags = (tagger.tags || 0) + 1;
         tagger.isIt = false;
         tagger.timedImmunityUntil = Date.now() + 20 * 60 * 1000;
@@ -378,7 +434,17 @@ export async function POST(req: NextRequest) {
         target.noTagbackFrom = resolvedUserId;
         target.lastTaggedInStreamId = streamerId;
         
-        return { success: true, doublePoints: true };
+        return {
+          success: true,
+          doublePoints: true,
+          xp: {
+            localUserId: resolvedUserId,
+            twitchUsername: tagger.twitchUsername,
+            displayName: tagger.displayName || tagger.twitchUsername,
+            upstreamEventId: historyId,
+            delta: scoreDelta,
+          },
+        };
       });
       
       if ((result as any).error) {
@@ -390,7 +456,15 @@ export async function POST(req: NextRequest) {
         summary: `${twitchUsername || username || userId} used an SPMT pass to tag ${targetUserId}.`,
         payload: { userId, twitchUsername, targetUserId, streamerId, doublePoints: true },
       });
-      return NextResponse.json(result);
+      const { xp, ...publicResult } = result as any;
+      if (xp) {
+        void awardChatTagXp({
+          ...xp,
+          mappedEventType: 'chat-tag.pass',
+          metadata: { targetUserId, streamerId, surface: 'chat-tag' },
+        });
+      }
+      return NextResponse.json(publicResult);
     }
 
     if (action === 'link-platform') {
@@ -608,21 +682,25 @@ export async function POST(req: NextRequest) {
         const anyoneItNow = playersForDoubleCheck.some((p) => p?.isIt);
         const doublePoints = !anyoneItNow;
 
+        const historyId = makeId('hist');
+        const tagId = makeId('tag');
+        const timestamp = Date.now();
+
         state.tagHistory.push({
-          id: makeId('hist'),
+          id: historyId,
           taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
-          timestamp: Date.now(),
+          timestamp,
           doublePoints,
         });
 
         state.chatTags.push({
-          id: makeId('tag'),
+          id: tagId,
           taggerId: resolvedUserId,
           taggedId: targetUserId,
           streamerId,
-          timestamp: Date.now(),
+          timestamp,
           doublePoints,
         });
 
@@ -634,7 +712,8 @@ export async function POST(req: NextRequest) {
 
         // Update tagger (now no longer "it")
         const scoring = getScoringSettings(state);
-        tagger.score = (tagger.score || 0) + (doublePoints ? scoring.tagSuccessPoints * 2 : scoring.tagSuccessPoints);
+        const scoreDelta = doublePoints ? scoring.tagSuccessPoints * 2 : scoring.tagSuccessPoints;
+        tagger.score = (tagger.score || 0) + scoreDelta;
         tagger.tags = (tagger.tags || 0) + 1;
         tagger.isIt = false;
         tagger.timedImmunityUntil = Date.now() + 20 * 60 * 1000;
@@ -647,7 +726,17 @@ export async function POST(req: NextRequest) {
         target.noTagbackFrom = resolvedUserId;
         target.lastTaggedInStreamId = streamerId;
 
-        return { success: true, doublePoints };
+        return {
+          success: true,
+          doublePoints,
+          xp: {
+            localUserId: resolvedUserId,
+            twitchUsername: tagger.twitchUsername,
+            displayName: tagger.displayName || tagger.twitchUsername,
+            upstreamEventId: historyId,
+            delta: scoreDelta,
+          },
+        };
       });
 
       if ((result as any).error) {
@@ -660,7 +749,15 @@ export async function POST(req: NextRequest) {
         summary: `${twitchUsername || username || userId} tagged ${targetUserId}.`,
         payload: { userId, twitchUsername, targetUserId, streamerId, doublePoints: (result as any).doublePoints },
       });
-      return NextResponse.json(result);
+      const { xp, ...publicResult } = result as any;
+      if (xp) {
+        void awardChatTagXp({
+          ...xp,
+          mappedEventType: 'chat-tag.tag',
+          metadata: { targetUserId, streamerId, surface: 'chat-tag' },
+        });
+      }
+      return NextResponse.json(publicResult);
     }
 
     if (action === 'sleep') {
