@@ -1690,9 +1690,11 @@ console.log = (...args) => {
     
     const rawMessage = message.trim();
     const msg = rawMessage.toLowerCase();
-    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ')) return;
+    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ')) return;
     // Normalize: ensure @spmt prefix
-    const normalizedMsg = msg.startsWith('spmt ') ? '@' + rawMessage.trim() : rawMessage.trim();
+    const normalizedMsg = (msg.startsWith('spmt ') || msg.startsWith('!spmt '))
+      ? '@' + rawMessage.trim().replace(/^!/, '')
+      : rawMessage.trim();
 
     // In shared chat, process mirrored partner messages too, but map to source channel context.
     const rawChannelName = channel.replace('#', '');
