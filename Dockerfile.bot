@@ -6,6 +6,9 @@ ARG BUILD_SHA=unknown
 LABEL org.opencontainers.image.revision=$GITHUB_SHA
 LABEL com.github.sha=$GH_SHA
 LABEL app.build_sha=$BUILD_SHA
+LABEL GITHUB_SHA=$GITHUB_SHA
+LABEL GH_SHA=$GH_SHA
+LABEL BUILD_SHA=$BUILD_SHA
 COPY package*.json ./
 RUN npm ci --only=production
 COPY bot.js ./
