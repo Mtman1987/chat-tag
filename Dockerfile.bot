@@ -1,5 +1,11 @@
 FROM node:20-alpine
 WORKDIR /app
+ARG GITHUB_SHA=unknown
+ARG GH_SHA=unknown
+ARG BUILD_SHA=unknown
+LABEL org.opencontainers.image.revision=$GITHUB_SHA
+LABEL com.github.sha=$GH_SHA
+LABEL app.build_sha=$BUILD_SHA
 COPY package*.json ./
 RUN npm ci --only=production
 COPY bot.js ./
