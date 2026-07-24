@@ -2503,10 +2503,11 @@ console.log = (...args) => {
     }
 
     else if (cmd === 'pack' || cmd === 'quackpack') {
+      const streamweaverTenantId = String(isMirroredSharedMessage ? sourceRoomId : roomId || '').trim();
       const res = await apiCall('/api/quackverse/pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'open', userId, twitchUsername: senderLogin })
+        body: JSON.stringify({ action: 'open', userId, twitchUsername: senderLogin, streamweaverTenantId })
       });
       if (res?.error) {
         reply(`@${user} ${res.error} ${Number(res.packsRemaining || 0)}/3 packs left today.`);

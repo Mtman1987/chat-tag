@@ -7,6 +7,7 @@ import { openQuackverseBoosterPack } from '@/lib/quackverse-packs';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { makeId, updateAppState, readAppState } from '@/lib/volume-store';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 import {
   normalizeQuackverseState,
   quackverseDailyPackLimit,
@@ -32,6 +33,19 @@ function publicCollection(collection: ReturnType<typeof getCollectionForUser>) {
 }
 
 const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
+
+function getStreamWeaverOverlaySecret() {
+  try {
+    return getStreamweaverSecret();
+  } catch (error) {
+    console.warn('[Quackverse] StreamWeaver overlay secret unavailable:', error instanceof Error ? error.message : error);
+    return '';
+  }
+}
+
+function normalizeOverlayTenantId(value: unknown) {
+  return String(value || '').trim().replace(/^user_/, '') || undefined;
+}
 
 function absoluteUrl(origin: string, value: string) {
   try {
@@ -73,8 +87,9 @@ async function notifyStreamWeaverPackOverlay(input: {
   username: string;
   packId: string;
   pack: any[];
+  tenantId?: string;
 }) {
-  const secret = String(process.env.BOT_SECRET_KEY || process.env.CHAT_TAG_BOT_SECRET || '').trim();
+  const secret = getStreamWeaverOverlaySecret();
   if (!secret || !STREAMWEAVER_URL || !input.origin) return;
 
   const packImageUrl = `${input.origin}/api/quackverse/pack/image?packId=${encodeURIComponent(input.packId)}&t=${Date.now()}`;
@@ -88,7 +103,7 @@ async function notifyStreamWeaverPackOverlay(input: {
     };
   });
 
-  await fetch(`${STREAMWEAVER_URL}/api/quackverse/pack-overlay`, {
+  const response = await fetch(`${STREAMWEAVER_URL}/api/quackverse/pack-overlay`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -99,8 +114,14 @@ async function notifyStreamWeaverPackOverlay(input: {
       setName: 'Quackverse',
       pack,
       packImageUrl,
+      tenantId: input.tenantId,
     }),
-  }).catch((error) => console.warn('[Quackverse] StreamWeaver overlay notify failed:', error));
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    console.warn('[Quackverse] StreamWeaver overlay notify failed:', response.status, detail.slice(0, 300));
+  }
 }
 
 function summarizePackAudit(events: any[]) {
@@ -200,6 +221,7 @@ export async function POST(req: NextRequest) {
   const { userId, twitchUsername } = resolveRequestUser(req, body);
   if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const normalizedUsername = String(twitchUsername || '').trim().toLowerCase();
+  const overlayTenantId = normalizeOverlayTenantId(body?.streamweaverTenantId || body?.tenantId || body?.streamerId);
   const twitchProfile = normalizedUsername ? await lookupTwitchUser(normalizedUsername).catch(() => null) : null;
   const userRecordId = String(body?.twitchUserId || twitchProfile?.id || userId.replace(/^user_/, '') || '').trim();
 
@@ -339,7 +361,10 @@ export async function POST(req: NextRequest) {
       username: normalizedUsername || userRecordId || userId,
       packId: payload.packId,
       pack: payload.pack,
-    }).catch(() => {});
+      tenantId: overlayTenantId,
+    }).catch((error) => {
+      console.warn('[Quackverse] StreamWeaver overlay notify failed:', error instanceof Error ? error.message : error);
+    });
   }
   return NextResponse.json(payload);
 }
