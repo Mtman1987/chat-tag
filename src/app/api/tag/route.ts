@@ -4,6 +4,7 @@ import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
+import { mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,7 @@ async function awardChatTagXp(input: {
   localUserId: string;
   twitchUsername?: string;
   displayName?: string;
-  mappedEventType: 'chat-tag.tag' | 'chat-tag.pass';
+  mappedEventType: Extract<XpMappedEventTypeV1, 'chat-tag.tag' | 'chat-tag.pass'>;
   upstreamEventId: string;
   delta: number;
   metadata?: Record<string, unknown>;
@@ -77,20 +78,19 @@ async function awardChatTagXp(input: {
     const spmtUserId = identity?.user?.id;
     if (!spmtUserId) return;
 
-    await awardSpmtXp({
+    const award = mappedXpAwardV1({
       userId: spmtUserId,
-      eventType: input.mappedEventType,
-      idempotencyKey: ['chat-tag', input.mappedEventType, input.upstreamEventId, spmtUserId].join(':').slice(0, 200),
-      delta: input.delta,
+      mappedEventType: input.mappedEventType,
+      upstreamEventId: input.upstreamEventId,
+      deltaOverride: input.delta,
       metadata: {
-        schemaVersion: 1,
-        upstreamEventId: input.upstreamEventId,
         localUserId: input.localUserId,
         twitchId,
         twitchUsername,
         ...(input.metadata || {}),
       },
     });
+    await awardSpmtXp(award);
   } catch (error) {
     console.warn('[ChatTag] SPMT XP award skipped', error);
   }
