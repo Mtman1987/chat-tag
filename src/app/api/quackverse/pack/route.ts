@@ -247,6 +247,16 @@ export async function POST(req: NextRequest) {
       collection.openedToday = 0;
     }
 
+    if (action === 'refill-daily') {
+      if (!isAdminUsername(normalizedUsername)) {
+        return { error: 'Admin access required.', status: 403, collection };
+      }
+      collection.openedToday = 0;
+      state.updatedAt = new Date().toISOString();
+      appState.quackverse = state;
+      return { collection, refilled: true };
+    }
+
     if (action === 'open') {
       if (collection.openedToday >= quackverseDailyPackLimit) {
         appState.quackverse = state;

@@ -2617,6 +2617,23 @@ console.log = (...args) => {
       }
     }
 
+    else if (cmd === 'refillpacks') {
+      if (!isAdminUser) {
+        reply(`@${user} Admin access required.`);
+        return;
+      }
+      const res = await apiCall('/api/quackverse/pack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'refill-daily', userId, twitchUsername: senderLogin })
+      });
+      if (res?.error) {
+        reply(`@${user} ${res.error}`);
+        return;
+      }
+      reply(`@${user} Quackverse test packs refilled. ${Number(res?.packsRemaining || 0)} packs available.`);
+    }
+
     else if (cmd === 'pack' || cmd === 'quackpack') {
       const streamweaverTenantId = String(isMirroredSharedMessage ? sourceRoomId : roomId || '').trim();
       const res = await apiCall('/api/quackverse/pack', {
