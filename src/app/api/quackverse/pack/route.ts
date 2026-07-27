@@ -47,14 +47,6 @@ function normalizeOverlayTenantId(value: unknown) {
   return String(value || '').trim().replace(/^user_/, '') || undefined;
 }
 
-function absoluteUrl(origin: string, value: string) {
-  try {
-    return new URL(value, origin).toString();
-  } catch {
-    return value;
-  }
-}
-
 function resolvePublicOrigin(req: NextRequest, body?: any) {
   const fromBody = String(body?.publicOrigin || '').trim();
   if (fromBody) {
@@ -70,15 +62,19 @@ function resolvePublicOrigin(req: NextRequest, body?: any) {
   return getPublicAppOrigin(req);
 }
 
+function quackverseCardImageUrl(origin: string, cardId: unknown) {
+  return `${origin}/api/quackverse/pack-preview?ids=${encodeURIComponent(String(cardId))}&mode=card`;
+}
+
 function quackverseOverlayCard(card: any, origin: string) {
-  const artUrl = card?.artUrl || card?.artHoverUrl || '';
+  const cardId = Number(card?.id);
   return {
-    id: `qv-${card.id}`,
-    number: String(card.id),
+    id: `qv-${cardId}`,
+    number: String(cardId),
     name: card.name,
     rarity: card.rarity || 'Unknown',
     setCode: 'QV',
-    imageUrl: artUrl ? absoluteUrl(origin, artUrl) : `${origin}/api/quackverse/pack/image?packId=__PACK_ID__`,
+    imageUrl: quackverseCardImageUrl(origin, cardId),
   };
 }
 
@@ -93,15 +89,7 @@ async function notifyStreamWeaverPackOverlay(input: {
   if (!secret || !STREAMWEAVER_URL || !input.origin) return;
 
   const packImageUrl = `${input.origin}/api/quackverse/pack/image?packId=${encodeURIComponent(input.packId)}&t=${Date.now()}`;
-  const pack = input.pack.map((card) => {
-    const normalized = quackverseOverlayCard(card, input.origin);
-    return {
-      ...normalized,
-      imageUrl: normalized.imageUrl.includes('__PACK_ID__')
-        ? normalized.imageUrl.replace('__PACK_ID__', encodeURIComponent(input.packId))
-        : normalized.imageUrl,
-    };
-  });
+  const pack = input.pack.map((card) => quackverseOverlayCard(card, input.origin));
 
   const response = await fetch(`${STREAMWEAVER_URL}/api/quackverse/pack-overlay`, {
     method: 'POST',
@@ -356,7 +344,12 @@ export async function POST(req: NextRequest) {
 
   const payload = {
     ...publicCollection((result as any).collection),
-    pack: Array.isArray((result as any).pack) ? (result as any).pack : undefined,
+    pack: Array.isArray((result as any).pack)
+      ? (result as any).pack.map((card: any) => ({
+          ...card,
+          cardImageUrl: publicOrigin ? quackverseCardImageUrl(publicOrigin, card.id) : '',
+        }))
+      : undefined,
     packId: typeof (result as any).packId === 'string' ? (result as any).packId : undefined,
     packImageUrl: publicOrigin && typeof (result as any).packId === 'string'
       ? `${publicOrigin}/api/quackverse/pack/image?packId=${encodeURIComponent((result as any).packId)}`

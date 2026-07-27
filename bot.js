@@ -2664,21 +2664,31 @@ console.log = (...args) => {
         .map(([rarity, count]) => `${rarity}: ${count}`)
         .join(' | ') || 'Unknown';
 
-      if (res?.packImageUrl) {
+      if (packCards.length > 0) {
+        const cardEmbeds = packCards.slice(0, 5).map((card) => ({
+          title: `#${card?.id || '?'} ${card?.name || 'Unknown Card'}`,
+          description: `${card?.rarity || 'Unknown'} · ${card?.type || 'Quackverse'}`,
+          color: 0x00d9ff,
+          image: { url: card?.cardImageUrl },
+        })).filter((embed) => embed.image.url);
         const announceRes = await apiCall('/api/discord/announce', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: '🦆 Quackverse Pack Opened',
-            description: `**@${user}** opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`,
-            imageUrl: res.packImageUrl,
-            color: 0x00d9ff,
-            fields: [
-              { name: 'Pack', value: packCardLines, inline: false },
-              { name: 'Collection', value: `${collectionTotal} total cards | ${collectionUnique} unique`, inline: true },
-              { name: 'Rarity Breakdown', value: rarityText, inline: false },
+            embeds: [
+              {
+                title: '🦆 Quackverse Pack Opened',
+                description: `**@${user}** opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`,
+                color: 0x00d9ff,
+                fields: [
+                  { name: 'Pack', value: packCardLines, inline: false },
+                  { name: 'Collection', value: `${collectionTotal} total cards | ${collectionUnique} unique`, inline: true },
+                  { name: 'Rarity Breakdown', value: rarityText, inline: false },
+                ],
+                footer: { text: 'SPMT Chat Tag' },
+              },
+              ...cardEmbeds,
             ],
-            footerText: 'SPMT Chat Tag',
           }),
         });
         if (announceRes?.__ok === false || announceRes?.success === false) {

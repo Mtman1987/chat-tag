@@ -127,15 +127,6 @@ async function sendDiscordPackReply(
   const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
   const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
   const uniqueCards = new Set(collectionIds).size;
-  const previewUrl = absolutePublicUrl(
-    req,
-    typeof packData.packImageUrl === 'string' && packData.packImageUrl
-      ? packData.packImageUrl
-      : typeof packData.packId === 'string' && packData.packId
-        ? `/api/quackverse/pack/image?packId=${encodeURIComponent(packData.packId)}&t=${Date.now()}`
-        : '',
-  );
-
   const embed: any = {
     title: 'Quackverse Pack Opened',
     description: `🦆 @${userName} opened a Quackverse pack: ${packNames}. ${Number(packData.packsRemaining || 0)}/3 packs left today.`,
@@ -160,13 +151,24 @@ async function sendDiscordPackReply(
     footer: { text: 'SPMT Chat Tag' },
     timestamp: new Date().toISOString(),
   };
-  if (previewUrl) embed.image = { url: previewUrl };
+  const cardEmbeds = packCards.slice(0, 5).map((card: any) => {
+    const cardImageUrl = absolutePublicUrl(
+      req,
+      card?.cardImageUrl || `/api/quackverse/pack-preview?ids=${encodeURIComponent(String(card?.id || ''))}&mode=card`,
+    );
+    return {
+      title: `#${card?.id || '?'} ${card?.name || 'Unknown Card'}`,
+      description: `${card?.rarity || 'Unknown'} · ${card?.type || 'Quackverse'}`,
+      color: 0x00d9ff,
+      ...(cardImageUrl ? { image: { url: cardImageUrl } } : {}),
+    };
+  });
 
   const result = await sendDiscordMessage({
     channelId,
     content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
-    embeds: [embed],
+    embeds: [embed, ...cardEmbeds],
     allowedMentions: { parse: [] },
     botToken: DISCORD_BOT_TOKEN,
     recordHistorySource: 'discord/chat-pack',

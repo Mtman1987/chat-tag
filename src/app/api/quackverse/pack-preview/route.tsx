@@ -208,6 +208,150 @@ function PackCard({ card }: { card: any }) {
   );
 }
 
+function SingleCard({ card }: { card: any }) {
+  const rarity = rarityColors[card.rarity] || rarityColors.Unknown;
+  const abilities = (card.abilities.length ? card.abilities : [card.effect]).filter(Boolean).slice(0, 2);
+  const flavorLines = wrapText(card.flavor || card.role || card.effect || '', 52, 3);
+
+  return (
+    <div
+      style={{
+        width: 720,
+        height: 1008,
+        display: 'flex',
+        flexDirection: 'column',
+        border: `16px solid ${rarity.border}`,
+        borderRadius: 42,
+        background: 'linear-gradient(145deg, #07111f 0%, #0f172a 58%, #111827 100%)',
+        padding: 34,
+        color: '#f8fafc',
+        fontFamily: 'Arial, sans-serif',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 470 }}>
+          <div style={{ display: 'flex', fontSize: 42, fontWeight: 900, lineHeight: 1.05 }}>{card.name}</div>
+          <div style={{ marginTop: 10, display: 'flex', fontSize: 23, fontWeight: 700, color: '#bae6fd' }}>
+            #{card.id} · {card.role || card.type}
+          </div>
+        </div>
+        <div
+          style={{
+            border: `3px solid ${rarity.border}`,
+            borderRadius: 16,
+            background: rarity.fill,
+            color: rarity.text,
+            display: 'flex',
+            fontSize: 22,
+            fontWeight: 900,
+            padding: '12px 18px',
+          }}
+        >
+          {card.rarity}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 24,
+          width: '100%',
+          height: 430,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          borderRadius: 28,
+          border: `3px solid ${rarity.border}`,
+          background: rarity.fill,
+        }}
+      >
+        {card.art ? (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              backgroundImage: `url(${card.art})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: rarity.border }}>
+            <div style={{ display: 'flex', fontSize: 92, fontWeight: 900 }}>QV</div>
+            <div style={{ marginTop: 8, display: 'flex', fontSize: 30, fontWeight: 800 }}>{card.type}</div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 22, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+        {['ATK', 'DEF', 'SPD', 'SPC', 'HP'].map((stat) => (
+          <div
+            key={stat}
+            style={{
+              width: 116,
+              height: 78,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 16,
+              border: '2px solid rgba(255,255,255,0.12)',
+              background: 'rgba(255,255,255,0.055)',
+            }}
+          >
+            <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#94a3b8' }}>{stat}</div>
+            <div style={{ marginTop: 5, display: 'flex', fontSize: 31, fontWeight: 900 }}>
+              {card.type === 'Equipment' ? '—' : statValue(card, stat)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {abilities.map((ability: string, index: number) => (
+          <div
+            key={`${card.id}-${index}`}
+            style={{
+              minHeight: 76,
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: 16,
+              background: 'rgba(0,0,0,0.28)',
+              padding: '12px 18px',
+              color: '#dbeafe',
+              fontSize: 21,
+              fontWeight: 700,
+              lineHeight: 1.2,
+            }}
+          >
+            {wrapText(ability, 58, 2).map((line) => <div key={line} style={{ display: 'flex' }}>{line}</div>)}
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          marginTop: 'auto',
+          minHeight: 78,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          borderRadius: 18,
+          border: '2px solid rgba(255,255,255,0.09)',
+          background: 'rgba(255,255,255,0.045)',
+          padding: '12px 18px',
+          color: '#cbd5e1',
+          fontSize: 20,
+          fontStyle: 'italic',
+          lineHeight: 1.2,
+        }}
+      >
+        {flavorLines.map((line) => <div key={line} style={{ display: 'flex' }}>{line}</div>)}
+      </div>
+    </div>
+  );
+}
+
 export async function GET(req: NextRequest) {
   const ids = String(req.nextUrl.searchParams.get('ids') || '')
     .split(',')
@@ -239,6 +383,16 @@ export async function GET(req: NextRequest) {
       };
     })
   );
+
+  if (req.nextUrl.searchParams.get('mode') === 'card') {
+    return new ImageResponse(<SingleCard card={cards[0]} />, {
+      width: 720,
+      height: 1008,
+      headers: {
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+  }
 
   return new ImageResponse(
     (
