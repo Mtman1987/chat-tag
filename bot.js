@@ -452,19 +452,28 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Forward Twitch events to DSH for leaderboard points (fire and forget)
+// Forward Twitch events to DSH for leaderboard points.
 let dshErrorSuppressedUntil = 0;
 let dshErrorCount = 0;
 const DSH_ERROR_WINDOW_MS = 60000;
 
-function forwardToDSH(eventData) {
-  fetch(`${DSH_API_BASE}/api/twitch/events`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(eventData),
-  }).then(r => {
+async function forwardToDSH(eventData) {
+  try {
+    const r = await fetch(`${DSH_API_BASE}/api/twitch/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventData),
+    });
+    const text = await r.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+
     if (!r.ok) {
-      if (Date.now() < dshErrorSuppressedUntil) return;
+      if (Date.now() < dshErrorSuppressedUntil) return { success: false, status: r.status };
       dshErrorCount++;
       if (dshErrorCount > 3) {
         console.log(`[DSH] Twitch event forward failing (${dshErrorCount} errors, not Discord webhook), suppressing logs for 60s`);
@@ -476,7 +485,10 @@ function forwardToDSH(eventData) {
     } else {
       dshErrorCount = 0;
     }
-  }).catch(e => {
+    return data && typeof data === 'object'
+      ? { ...data, status: r.status }
+      : { success: r.ok, status: r.status };
+  } catch (e) {
     if (Date.now() < dshErrorSuppressedUntil) return;
     dshErrorCount++;
     if (dshErrorCount > 3) {
@@ -486,7 +498,8 @@ function forwardToDSH(eventData) {
     } else {
       console.error('[DSH] Twitch event forward error (not Discord webhook):', e.message);
     }
-  });
+    return { success: false, error: e.message };
+  }
 }
 
 function dedupeSharedChatChannels(members) {
@@ -516,6 +529,40 @@ function dedupeSharedChatChannels(members) {
     }
   }
   return channels;
+}
+
+const RECENT_LIVE_RAID_WINDOW_MS = 10 * 60 * 1000;
+const recentlyLiveChannels = new Map();
+const RAID_EVENT_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+const recentRaidRewards = new Map();
+
+function recordRecentlyLiveChannels(members, now = Date.now()) {
+  for (const member of members || []) {
+    const login = String(member?.twitchUsername || '').trim().toLowerCase();
+    if (login) recentlyLiveChannels.set(login, now);
+  }
+
+  for (const [login, lastLiveAt] of recentlyLiveChannels) {
+    if (now - lastLiveAt > RECENT_LIVE_RAID_WINDOW_MS) recentlyLiveChannels.delete(login);
+  }
+}
+
+function wasRecentlyLive(login, now = Date.now()) {
+  const normalized = String(login || '').trim().toLowerCase();
+  const lastLiveAt = recentlyLiveChannels.get(normalized) || 0;
+  return Boolean(lastLiveAt && now - lastLiveAt <= RECENT_LIVE_RAID_WINDOW_MS);
+}
+
+function isDuplicateRaidReward(targetChannel, raiderLogin, now = Date.now()) {
+  const key = `${String(targetChannel || '').replace(/^#/, '').toLowerCase()}:${String(raiderLogin || '').toLowerCase()}`;
+  const lastRewardAt = recentRaidRewards.get(key) || 0;
+  recentRaidRewards.set(key, now);
+
+  for (const [raidKey, timestamp] of recentRaidRewards) {
+    if (now - timestamp > RAID_EVENT_DEDUPE_WINDOW_MS) recentRaidRewards.delete(raidKey);
+  }
+
+  return Boolean(lastRewardAt && now - lastRewardAt <= RAID_EVENT_DEDUPE_WINDOW_MS);
 }
 
 function errorMessage(err) {
@@ -729,6 +776,7 @@ async function getLiveMembersCached(force = false) {
 
   const liveData = await apiCall('/api/discord/live-members');
   const members = Array.isArray(liveData?.liveMembers) ? liveData.liveMembers : [];
+  recordRecentlyLiveChannels(members, now);
   const map = new Map();
 
   for (const member of members) {
@@ -1002,6 +1050,7 @@ console.log = (...args) => {
       
       // Get live channels
       const liveData = await apiCall('/api/discord/live-members');
+      recordRecentlyLiveChannels(liveData?.liveMembers || []);
       const liveMembers = (liveData?.liveMembers || []).filter((m) =>
         allChannelNames.includes((m.twitchUsername || '').toLowerCase())
       );
@@ -1247,6 +1296,7 @@ console.log = (...args) => {
       if (channels?.channels) {
         const allChannelNames = channels.channels.map(c => typeof c === 'string' ? c : c.name);
         const liveData = await apiCall('/api/discord/live-members');
+        recordRecentlyLiveChannels(liveData?.liveMembers || []);
         const liveMembers = (liveData?.liveMembers || []).filter((m) =>
           allChannelNames.includes((m.twitchUsername || '').toLowerCase())
         );
@@ -1341,16 +1391,20 @@ console.log = (...args) => {
     await sendChatWithSharedFallback(client, targetChannel, message, { warnOnFallback: true });
   }
 
-  async function grantPassForEvent(channel, userId, login, reason) {
+  async function grantPassForEvent(channel, userId, login, reason, options = {}) {
     console.log(`[Event] 🎫 Grant pass: ${login} (${userId}) — ${reason}`);
-    const result = await apiCall('/api/tag', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'grant-pass', userId, twitchUsername: login, reason })
-    }).catch(() => null);
+    const result = options.requireRecentLive && !wasRecentlyLive(login)
+      ? { granted: false, reason: 'raider-not-recently-live' }
+      : await apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'grant-pass', userId, twitchUsername: login, reason })
+        }).catch(() => null);
     if (result?.granted) {
       console.log(`[Event] ✅ Pass granted to ${login} (${result.passCount}/3)`);
-      await announceGrantedPass(channel, login, reason, result.passCount);
+      if (options.announce !== false) {
+        await announceGrantedPass(channel, login, reason, result.passCount);
+      }
     } else {
       console.log(`[Event] ⏭️ Pass not granted to ${login}: ${result?.reason || 'already has one / not a player'}`);
     }
@@ -1358,9 +1412,75 @@ console.log = (...args) => {
     await apiCall('/api/tag/mod-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor: 'system', action: 'grant-pass', target: login, detail: reason, channel })
+      body: JSON.stringify({
+        actor: 'system',
+        action: result?.granted ? 'grant-pass' : 'grant-pass-denied',
+        target: login,
+        detail: result?.granted ? reason : `${reason}; denied=${result?.reason || 'unknown'}`,
+        channel
+      })
     }).catch(() => {});
     return result;
+  }
+
+  async function announceRaidSupport(channel, login, pointsResult, passResult) {
+    const targetChannel = String(channel || '').replace(/^#/, '').toLowerCase();
+    if (!targetChannel || !login) return;
+
+    const pointsAwarded = Number(pointsResult?.pointsAwarded);
+    const parts = [`🚀 Thanks for the raid and the support, @${login}!`];
+    if (Number.isFinite(pointsAwarded) && pointsAwarded >= 0) {
+      parts.push(`You earned +${pointsAwarded} Space Mountain leaderboard points.`);
+    } else if (pointsResult?.reason === 'user-not-in-server') {
+      parts.push(`I couldn't match your Twitch account for Space Mountain points.`);
+    } else {
+      parts.push(`I couldn't confirm the Space Mountain points award.`);
+    }
+
+    if (passResult?.granted) {
+      parts.push(`🎟️ You also earned a ChatTag pass (${passResult.passCount}/3) for a double-points tag!`);
+    } else if (passResult?.reason === 'max-passes') {
+      parts.push(`Your ChatTag pass wallet is already full (${passResult.passCount || 3}/3).`);
+    } else if (passResult?.reason === 'not-a-player') {
+      parts.push(`Type "spmt join" to play ChatTag and earn a pass for double points next time!`);
+    }
+
+    await sendChatWithSharedFallback(client, targetChannel, parts.join(' '), { warnOnFallback: true });
+  }
+
+  async function handleRaidSupport(channel, login, viewers, twitchId = '') {
+    const targetChannel = String(channel || '').replace(/^#/, '').toLowerCase();
+    if (!targetChannel || !login) return;
+    if (isDuplicateRaidReward(targetChannel, login)) {
+      console.log(`[Event] ⏭️ Duplicate raid reward ignored: ${login} -> ${targetChannel}`);
+      return;
+    }
+    if (!wasRecentlyLive(login)) {
+      console.log(`[Event] ⏭️ Raid rewards denied for ${login}: raider-not-recently-live`);
+      return;
+    }
+
+    const pointsResult = await forwardToDSH({
+      type: 'raid',
+      twitchLogin: login,
+      twitchId,
+      username: login,
+      channel: targetChannel,
+      viewers,
+    });
+
+    const twitchUser = twitchId ? { id: twitchId } : await helixGetUser(login);
+    const passResult = twitchUser?.id
+      ? await grantPassForEvent(
+          targetChannel,
+          `user_${twitchUser.id}`,
+          login,
+          `raided with ${viewers} viewers`,
+          { announce: false },
+        )
+      : { granted: false, reason: 'not-a-player' };
+
+    await announceRaidSupport(targetChannel, login, pointsResult, passResult);
   }
 
   // ── TMI.js fallback event handlers (kept as backup, EventSub is primary) ──
@@ -1405,12 +1525,7 @@ console.log = (...args) => {
   client.on('raided', async (channel, username, viewers) => {
     const login = (username || '').toLowerCase();
     console.log(`[TMI-Event] Raid: ${login} raided with ${viewers} viewers`);
-    forwardToDSH({ type: 'raid', twitchLogin: login, username: login, channel: channel.replace('#', ''), viewers });
-    // We don't have user-id from raided event, look it up
-    const twitchUser = await helixGetUser(login);
-    if (!twitchUser) return;
-    const uid = `user_${twitchUser.id}`;
-    await grantPassForEvent(channel, uid, login, `raided with ${viewers} viewers (tmi)`);
+    await handleRaidSupport(channel, login, viewers);
   });
 
   // ── EventSub WebSocket (primary event source) ──
@@ -1474,7 +1589,7 @@ console.log = (...args) => {
     await subscribeEventSub('channel.raid', '1', { to_broadcaster_user_id: broadcasterId });
   }
 
-  function handleEventSubNotification(payload) {
+  async function handleEventSubNotification(payload) {
     const type = payload?.subscription?.type;
     const event = payload?.event;
     if (!type || !event) return;
@@ -1530,13 +1645,11 @@ console.log = (...args) => {
       }
       case 'channel.raid': {
         const raiderLogin = (event.from_broadcaster_user_login || '').toLowerCase();
-        const raiderId = event.from_broadcaster_user_id ? `user_${event.from_broadcaster_user_id}` : null;
         const viewers = event.viewers || 0;
         const targetLogin = (event.to_broadcaster_user_login || '').toLowerCase();
         console.log(`[EventSub] 🚀 Raid: ${raiderLogin} raided ${targetLogin} with ${viewers} viewers`);
-        forwardToDSH({ type: 'raid', twitchLogin: raiderLogin, twitchId: event.from_broadcaster_user_id, username: raiderLogin, channel: targetLogin, viewers });
-        if (raiderId && raiderLogin) {
-          grantPassForEvent(targetLogin, raiderId, raiderLogin, `raided with ${viewers} viewers`);
+        if (raiderLogin) {
+          await handleRaidSupport(targetLogin, raiderLogin, viewers, event.from_broadcaster_user_id || '');
         }
         break;
       }
@@ -1593,7 +1706,7 @@ console.log = (...args) => {
         if (messageType === 'session_keepalive') return; // silent
 
         if (messageType === 'notification') {
-          handleEventSubNotification(msg.payload);
+          await handleEventSubNotification(msg.payload);
           return;
         }
       } catch (err) {

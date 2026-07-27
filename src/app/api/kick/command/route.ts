@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState, makeId, isTimedImmune } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { getPassSpendDenial } from '@/lib/pass-policy';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 
@@ -271,6 +272,11 @@ export async function POST(req: NextRequest) {
           if (tagger.passCount === undefined) tagger.passCount = tagger.hasPass ? 1 : 0;
           if (tagger.passCount <= 0) return { error: "You don't have a pass!" };
           if (resolvedUserId === targetPlayer.id) return { error: "You can't pass to yourself!" };
+          const spendDenial = getPassSpendDenial(s.tagHistory || [], resolvedUserId!);
+          if (spendDenial) {
+            const unit = spendDenial.hoursLeft === 1 ? 'hour' : 'hours';
+            return { error: `You already used 3 passes in the last 24 hours. Try again in ${spendDenial.hoursLeft} ${unit}.` };
+          }
           const immuneCheck = isPlayerImmune(tgt, resolvedUserId!);
           if (immuneCheck.immune) return { error: `${tgt.twitchUsername || 'Target'} is immune (${immuneCheck.reason})` };
 

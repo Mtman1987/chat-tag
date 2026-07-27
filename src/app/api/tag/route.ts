@@ -3,6 +3,7 @@ import { isBotRequest, requireAdminRequest } from '@/lib/auth';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { MAX_PASSES, getPassSpendDenial } from '@/lib/pass-policy';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
 import { mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
 
@@ -299,6 +300,7 @@ export async function POST(req: NextRequest) {
       'clear-winners',
       'reset-scores',
       'award-points',
+      'grant-pass',
       'set-it',
     ]);
 
@@ -327,7 +329,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'grant-pass') {
-      const MAX_PASSES = 3;
       const result = await updateAppState((state) => {
         const player = state.tagPlayers[userId];
         if (!player) return { granted: false, reason: 'not-a-player' };
@@ -336,7 +337,7 @@ export async function POST(req: NextRequest) {
         if (player.passCount === undefined) {
           player.passCount = player.hasPass ? 1 : 0;
         }
-        
+
         if (player.passCount >= MAX_PASSES) {
           return { granted: false, reason: 'max-passes', passCount: player.passCount };
         }
@@ -371,6 +372,15 @@ export async function POST(req: NextRequest) {
         }
         if (tagger.passCount <= 0) return { status: 400, error: 'You don\'t have a pass! Earn one by gifting a sub, cheering 100+ bits, or joining a hype train.' };
         if (resolvedUserId === targetUserId) return { status: 400, error: 'You can\'t pass to yourself!' };
+
+        const spendDenial = getPassSpendDenial(state.tagHistory || [], resolvedUserId);
+        if (spendDenial) {
+          const unit = spendDenial.hoursLeft === 1 ? 'hour' : 'hours';
+          return {
+            status: 429,
+            error: `You already used 3 passes in the last 24 hours. Try again in ${spendDenial.hoursLeft} ${unit}.`,
+          };
+        }
         
         const immuneCheck = isPlayerImmune(state, target, resolvedUserId);
         if (immuneCheck.immune) {
