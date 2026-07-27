@@ -53,6 +53,11 @@ export function Header() {
                     <AvatarFallback>{user.twitchUsername?.charAt(0)?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <span className="hidden text-sm font-medium text-slate-100 sm:inline">{user.twitchUsername}</span>
+                  {user.level !== null && user.xp !== null ? (
+                    <span className="hidden rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-xs font-semibold text-cyan-100 md:inline">
+                      LVL {user.level} · {user.xp.toLocaleString()} XP
+                    </span>
+                  ) : null}
                   <Button
                     variant="ghost"
                     size="icon"

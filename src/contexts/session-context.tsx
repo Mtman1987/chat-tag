@@ -5,6 +5,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 interface SessionUser {
   twitchUsername: string;
   avatarUrl: string;
+  xp: number | null;
+  level: number | null;
 }
 
 interface SessionContextState {
@@ -36,7 +38,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('twitchUsername', twitch.name);
           localStorage.setItem('twitchAvatar', twitch.avatar || '');
           if (!cancelled) {
-            setUser({ twitchUsername: twitch.name, avatarUrl: twitch.avatar || '' });
+            setUser({ twitchUsername: twitch.name, avatarUrl: twitch.avatar || '', xp: null, level: null });
+            void fetch('/api/spmt/xp', { credentials: 'same-origin', cache: 'no-store' })
+              .then((xpResponse) => xpResponse.ok ? xpResponse.json() : null)
+              .then((xpData) => {
+                const xp = Number(xpData?.xp);
+                const level = Number(xpData?.level);
+                if (cancelled || !Number.isFinite(xp) || !Number.isFinite(level)) return;
+                setUser((current) => current ? {
+                  ...current,
+                  xp: Math.max(0, Math.trunc(xp)),
+                  level: Math.max(1, Math.trunc(level)),
+                } : current);
+              })
+              .catch(() => {});
           }
           return;
         }
@@ -46,7 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const username = localStorage.getItem('twitchUsername');
         const avatar = localStorage.getItem('twitchAvatar');
         if (username && !cancelled) {
-          setUser({ twitchUsername: username, avatarUrl: avatar || '' });
+          setUser({ twitchUsername: username, avatarUrl: avatar || '', xp: null, level: null });
           return;
         }
       }
