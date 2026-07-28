@@ -2,6 +2,7 @@ import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import sharp from 'sharp';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { normalizeQuackverseArtManifest } from '@/lib/quackverse-art';
 import { dataDirPath, readAppState } from '@/lib/volume-store';
@@ -21,20 +22,26 @@ const rarityColors: Record<string, { border: string; fill: string; text: string 
   Unknown: { border: '#64748b', fill: '#111827', text: '#e5e7eb' },
 };
 
-function mimeTypeFor(filePath: string) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.png') return 'image/png';
-  if (ext === '.webp') return 'image/webp';
-  if (ext === '.gif') return 'image/gif';
-  if (ext === '.avif') return 'image/avif';
-  return 'image/jpeg';
+async function normalizedCardArtDataUri(buffer: Buffer) {
+  try {
+    const normalized = await sharp(buffer, { animated: false })
+      .rotate()
+      .png()
+      .toBuffer();
+    return `data:image/png;base64,${normalized.toString('base64')}`;
+  } catch {
+    return '';
+  }
 }
 
 async function inlineCardArt(cardId: number, artUrl: string | undefined, manifest: ReturnType<typeof normalizeQuackverseArtManifest>) {
   const uploaded = manifest[String(cardId)]?.static;
   if (uploaded) {
     const buffer = await fs.readFile(path.join(ART_ROOT, uploaded.fileName)).catch(() => null);
-    if (buffer) return `data:${uploaded.mimeType};base64,${buffer.toString('base64')}`;
+    if (buffer) {
+      const normalized = await normalizedCardArtDataUri(buffer);
+      if (normalized) return normalized;
+    }
   }
 
   if (artUrl && artUrl.startsWith('/')) {
@@ -42,7 +49,7 @@ async function inlineCardArt(cardId: number, artUrl: string | undefined, manifes
     const filePath = path.join(PUBLIC_ROOT, safePath);
     if (filePath.startsWith(PUBLIC_ROOT)) {
       const buffer = await fs.readFile(filePath).catch(() => null);
-      if (buffer) return `data:${mimeTypeFor(filePath)};base64,${buffer.toString('base64')}`;
+      if (buffer) return normalizedCardArtDataUri(buffer);
     }
   }
 
