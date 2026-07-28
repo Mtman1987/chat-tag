@@ -60,6 +60,7 @@ function clearWorkspaceThemeTokens() {
     '--workspace-border-strength',
     '--workspace-chat-transparency',
     '--workspace-animation-speed',
+    '--workspace-shooting-star-duration',
     '--workspace-dock-slot-count',
   ]) {
     root.style.removeProperty(property);
@@ -115,6 +116,7 @@ function applyWorkspaceThemeTokens(tokens: WorkspaceThemeTokensV1) {
     root.style.setProperty('--workspace-border-strength', String(appearance.borderStrength / 100));
     root.style.setProperty('--workspace-chat-transparency', String(appearance.chatTransparency / 100));
     root.style.setProperty('--workspace-animation-speed', String(appearance.animation.speed / 100));
+    root.style.setProperty('--workspace-shooting-star-duration', `${1200 / appearance.animation.speed}s`);
     root.dataset.workspaceSidebarCollapsed = appearance.sidebarCollapsed ? 'true' : 'false';
     root.dataset.workspaceSidebarStyle = appearance.sidebarStyle;
     root.dataset.workspaceSidebarPosition = appearance.sidebarPosition;
@@ -208,7 +210,7 @@ export function RootShell({ children }: RootShellProps) {
   }
 
   return (
-    <div className="cosmic-shell">
+    <div className="cosmic-shell" data-workspace-shell>
       <Starfield />
       <div className="relative z-10 min-h-screen">
         <Header />
