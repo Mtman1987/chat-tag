@@ -17,6 +17,7 @@ import { AlertTriangle, Trash2, Image as ImageIcon, Trash, Download } from "luci
 import { useSession } from "@/contexts/session-context";
 import { isClientAdminUsername } from "@/lib/client-admin";
 import { getAuthHeaders } from "@/lib/client-auth";
+import { Switch } from "@/components/ui/switch";
 
 const SettingsSchema = z.object({
   tagSuccessPoints: z.coerce.number().min(0),
@@ -24,6 +25,7 @@ const SettingsSchema = z.object({
   bingoSquarePoints: z.coerce.number().min(0),
   bingoWinPoints: z.coerce.number().min(0),
   uiThemePreset: z.enum(['cosmic', 'aurora', 'ember']),
+  followWorkspaceTheme: z.boolean(),
 });
 
 type SettingsForm = z.infer<typeof SettingsSchema>;
@@ -48,6 +50,7 @@ export default function SettingsPage() {
       bingoSquarePoints: 10,
       bingoWinPoints: 250,
       uiThemePreset: 'cosmic',
+      followWorkspaceTheme: true,
     },
   });
 
@@ -76,6 +79,7 @@ export default function SettingsPage() {
             bingoSquarePoints: data.bingoSquarePoints ?? 10,
             bingoWinPoints: data.bingoWinPoints ?? 250,
             uiThemePreset: data.uiThemePreset ?? 'cosmic',
+            followWorkspaceTheme: data.followWorkspaceTheme !== false,
           });
           applyThemePreview(data.uiThemePreset ?? 'cosmic');
         }
@@ -124,8 +128,8 @@ export default function SettingsPage() {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error('Failed to save');
-      applyThemePreview(data.uiThemePreset);
       toast({ title: "Settings saved!", description: "Your settings have been updated." });
+      window.setTimeout(() => window.location.reload(), 300);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save Failed", description: error.message });
     }
@@ -260,6 +264,17 @@ export default function SettingsPage() {
                       </FormControl>
                       <FormDescription>Saved shell preset for the app chrome and suite accents.</FormDescription>
                       <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="followWorkspaceTheme" render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="space-y-1">
+                        <FormLabel>Follow SpaceMountain theme</FormLabel>
+                        <FormDescription>Use the shared suite colors, glass, radius, star density, and motion. Turn this off to use the ChatTag preset above.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
                     </FormItem>
                   )} />
                 </div>

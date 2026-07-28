@@ -163,32 +163,37 @@ export function RootShell({ children }: RootShellProps) {
 
     let cancelled = false;
 
-    const loadLocalTheme = async () => {
+    const loadLocalSettings = async () => {
       try {
         const res = await fetch('/api/settings', { cache: 'no-store' });
-        if (!res.ok) return;
+        if (!res.ok) return { uiThemePreset: 'cosmic', followWorkspaceTheme: true };
         const data = await res.json();
-        if (cancelled) return;
-        applyThemePreset(String(data.uiThemePreset || 'cosmic'));
+        return {
+          uiThemePreset: String(data.uiThemePreset || 'cosmic'),
+          followWorkspaceTheme: data.followWorkspaceTheme !== false,
+        };
       } catch {
-        applyThemePreset('cosmic');
+        return { uiThemePreset: 'cosmic', followWorkspaceTheme: true };
       }
     };
 
     const loadTheme = async () => {
-      try {
-        const workspace = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
-        if (workspace.ok) {
-          const body = await workspace.json().catch(() => ({}));
-          if (!cancelled && body?.tokens) {
-            applyWorkspaceThemeTokens(body.tokens as WorkspaceThemeTokensV1);
-            return;
+      const settings = await loadLocalSettings();
+      if (settings.followWorkspaceTheme) {
+        try {
+          const workspace = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
+          if (workspace.ok) {
+            const body = await workspace.json().catch(() => ({}));
+            if (!cancelled && body?.tokens) {
+              applyWorkspaceThemeTokens(body.tokens as WorkspaceThemeTokensV1);
+              return;
+            }
           }
+        } catch {
+          // Fall back to the app-local preset below.
         }
-      } catch {
-        // Fall back to the app-local preset below.
       }
-      await loadLocalTheme();
+      if (!cancelled) applyThemePreset(settings.uiThemePreset);
     };
 
     loadTheme();
