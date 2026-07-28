@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
+import React from 'react';
 import fs from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
@@ -97,9 +98,10 @@ function PackCard({ card }: { card: any }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#94a3b8' }}>#{card.id} {card.type}</div>
+        <div style={{ display: 'flex', fontSize: 15, fontWeight: 800, color: '#94a3b8' }}>#{card.id} {card.type}</div>
         <div
           style={{
+            display: 'flex',
             border: `2px solid ${rarity.border}`,
             borderRadius: 8,
             background: rarity.fill,
@@ -114,9 +116,9 @@ function PackCard({ card }: { card: any }) {
       </div>
 
       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', fontSize: 25, fontWeight: 900, lineHeight: 1.08 }}>
-        {wrapText(card.name, 20, 3).map((line) => <div key={line}>{line}</div>)}
+        {wrapText(card.name, 20, 3).map((line) => <div key={line} style={{ display: 'flex' }}>{line}</div>)}
       </div>
-      <div style={{ marginTop: 10, fontSize: 17, fontWeight: 700, color: '#bae6fd' }}>{card.role || card.type}</div>
+      <div style={{ marginTop: 10, display: 'flex', fontSize: 17, fontWeight: 700, color: '#bae6fd' }}>{card.role || card.type}</div>
 
       <div
         style={{
@@ -143,7 +145,7 @@ function PackCard({ card }: { card: any }) {
             }}
           />
         ) : (
-          <div style={{ fontSize: 52, fontWeight: 900, color: rarity.border }}>QV</div>
+          <div style={{ display: 'flex', fontSize: 52, fontWeight: 900, color: rarity.border }}>QV</div>
         )}
       </div>
 
@@ -163,8 +165,8 @@ function PackCard({ card }: { card: any }) {
               background: 'rgba(255,255,255,0.055)',
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#94a3b8' }}>{stat}</div>
-            <div style={{ marginTop: 5, fontSize: 25, fontWeight: 900 }}>{statValue(card, stat)}</div>
+            <div style={{ display: 'flex', fontSize: 14, fontWeight: 800, color: '#94a3b8' }}>{stat}</div>
+            <div style={{ marginTop: 5, display: 'flex', fontSize: 25, fontWeight: 900 }}>{statValue(card, stat)}</div>
           </div>
         ))}
       </div>
@@ -187,7 +189,7 @@ function PackCard({ card }: { card: any }) {
               lineHeight: 1.22,
             }}
           >
-            {wrapText(ability, 36, 3).map((line) => <div key={line}>{line}</div>)}
+            {wrapText(ability, 36, 3).map((line) => <div key={line} style={{ display: 'flex' }}>{line}</div>)}
           </div>
         ))}
       </div>
@@ -209,7 +211,7 @@ function PackCard({ card }: { card: any }) {
           lineHeight: 1.25,
         }}
       >
-        {flavorLines.map((line) => <div key={line}>{line}</div>)}
+        {flavorLines.map((line) => <div key={line} style={{ display: 'flex' }}>{line}</div>)}
       </div>
     </div>
   );
@@ -416,8 +418,8 @@ export async function GET(req: NextRequest) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 48 }}>
-          <div style={{ fontSize: 34, fontWeight: 900 }}>Quackverse Pack</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#93c5fd' }}>SPMT Chat Tag</div>
+          <div style={{ display: 'flex', fontSize: 34, fontWeight: 900 }}>Quackverse Pack</div>
+          <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#93c5fd' }}>SPMT Chat Tag</div>
         </div>
         <div style={{ marginTop: 20, display: 'flex', gap: 22 }}>
           {cards.map((card) => <PackCard key={card.id} card={card} />)}
