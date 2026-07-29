@@ -60,7 +60,7 @@ export function MainDashboard() {
   }
 
   return (
-    <main className="cosmic-page">
+    <main className="cosmic-page" data-workspace-main>
       <section className="cosmic-hero">
         <div className="cosmic-card space-y-4">
           <div className="cosmic-status">Production Layout</div>

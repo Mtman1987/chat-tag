@@ -207,3 +207,75 @@
     transform: translateY(-2000px);
   }
 }
+
+/* SpaceMountain workspace appearance adapters. */
+:root[data-workspace-density='compact'] [data-workspace-main] { padding: 0.75rem !important; }
+:root[data-workspace-density='spacious'] [data-workspace-main] { padding: 2rem !important; }
+:root[data-workspace-topbar-style='transparent'] [data-workspace-topbar] { background: transparent !important; backdrop-filter: none !important; }
+:root[data-workspace-topbar-style='glass'] [data-workspace-topbar] {
+  background: hsl(var(--card) / var(--workspace-glass-opacity, 0.65)) !important;
+  border-color: hsl(var(--border) / var(--workspace-border-strength, 0.6));
+  backdrop-filter: blur(var(--workspace-blur-strength, 22px));
+}
+:root[data-workspace-tab-style='underline'] [data-workspace-tabs] {
+  border-radius: 0 !important;
+  background: transparent !important;
+  border-bottom: 1px solid hsl(var(--border) / var(--workspace-border-strength, 0.6));
+}
+:root[data-workspace-tab-style='underline'] [data-workspace-tabs] > :is([role='tab'], a) {
+  border-radius: 0 !important;
+  border-color: transparent !important;
+  border-bottom: 2px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+:root[data-workspace-tab-style='underline'] [data-workspace-tabs] > :is([role='tab'][data-state='active'], a[aria-current='page']) { border-bottom-color: hsl(var(--accent)) !important; }
+:root[data-workspace-tab-style='cards'] [data-workspace-tabs] { gap: 0.4rem; height: auto; padding: 0; background: transparent !important; }
+:root[data-workspace-tab-style='cards'] [data-workspace-tabs] > :is([role='tab'], a) {
+  border: 1px solid hsl(var(--border) / var(--workspace-border-strength, 0.6));
+  border-radius: var(--radius) !important;
+  background: hsl(var(--card) / var(--workspace-glass-opacity, 0.65));
+}
+:root[data-workspace-tab-style='pills'] [data-workspace-tabs],
+:root[data-workspace-tab-style='pills'] [data-workspace-tabs] > :is([role='tab'], a) { border-radius: 9999px !important; }
+:root[data-workspace-tab-position='top'] [data-workspace-tabs-root],
+:root[data-workspace-tab-position='bottom'] [data-workspace-tabs-root] { display: flex; flex-direction: column; }
+:root[data-workspace-tab-position='bottom'] [data-workspace-tabs-root] { flex-direction: column-reverse; }
+:root[data-workspace-tab-position='left'] [data-workspace-tabs-root],
+:root[data-workspace-tab-position='right'] [data-workspace-tabs-root] { display: flex; align-items: flex-start; gap: 1rem; }
+:root[data-workspace-tab-position='right'] [data-workspace-tabs-root] { flex-direction: row-reverse; }
+:root[data-workspace-tab-position='left'] [data-workspace-tabs-root] > [data-workspace-tabs],
+:root[data-workspace-tab-position='right'] [data-workspace-tabs-root] > [data-workspace-tabs] {
+  display: flex !important;
+  height: auto !important;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+}
+:root[data-workspace-show-avatars='false'] [data-workspace-avatar] { display: none !important; }
+:root[data-workspace-particles='false'] [data-workspace-particles] { display: none !important; }
+:root[data-workspace-theme] :is(.cosmic-card, .cosmic-panel, .cosmic-tile) {
+  border-color: hsl(var(--border) / var(--workspace-border-strength, 0.6));
+  background-color: hsl(var(--card) / var(--workspace-glass-opacity, 0.65));
+  backdrop-filter: blur(var(--workspace-blur-strength, 22px));
+}
+:root[data-workspace-shooting-stars='true'] [data-workspace-shell]::after {
+  content: '';
+  position: fixed;
+  top: 12%;
+  left: -16rem;
+  z-index: 0;
+  width: 13rem;
+  height: 2px;
+  pointer-events: none;
+  opacity: var(--workspace-star-density, 0.7);
+  background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.9), white);
+  filter: drop-shadow(0 0 8px hsl(var(--accent) / 0.75));
+  transform: rotate(-18deg);
+  animation: workspace-shooting-star var(--workspace-shooting-star-duration, 12s) linear infinite;
+}
+@keyframes workspace-shooting-star {
+  0%, 72% { transform: translate3d(0, 0, 0) rotate(-18deg); opacity: 0; }
+  74% { opacity: 1; }
+  82%, 100% { transform: translate3d(130vw, 38vh, 0) rotate(-18deg); opacity: 0; }
+}

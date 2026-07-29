@@ -28,7 +28,7 @@ const stars3 = generateStars(100, 2000, 2000, 37);
 
 export function Starfield() {
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0">
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0" data-workspace-particles>
       <div className="absolute inset-0 bg-transparent">
         <div
           className="absolute h-full w-full bg-transparent"

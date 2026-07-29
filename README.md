@@ -133,3 +133,10 @@ Each object inside the `players` array must have the following properties:
     *   `/chatTags/{tagId}`: A new document is created here every time a tag occurs. A serverless function or bot listens to this collection to trigger the Twitch chat announcement.
     *   `/bingoEvents/{eventId}`: A new document is created for every Bingo win. This can be used by a Discord bot to announce winners.
 *   **Authentication:** A Twitch OAuth flow allows users to sign in. The app uses Firebase Authentication to manage user sessions.
+## Shared SpaceMountain appearance
+
+ChatTag's explicit follow switch maps the signed-in account's shared appearance
+onto the cosmic shell, header navigation, tabs, avatars, cards, particles, and
+motion. ChatTag has no persistent app sidebar, so sidebar settings are ignored
+safely. Turning follow mode off restores the selected ChatTag preset without
+changing authentication, game state, or OBS overlay transparency.
