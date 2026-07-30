@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "npx next typegen && npx tsc --noEmit",
-    "test:workspace-theme": "tsx --test tests/workspace-theme.test.ts"
+    "test:workspace-theme": "tsx --test tests/workspace-theme.test.ts",
+    "test:crowns": "node --test tests/chat-tag-crowns.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.3",

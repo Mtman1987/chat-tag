@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { makeId, readAppState, updateAppState } from '@/lib/volume-store';
+import { decorateCrowns, decorateCrownsDeep, getWinners } from '@/lib/chat-tag-crowns';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,15 +48,16 @@ export async function POST(req: NextRequest) {
       const userId = body.userId || findPlayerIdByChannel(state, channel);
       if (!userId) return { error: 'overlay player not found', status: 404 };
 
+      const winners = getWinners(state);
       state.overlayMessages = state.overlayMessages || {};
       const messages = state.overlayMessages[userId] || [];
       messages.push({
         id: makeId('overlay'),
         userId,
         channel,
-        message,
+        message: decorateCrowns(message, winners),
         type: body.type || 'bot-message',
-        payload: body.payload || null,
+        payload: body.payload ? decorateCrownsDeep(body.payload, winners) : null,
         timestamp: Date.now(),
       });
       state.overlayMessages[userId] = messages.slice(-50);

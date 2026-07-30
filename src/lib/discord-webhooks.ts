@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readAppState, updateAppState, type JsonObject } from '@/lib/volume-store';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { decorateCrowns, decorateCrownsDeep, getWinners } from '@/lib/chat-tag-crowns';
 
 export type DiscordWebhookRecord = {
   id: string;
@@ -214,7 +215,24 @@ async function sendDiscordViaBot(channelId: string, payload: DiscordSendPayload,
   return { ok: true, via: 'bot', messageId: message?.id || undefined };
 }
 
-export async function sendDiscordMessage(payload: DiscordSendPayload): Promise<DiscordSendResult> {
+// Monthly winners keep their crown in every Discord message we send.
+async function applyCrowns(payload: DiscordSendPayload): Promise<DiscordSendPayload> {
+  try {
+    const winners = getWinners(await readAppState());
+    if (!winners.length) return payload;
+    return {
+      ...payload,
+      content: decorateCrowns(payload.content, winners) as string,
+      embeds: payload.embeds ? (decorateCrownsDeep(payload.embeds, winners) as JsonObject[]) : payload.embeds,
+    };
+  } catch (error) {
+    console.error('[Discord] Failed to apply winner crowns:', error);
+    return payload;
+  }
+}
+
+export async function sendDiscordMessage(rawPayload: DiscordSendPayload): Promise<DiscordSendResult> {
+  const payload = await applyCrowns(rawPayload);
   const botToken = payload.botToken || process.env.DISCORD_BOT_TOKEN;
   if (!botToken) {
     return { ok: false, error: 'DISCORD_BOT_TOKEN is not configured' };
