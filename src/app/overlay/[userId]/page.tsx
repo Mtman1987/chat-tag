@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { getChatTagSoundUrl, type ChatTagSoundKey } from '@/lib/sound-effects';
+import { crownName, decorateCrowns } from '@/lib/chat-tag-crowns';
 
 interface OverlayState {
   me: any;
@@ -94,14 +95,16 @@ export default function OverlayPage() {
   const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const previewTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const winnersRef = useRef<any[]>([]);
+
   const crown = useCallback(
-    (name: string) => {
-      if (!data?.monthlyWinners?.length) return name;
-      const w = data.monthlyWinners.find((e: any) => (e.username || '').toLowerCase() === (name || '').toLowerCase());
-      return w ? `👑 ${name}` : name;
-    },
+    (name: string) => crownName(name, data?.monthlyWinners || []),
     [data?.monthlyWinners],
   );
+
+  useEffect(() => {
+    winnersRef.current = data?.monthlyWinners || [];
+  }, [data?.monthlyWinners]);
 
   useEffect(() => {
     const unlockAudio = () => {
@@ -207,7 +210,12 @@ export default function OverlayPage() {
   }, []);
 
   const fireBroadcast = useCallback(
-    (b: Broadcast, duration = 6000) => {
+    (raw: Broadcast, duration = 6000) => {
+      // Winners keep their crown no matter which code path built the lines.
+      const b: Broadcast = {
+        ...raw,
+        lines: (raw.lines || []).map((line) => decorateCrowns(line, winnersRef.current)),
+      };
       if (broadcastTimer.current) clearTimeout(broadcastTimer.current);
       activeBroadcastRef.current = true;
       setDimBar(true);
@@ -247,25 +255,25 @@ export default function OverlayPage() {
       if (!history.length || broadcast) return;
       const lines = history.slice(0, 6).map((h: any) => {
         if (h.blocked) return `🛡️ ${h.tagger} → ${h.tagged} (${h.blocked})`;
-        return `${h.doublePoints ? '🔥' : '🎯'} ${crown(h.tagger)} tagged ${crown(h.tagged)}${h.doublePoints ? ' 2x!' : ''}`;
+        return `${h.doublePoints ? '🔥' : '🎯'} ${h.tagger} tagged ${h.tagged}${h.doublePoints ? ' 2x!' : ''}`;
       });
       fireBroadcast({ type: 'history', lines, icon: '📜', color: '#9146ff', glow: '#9146ff', sound: 'history' }, 15000);
       lastHistoryShow.current = Date.now();
     },
-    [broadcast, crown, fireBroadcast],
+    [broadcast, fireBroadcast],
   );
 
   const fireLeaderboardBroadcast = useCallback(
     (leaderboard: any[]) => {
       if (!leaderboard.length || broadcast) return;
       const lines = leaderboard.slice(0, 5).map((player: any, index: number) =>
-        `#${index + 1} ${crown(player.twitchUsername || player.username || '?')} ${player.score} pts`
+        `#${index + 1} ${player.twitchUsername || player.username || '?'} ${player.score} pts`
       );
       fireBroadcast({ type: 'history', lines, icon: '🏆', color: '#ffd700', glow: '#ffb300', sound: 'leaderboard' }, 15000);
       spawnConfetti(['#ffd700', '#fff2a8', '#ffffff', '#ffb300']);
       lastHistoryShow.current = Date.now();
     },
-    [broadcast, crown, fireBroadcast, spawnConfetti],
+    [broadcast, fireBroadcast, spawnConfetti],
   );
 
   const fireLiveBroadcast = useCallback(
@@ -281,7 +289,7 @@ export default function OverlayPage() {
         : [`${state.liveCount || 0} live right now`, `${state.playerCount || 0} players tracked`];
 
       if (state.it?.username) {
-        lines.unshift(`IT: ${crown(state.it.username)}`);
+        lines.unshift(`IT: ${state.it.username}`);
       } else {
         lines.unshift('FREE FOR ALL');
       }
@@ -289,7 +297,7 @@ export default function OverlayPage() {
       fireBroadcast({ type: 'history', lines, icon: '📺', color: '#34d399', glow: '#34d399', sound: 'live' }, 15000);
       lastHistoryShow.current = Date.now();
     },
-    [crown, fireBroadcast],
+    [fireBroadcast],
   );
 
   const buildBroadcastFromOverlayMessage = useCallback((message: OverlayMessage): Broadcast | null => {
@@ -512,7 +520,7 @@ export default function OverlayPage() {
           if (h && !h.blocked) {
             const dp = h.doublePoints ? ' for DOUBLE POINTS and is now it!' : ' who is now it!';
             fireBroadcast({
-              type: 'tag', lines: [`${crown(h.tagger)} tagged ${crown(h.tagged)}${dp}`],
+              type: 'tag', lines: [`${h.tagger} tagged ${h.tagged}${dp}`],
               icon: h.doublePoints ? '🔥' : '🎯',
               color: h.doublePoints ? '#ff4500' : '#00d9ff',
               glow: h.doublePoints ? '#ff4500' : '#00d9ff',
@@ -527,7 +535,7 @@ export default function OverlayPage() {
           if (!newIt) {
             fireBroadcast({ type: 'ffa', lines: ['FREE FOR ALL!', 'Anyone can tag for DOUBLE POINTS!'], icon: '🔥', color: '#ff4500', glow: '#ff8c00', sound: 'ffa' }, 13000);
           } else {
-            fireBroadcast({ type: 'newit', lines: [`${crown(newIt)} is now IT!`], icon: '🎯', color: '#00d9ff', glow: '#00d9ff', sound: 'new-it' }, 11000);
+            fireBroadcast({ type: 'newit', lines: [`${newIt} is now IT!`], icon: '🎯', color: '#00d9ff', glow: '#00d9ff', sound: 'new-it' }, 11000);
           }
         }
         prevIt.current = newIt;
@@ -538,7 +546,7 @@ export default function OverlayPage() {
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [buildBroadcastFromOverlayMessage, crown, fireBroadcast, isPreview, queueBroadcast, userId]);
+  }, [buildBroadcastFromOverlayMessage, fireBroadcast, isPreview, queueBroadcast, userId]);
 
   useEffect(() => {
     broadcastRef.current = broadcast;

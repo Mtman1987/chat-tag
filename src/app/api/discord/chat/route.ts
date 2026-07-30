@@ -97,11 +97,6 @@ async function sendDiscordReply(channelId: string, content: string) {
   return result;
 }
 
-function crownPlayerName(name: string, winners: any[] = []) {
-  const winner = winners.find((entry: any) => normalizeChatHandle(entry.username) === normalizeChatHandle(name));
-  return winner ? `${name} 👑#${winner.place}` : name;
-}
-
 function rarityBreakdown(cardIds: number[] = []) {
   const counts: Record<string, number> = {};
   for (const id of cardIds) {
@@ -580,7 +575,7 @@ export async function POST(req: NextRequest) {
         const filtered = allPlayers.filter((p: any) => (p.twitchUsername || '').toLowerCase() !== 'mtman1987');
         const top3 = filtered.slice(0, 3);
         const lines = top3
-          .map((p, i) => `#${i + 1} ${crownPlayerName(p.twitchUsername || p.username || 'unknown', winners)} - ${p.score || 0} pts`)
+          .map((p, i) => `#${i + 1} ${p.twitchUsername || p.username || 'unknown'} - ${p.score || 0} pts`)
           .join('\n');
         const winnerLine = winners.length > 0
           ? `\n\nLast month's crowns: ${winners.map((w: any) => `👑#${w.place} ${w.username}`).join(' | ')}`

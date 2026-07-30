@@ -4,6 +4,7 @@ const path = require('path');
 const WebSocket = require('ws');
 const { getPlayerHelpText, getRulesText, getModHelpText } = require('./src/lib/chat-tag-command-text');
 const { normalizeChatHandle, getPlayerDisplayName, resolvePlayerTarget } = require('./src/lib/chat-tag-player-lookup');
+const { decorateCrownsDeep, getWinners } = require('./src/lib/chat-tag-crowns');
 
 // Load environment variables
 const env = process.env;
@@ -102,15 +103,29 @@ function publicTagError(error) {
   return message;
 }
 
-// Crown helper: wraps winner usernames with 👑
+// Crown helpers: monthly winners always show 👑 next to their name.
 let cachedWinners = [];
-function crown(username, winners) {
-  const w = (winners || cachedWinners);
-  const entry = w.find(e => (e.username || '').toLowerCase() === (username || '').toLowerCase());
-  return entry ? '👑' + username : username;
-}
+let cachedWinnersAt = 0;
+const WINNERS_CACHE_MS = 60_000;
+
 function updateWinnersCache(data) {
-  if (data?.monthlyWinners) cachedWinners = data.monthlyWinners;
+  if (!data || typeof data !== 'object' || !Array.isArray(data.monthlyWinners)) return;
+  cachedWinners = getWinners(data.monthlyWinners);
+  cachedWinnersAt = Date.now();
+}
+
+async function ensureWinnersCache() {
+  if (cachedWinnersAt && Date.now() - cachedWinnersAt < WINNERS_CACHE_MS) return cachedWinners;
+  cachedWinnersAt = Date.now();
+  updateWinnersCache(await apiCall('/api/tag/winners'));
+  return cachedWinners;
+}
+
+// Every outgoing message runs through this so any mention of a winner keeps its crown.
+async function withCrowns(value) {
+  if (!value) return value;
+  const winners = await ensureWinnersCache();
+  return decorateCrownsDeep(value, winners);
 }
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
 const AUTO_ROTATE_MINUTES = Number.parseInt(process.env.AUTO_ROTATE_MINUTES || '60', 10);
@@ -273,6 +288,7 @@ async function apiCall(endpoint, options = {}) {
     const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
+    updateWinnersCache(data);
     if (!res.ok && !isExpectedApiResponse(endpoint, res.status, data)) {
       console.error(`[API Error] ${endpoint}: ${res.status} ${text.slice(0, 300)}`);
     } else if (!res.ok) {
@@ -345,7 +361,7 @@ async function triggerFfaFallback(client, data, itUsername, reason) {
   }
 
   await recordBotEvent('auto-rotate-ffa-fallback', itUsername, `Fallback after ${failures} failures: ${reason}`);
-  await broadcastToPlayers(client, `⏰ ${crown(itUsername)} could not be auto-rotated after ${MAX_ROTATE_FAILURES_BEFORE_FFA} attempts — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`);
+  await broadcastToPlayers(client, `⏰ ${itUsername} could not be auto-rotated after ${MAX_ROTATE_FAILURES_BEFORE_FFA} attempts — FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`);
   await refreshDiscordEmbed('Auto-rotate fallback to free for all');
   lastFfaAnnouncedAt = Date.now();
   resetRotateFailures();
@@ -378,9 +394,9 @@ async function sendOverlayMessage(targetChannel, message, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       channel: normalized,
-      message,
+      message: await withCrowns(message),
       type: options.type || 'bot-message',
-      payload: options.payload || null,
+      payload: options.payload ? await withCrowns(options.payload) : null,
     }),
   });
 
@@ -421,10 +437,10 @@ async function queueScoreOverlay(channelName, playerName, rank, totalPlayers, pl
   );
 }
 
-async function queueLeaderboardOverlay(channelName, players = [], winners = []) {
+async function queueLeaderboardOverlay(channelName, players = []) {
   const rows = players.slice(0, 5).map((p, i) => ({
     rank: i + 1,
-    username: crown(p.twitchUsername || p.username, winners),
+    username: p.twitchUsername || p.username,
     score: p.score || 0,
   }));
   await sendRichOverlayEvent(channelName, 'leaderboard-card', 'Top players', { rows });
@@ -794,9 +810,11 @@ async function getLiveMembersCached(force = false) {
   return members;
 }
 
-async function sendChatWithSharedFallback(client, targetChannel, message, options = {}) {
+async function sendChatWithSharedFallback(client, targetChannel, rawMessage, options = {}) {
   const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
-  if (!normalized || !message) return;
+  if (!normalized || !rawMessage) return;
+
+  const message = await withCrowns(rawMessage);
 
   const mutedChannels = await getMutedChannelsCached();
   if (!options.forceChat && mutedChannels.has(normalized)) {
@@ -1147,7 +1165,7 @@ console.log = (...args) => {
               await recordBotEvent('auto-rotate-random', chosen.twitchUsername || chosen.id, `from=${itUsername}; elapsed=${elapsedMin}m; stale=${isStaleTimeout}`);
               lastFfaAnnouncedAt = 0;
               if (!isStaleTimeout) {
-                const msg = `🎲 ${crown(itUsername)} held it too long! ${crown(chosen.twitchUsername)} was randomly selected as it! Tag someone!`;
+                const msg = `🎲 ${itUsername} held it too long! ${chosen.twitchUsername} was randomly selected as it! Tag someone!`;
                 await broadcastToPlayers(client, msg);
                 const announceRes = await apiCall('/api/discord/announce', {
                   method: 'POST',
@@ -1202,7 +1220,7 @@ console.log = (...args) => {
               if (rotateRes?.__ok === false || rotateRes?.error) {
                 await triggerFfaFallback(client, data, itUsername, rotateRes?.error || `set-it returned ${rotateRes?.__status || 'unknown status'}`);
               } else {
-                const msg = `⏰ ${crown(itUsername)} didn't tag anyone! ${crown(chosen.twitchUsername)} is now randomly it! Tag someone!`;
+                const msg = `⏰ ${itUsername} didn't tag anyone! ${chosen.twitchUsername} is now randomly it! Tag someone!`;
                 await broadcastToPlayers(client, msg);
                 await refreshDiscordEmbed('Auto-rotate random assignment');
                 await recordBotEvent('auto-rotate-random', chosen.twitchUsername || chosen.id, `from=${itUsername}; elapsed=${elapsedMin}m; live=${itIsLive}; recentChat=${recentlySeenInPlayerChat}`);
@@ -1262,7 +1280,7 @@ console.log = (...args) => {
           });
           
           if (rotateRes?.success || rotateRes?.__ok !== false) {
-            const msg = `🎲 No one was it! System randomly assigned ${crown(chosen.twitchUsername)} as it! Tag someone!`;
+            const msg = `🎲 No one was it! System randomly assigned ${chosen.twitchUsername} as it! Tag someone!`;
             await broadcastToPlayers(client, msg);
             await refreshDiscordEmbed('Null-state random assignment');
             await recordBotEvent('auto-assign-random', chosen.twitchUsername || chosen.id, 'null current-it state');
@@ -2011,7 +2029,7 @@ console.log = (...args) => {
               : `🎯 ${user} tagged @${targetName} who is now it! (Pin has tagged them ${pinRes.count} times total)`;
             await sendChatWithSharedFallback(client, channelName, msg, { warnOnFallback: true });
             if (isMuted) {
-              await queueTagOverlay(channelName, realTagRes.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(targetName), { doublePoints: Boolean(realTagRes.doublePoints) });
+              await queueTagOverlay(channelName, realTagRes.doublePoints ? 'pass-card' : 'tag-card', user, targetName, { doublePoints: Boolean(realTagRes.doublePoints) });
             }
             if (!isMuted) {
               await broadcastToPlayers(client, msg, channelName);
@@ -2064,7 +2082,7 @@ console.log = (...args) => {
         console.log(`[Bot] Sending tag message in current channel`);
         await reply( msg);
         if (isMuted) {
-          await queueTagOverlay(channelName, res.doublePoints ? 'pass-card' : 'tag-card', crown(user), crown(targetName), { doublePoints: Boolean(res.doublePoints) });
+          await queueTagOverlay(channelName, res.doublePoints ? 'pass-card' : 'tag-card', user, targetName, { doublePoints: Boolean(res.doublePoints) });
         }
         if (!isMuted) {
           console.log('[Bot] Broadcasting to other players...');
@@ -2159,7 +2177,7 @@ console.log = (...args) => {
       const itPlayer = data?.players?.find(p => p.isIt);
       const itName = itPlayer ? (itPlayer.twitchUsername || itPlayer.username || 'Someone') : null;
       const response = itName 
-        ? `@${user} ${crown(itName)} is it!`
+        ? `@${user} ${itName} is it!`
         : `@${user} 🔥 FREE FOR ALL! Anyone can tag for DOUBLE POINTS! 🔥`;
       console.log(`[Bot] Sending: ${response}`);
       await reply( response);
@@ -2461,9 +2479,9 @@ console.log = (...args) => {
       const winEntry = (data?.monthlyWinners || []).find(w => w.userId === userId);
       const winsText = (player.wins || 0) > 0 ? ` | 🏆 Wins: ${player.wins}` : '';
       const winnerText = winEntry ? ` | 👑 #${winEntry.place} Winner` : '';
-      reply(`@${crown(user)} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || (player.hasPass ? 1 : 0)}/3${winsText}${winnerText}`);
+      reply(`@${user} Rank: #${rank}/${sorted.length} | Score: ${player.score || 0} pts | Tags: ${player.tags || 0} | Tagged: ${player.tagged || 0} | 🎟️ Pass: ${player.passCount || (player.hasPass ? 1 : 0)}/3${winsText}${winnerText}`);
       if (isMuted) {
-        await queueScoreOverlay(channelName, crown(user), rank, sorted.length, player, winnerText.replace(/^ \| /, ''));
+        await queueScoreOverlay(channelName, user, rank, sorted.length, player, winnerText.replace(/^ \| /, ''));
       }
     }
     
@@ -2472,12 +2490,12 @@ console.log = (...args) => {
       const sorted = (data?.players || []).filter(p => (p.twitchUsername || p.username)?.toLowerCase() !== 'mtman1987').sort((a, b) => (b.score || 0) - (a.score || 0));
       const top3 = sorted.slice(0, 3);
       updateWinnersCache(data);
-      const rankings = top3.map((p, i) => `#${i+1} ${crown(p.twitchUsername || p.username, data?.monthlyWinners)}: ${p.score || 0}`).join(' | ');
+      const rankings = top3.map((p, i) => `#${i+1} ${p.twitchUsername || p.username}: ${p.score || 0}`).join(' | ');
       const winners = (data?.monthlyWinners || []);
       const winnerLine = winners.length > 0 ? ' | Last Winners: ' + winners.map(w => `\u{1F451}#${w.place} ${w.username}`).join(', ') : '';
       reply(`@${user} Top 3: ${rankings}${winnerLine}`);
       if (isMuted) {
-        await queueLeaderboardOverlay(channelName, sorted, winners);
+        await queueLeaderboardOverlay(channelName, sorted);
       }
     }
     
@@ -2723,10 +2741,10 @@ console.log = (...args) => {
       if (res?.error) {
         reply(`@${user} ${publicTagError(res.error)}`);
       } else {
-        const msg = `🎟️ ${crown(user)} used their PASS to tag @${crown(targetName)} for DOUBLE POINTS and is now it! Raid, follow, cheer, or sub to earn yours!`;
+        const msg = `🎟️ ${user} used their PASS to tag @${targetName} for DOUBLE POINTS and is now it! Raid, follow, cheer, or sub to earn yours!`;
         await reply(msg);
         if (isMuted) {
-          await queueTagOverlay(channelName, 'pass-card', crown(user), crown(targetName), { doublePoints: true, passUsed: true });
+          await queueTagOverlay(channelName, 'pass-card', user, targetName, { doublePoints: true, passUsed: true });
         }
         if (!isMuted) {
           await broadcastToPlayers(client, msg, channelName);
