@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'Home' },
+  { href: '/messages', label: 'Messages' },
   { href: '/about', label: 'About' },
   { href: '/overlay', label: 'Overlay' },
   { href: '/quackverse', label: 'Quackverse' },
