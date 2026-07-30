@@ -1,0 +1,45 @@
+name: Apply Discord tag status fix
+
+on:
+  push:
+    branches:
+      - fix/discord-tag-status-embeds
+    paths:
+      - .github/workflows/apply-discord-tag-status-fix.yml
+      - scripts/apply-discord-tag-status-fix.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/discord-tag-status-embeds
+          fetch-depth: 0
+
+      - name: Apply exact source patches
+        run: python3 scripts/apply-discord-tag-status-fix.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run crown tests
+        run: npm run test:crowns --if-present
+
+      - name: Run project tests
+        run: npm test --if-present
+
+      - name: Run TypeScript/build validation
+        run: npm run build
+
+      - name: Commit patched source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix Discord tag replies, crowns, and status timing"
+          git push origin HEAD:fix/discord-tag-status-embeds
