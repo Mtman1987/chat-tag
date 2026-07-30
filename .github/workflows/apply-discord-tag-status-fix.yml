@@ -1,18 +1,17 @@
 name: Apply Discord tag status fix
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/discord-tag-status-embeds
-    paths:
-      - .github/workflows/apply-discord-tag-status-fix.yml
-      - scripts/apply-discord-tag-status-fix.py
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   patch-test-commit:
+    if: github.head_ref == 'fix/discord-tag-status-embeds'
     runs-on: ubuntu-latest
     steps:
       - name: Check out branch
