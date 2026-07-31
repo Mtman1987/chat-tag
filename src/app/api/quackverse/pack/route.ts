@@ -86,7 +86,10 @@ async function notifyStreamWeaverPackOverlay(input: {
   tenantId?: string;
 }) {
   const secret = getStreamWeaverOverlaySecret();
-  if (!secret || !STREAMWEAVER_URL || !input.origin) return;
+  // Browser and Discord pack opens are not always associated with a streamer.
+  // Do not send a tenant-scoped overlay request when there is no authoritative
+  // tenant; the pack open itself remains successful.
+  if (!secret || !STREAMWEAVER_URL || !input.origin || !input.tenantId) return;
 
   const packImageUrl = `${input.origin}/api/quackverse/pack/image?packId=${encodeURIComponent(input.packId)}&t=${Date.now()}`;
   const pack = input.pack.map((card) => quackverseOverlayCard(card, input.origin));
