@@ -1,6 +1,7 @@
 import { quackverseCards, type QuackverseCard } from '@/lib/quackverse-data';
 
 export type QuackverseRarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary';
+export const QUACKVERSE_PACK_SIZE = 9;
 type QuackversePackSlot = {
   label: string;
   cardType?: QuackverseCard['type'];
@@ -11,8 +12,12 @@ type QuackversePackSlot = {
 export const quackversePackSlots: QuackversePackSlot[] = [
   { label: 'Utility 1', cardType: 'Equipment', rarities: ['Common', 'Uncommon'], weights: [70, 30] },
   { label: 'Utility 2', cardType: 'Equipment', rarities: ['Common', 'Uncommon', 'Rare', 'Epic'], weights: [40, 35, 20, 5] },
+  { label: 'Utility 3', cardType: 'Equipment', rarities: ['Common', 'Uncommon', 'Rare'], weights: [55, 35, 10] },
+  { label: 'Utility 4', cardType: 'Equipment', rarities: ['Uncommon', 'Rare', 'Epic'], weights: [70, 25, 5] },
   { label: 'Duck 1', cardType: 'Duck', rarities: ['Common', 'Uncommon'], weights: [70, 30] },
   { label: 'Duck 2', cardType: 'Duck', rarities: ['Uncommon', 'Rare'], weights: [75, 25] },
+  { label: 'Duck 3', cardType: 'Duck', rarities: ['Common', 'Uncommon', 'Rare', 'Epic'], weights: [45, 35, 15, 5] },
+  { label: 'Duck 4', cardType: 'Duck', rarities: ['Uncommon', 'Rare', 'Epic'], weights: [70, 25, 5] },
   { label: 'Wild', rarities: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'], weights: [35, 35, 20, 8, 2] },
 ];
 
@@ -65,9 +70,13 @@ function drawFromSlot(slot: QuackversePackSlot, seen: Set<number>) {
 export function openQuackverseBoosterPack() {
   const seen = new Set<number>();
 
-  return quackversePackSlots
+  const cards = quackversePackSlots
     .map((slot) => drawFromSlot(slot, seen))
     .sort((a, b) => (rarityOrder[a.rarity || ''] ?? 0) - (rarityOrder[b.rarity || ''] ?? 0));
+  if (cards.length !== QUACKVERSE_PACK_SIZE) {
+    throw new Error(`Quackverse booster contract expected ${QUACKVERSE_PACK_SIZE} cards, received ${cards.length}`);
+  }
+  return cards;
 }
 
 export function summarizeCollection(cardIds: number[]) {
