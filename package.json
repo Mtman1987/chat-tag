@@ -14,7 +14,8 @@
     "typecheck": "npx next typegen && npx tsc --noEmit",
     "test:workspace-theme": "tsx --test tests/workspace-theme.test.ts",
     "test:crowns": "node --test tests/chat-tag-crowns.test.mjs",
-    "test:discord-dashboard": "npx tsx --test tests/chat-tag-discord-dashboard.test.ts"
+    "test:discord-dashboard": "npx tsx --test tests/chat-tag-discord-dashboard.test.ts",
+    "test:quackverse-pack": "npx tsx --test tests/quackverse-pack-contract.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.3",
