@@ -14,4 +14,6 @@ RUN npm ci --only=production
 COPY bot.js ./
 COPY src/lib/chat-tag-command-text.js ./src/lib/chat-tag-command-text.js
 COPY src/lib/chat-tag-player-lookup.js ./src/lib/chat-tag-player-lookup.js
+COPY src/lib/chat-tag-crowns.js ./src/lib/chat-tag-crowns.js
+RUN node -e "require('./src/lib/chat-tag-crowns')"
 CMD ["node", "bot.js"]
