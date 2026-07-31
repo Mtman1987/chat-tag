@@ -81,10 +81,9 @@ function replyEmbedIdentity(context: DiscordReplyContext) {
       name: context.userName,
       ...(context.userAvatarUrl ? { icon_url: context.userAvatarUrl } : {}),
     },
-    ...(context.userAvatarUrl ? { thumbnail: { url: context.userAvatarUrl } } : {}),
+    ...(context.chatTagLogoUrl ? { thumbnail: { url: context.chatTagLogoUrl } } : {}),
     footer: {
       text: `${context.userName} • ${command || 'Chat Tag command'}`,
-      ...(context.chatTagLogoUrl ? { icon_url: context.chatTagLogoUrl } : {}),
     },
   };
 }
