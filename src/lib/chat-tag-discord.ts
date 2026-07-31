@@ -86,12 +86,31 @@ export function buildGameStatePayload(state: AppState) {
 
   const currentIt = players.find((p) => p.isIt);
 
+  const sortedTagHistory = [...(state.tagHistory || [])]
+    .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0));
   const storedAnnouncements = Array.isArray(state.discordMessages?.announcements)
     ? state.discordMessages.announcements
-    : state.discordMessages?.lastTagAnnouncement
-      ? [state.discordMessages.lastTagAnnouncement]
-      : [];
-  const recentAnnouncements = [...storedAnnouncements]
+    : [];
+  const derivedAnnouncements = sortedTagHistory
+    .filter((entry: any) => !entry.blocked)
+    .slice(0, 3)
+    .map((entry: any, index: number) => {
+      const taggerId = entry.taggerId || entry.from;
+      const taggedId = entry.taggedId || entry.to;
+      const tagger = state.tagPlayers[taggerId];
+      const tagged = state.tagPlayers[taggedId];
+      const taggerUsername = tagger?.twitchUsername || taggerId || 'Someone';
+      const taggedUsername = tagged?.twitchUsername || taggedId || 'someone';
+      return {
+        id: `history_${toMillis(entry.timestamp) || index}`,
+        title: entry.doublePoints ? '🔥 Double-Points Tag' : '🎯 New Tag',
+        description: `**${taggerUsername}** tagged **${taggedUsername}**${entry.doublePoints ? ' for **DOUBLE POINTS**' : ''}.`,
+        details: [`**Now IT:** ${taggedUsername}`],
+        kind: entry.doublePoints ? 'double-points-tag' : 'tag',
+        timestamp: entry.timestamp,
+      };
+    });
+  const recentAnnouncements = [...(storedAnnouncements.length > 0 ? storedAnnouncements : derivedAnnouncements)]
     .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
     .slice(0, 3)
     .map((announcement: any) => ({
@@ -103,8 +122,7 @@ export function buildGameStatePayload(state: AppState) {
       timestamp: toMillis(announcement.timestamp) || Date.now(),
     }));
 
-  const recentHistory = [...(state.tagHistory || [])]
-    .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
+  const recentHistory = sortedTagHistory
     .slice(0, 25)
     .map((entry: any) => {
       const taggerId = entry.taggerId || entry.from;

@@ -102,3 +102,13 @@ test('current tagged duration uses a live Discord relative timestamp', () => {
   assert.doesNotMatch(description, /0 min/);
   assert.equal(payload.embeds[0].thumbnail?.url, 'https://example.com/avatar.png');
 });
+
+test('recent tag events backfill the announcement section before new announcements accumulate', () => {
+  const state = testState();
+  state.discordMessages.announcements = [];
+  const gameState = buildGameStatePayload(state);
+
+  assert.equal(gameState.recentAnnouncements.length, 1);
+  assert.match(gameState.recentAnnouncements[0].title, /New Tag/);
+  assert.match(gameState.recentAnnouncements[0].description, /mamafeisty.*robdparry/);
+});
