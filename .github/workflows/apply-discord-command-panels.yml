@@ -19,14 +19,6 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Normalize patch script quotes
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('scripts/apply-discord-command-panels.py')
-          text = p.read_text(encoding='utf-8').replace('“', '"').replace('”', '"')
-          p.write_text(text, encoding='utf-8')
-          PY
       - name: Apply panels
         run: python3 scripts/apply-discord-command-panels.py
       - name: Install dependencies
