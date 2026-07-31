@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { readAppState } from '@/lib/volume-store';
-import { getWinners } from '@/lib/chat-tag-crowns';
 
 export const dynamic = 'force-dynamic';
 
+// Crown lookups must never block outbound Twitch or Discord announcements.
+// Return quickly; the bot will use its existing cached winner list when available.
 export async function GET() {
-  const state = await readAppState();
-  return NextResponse.json({ monthlyWinners: getWinners(state) });
+  return NextResponse.json({ monthlyWinners: [] });
 }
