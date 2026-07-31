@@ -89,6 +89,7 @@ test('permanent dashboard shows the latest three announcements first', () => {
   assert.match(fields[0].value, /mamafeisty.*robdparry/);
   assert.match(fields[1].name, /Automatic Rotation/);
   assert.doesNotMatch(JSON.stringify(fields), /This should not be displayed/);
+  assert.doesNotMatch(JSON.stringify(fields), /Add to OBS|tinyurl\.com\/spmt-overlay/);
 });
 
 test('current tagged duration uses a live Discord relative timestamp', () => {

@@ -232,7 +232,6 @@ export function buildChatTagEmbed(gameState: any) {
             : [{ name: '📣 LATEST ANNOUNCEMENT', value: 'No announcements yet.', inline: false }]),
           { name: '📜 Recent Tag History', value: recentLines, inline: false },
           { name: '🏆 Top 3', value: top3Lines, inline: true },
-          { name: '📺 Overlay', value: '[Add to OBS](https://tinyurl.com/spmt-overlay)', inline: true },
         ],
         ...(tag.currentIt?.avatarUrl ? { thumbnail: { url: tag.currentIt.avatarUrl } } : {}),
         footer: { text: 'type spmt controls to interact with chat tag' },
