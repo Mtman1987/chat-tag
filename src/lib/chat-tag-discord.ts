@@ -1,5 +1,6 @@
 import { readAppState, toMillis, updateAppState, type AppState } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
+import { applyCrownsToDiscordPayload } from '@/lib/discord-webhooks';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
@@ -206,16 +207,18 @@ async function tryRequestDiscord(path: string, init: RequestInit) {
 }
 
 export async function sendDiscordChannelMessage(channelId: string, payload: Record<string, unknown>) {
+  const crownedPayload = await applyCrownsToDiscordPayload(payload);
   return requestDiscord(`/channels/${channelId}/messages`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(crownedPayload),
   });
 }
 
 async function editDiscordMessage(channelId: string, messageId: string, payload: Record<string, unknown>) {
+  const crownedPayload = await applyCrownsToDiscordPayload(payload);
   return requestDiscord(`/channels/${channelId}/messages/${messageId}`, {
     method: 'PATCH',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(crownedPayload),
   });
 }
 
@@ -224,12 +227,13 @@ async function sendDiscordWebhookMessage(payload: Record<string, unknown>) {
     return sendDiscordChannelMessage(CHAT_TAG_CHANNEL_ID, payload);
   }
 
+  const crownedPayload = await applyCrownsToDiscordPayload(payload);
   const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
   webhookUrl.searchParams.set('wait', 'true');
   const response = await fetch(webhookUrl.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(withChatTagWebhookIdentity(payload)),
+    body: JSON.stringify(withChatTagWebhookIdentity(crownedPayload)),
   });
 
   if (!response.ok) {
@@ -244,10 +248,11 @@ async function editDiscordWebhookMessage(messageId: string, payload: Record<stri
     return editDiscordMessage(CHAT_TAG_CHANNEL_ID, messageId, payload);
   }
 
+  const crownedPayload = await applyCrownsToDiscordPayload(payload);
   const response = await fetch(getWebhookMessageUrl(messageId), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(withChatTagWebhookIdentity(payload)),
+    body: JSON.stringify(withChatTagWebhookIdentity(crownedPayload)),
   });
 
   if (!response.ok) {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readAppState, updateAppState, type JsonObject } from '@/lib/volume-store';
 import { getPublicAppOrigin } from '@/lib/public-origin';
-import { decorateCrowns, decorateCrownsDeep, getWinners } from '@/lib/chat-tag-crowns';
+import { decorateCrownsDeep, getWinners } from '@/lib/chat-tag-crowns';
 
 export type DiscordWebhookRecord = {
   id: string;
@@ -35,6 +35,49 @@ function timeoutSignal(milliseconds: number) {
   const controller = new AbortController();
   setTimeout(() => controller.abort(), milliseconds);
   return controller.signal;
+}
+
+function scheduleDiscordMessageCleanup(
+  channelId: string,
+  result: Extract<DiscordSendResult, { ok: true }>,
+  botToken: string,
+  cleanupAfterMs?: number,
+) {
+  if (!result.messageId || !cleanupAfterMs || cleanupAfterMs <= 0) return;
+
+  setTimeout(async () => {
+    let webhookError = '';
+    if (result.via === 'webhook' && result.webhook?.id && result.webhook?.token) {
+      try {
+        const response = await fetch(
+          `https://discord.com/api/v10/webhooks/${result.webhook.id}/${result.webhook.token}/messages/${result.messageId}`,
+          { method: 'DELETE', signal: timeoutSignal(7_000) },
+        );
+        if (response.ok || response.status === 404) return;
+        webhookError = `webhook delete returned ${response.status}: ${await response.text().catch(() => '')}`;
+      } catch (error: any) {
+        webhookError = error?.message || 'webhook delete failed';
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `https://discord.com/api/v10/channels/${channelId}/messages/${result.messageId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bot ${botToken}` },
+          signal: timeoutSignal(7_000),
+        },
+      );
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`bot delete returned ${response.status}: ${await response.text().catch(() => '')}`);
+      }
+    } catch (error: any) {
+      console.error(
+        `[Discord] Timed cleanup failed for ${channelId}/${result.messageId}: ${webhookError ? `${webhookError}; ` : ''}${error?.message || error}`,
+      );
+    }
+  }, cleanupAfterMs);
 }
 
 function normalizeDiscordUrl(value: unknown): string | undefined {
@@ -212,19 +255,21 @@ async function sendDiscordViaBot(channelId: string, payload: DiscordSendPayload,
     });
   }
 
-  return { ok: true, via: 'bot', messageId: message?.id || undefined };
+  const result: Extract<DiscordSendResult, { ok: true }> = {
+    ok: true,
+    via: 'bot',
+    messageId: message?.id || undefined,
+  };
+  scheduleDiscordMessageCleanup(channelId, result, botToken, payload.cleanupAfterMs);
+  return result;
 }
 
 // Monthly winners keep their crown in every Discord message we send.
-async function applyCrowns(payload: DiscordSendPayload): Promise<DiscordSendPayload> {
+export async function applyCrownsToDiscordPayload<T extends Record<string, any>>(payload: T): Promise<T> {
   try {
     const winners = getWinners(await readAppState());
     if (!winners.length) return payload;
-    return {
-      ...payload,
-      content: decorateCrowns(payload.content, winners) as string,
-      embeds: payload.embeds ? (decorateCrownsDeep(payload.embeds, winners) as JsonObject[]) : payload.embeds,
-    };
+    return decorateCrownsDeep(payload, winners) as T;
   } catch (error) {
     console.error('[Discord] Failed to apply winner crowns:', error);
     return payload;
@@ -232,7 +277,7 @@ async function applyCrowns(payload: DiscordSendPayload): Promise<DiscordSendPayl
 }
 
 export async function sendDiscordMessage(rawPayload: DiscordSendPayload): Promise<DiscordSendResult> {
-  const payload = await applyCrowns(rawPayload);
+  const payload = await applyCrownsToDiscordPayload(rawPayload);
   const botToken = payload.botToken || process.env.DISCORD_BOT_TOKEN;
   if (!botToken) {
     return { ok: false, error: 'DISCORD_BOT_TOKEN is not configured' };
@@ -302,7 +347,14 @@ export async function sendDiscordMessage(rawPayload: DiscordSendPayload): Promis
       components: payload.components || [],
     });
 
-    return { ok: true, via: 'webhook', messageId: message?.id || undefined, webhook };
+    const result: Extract<DiscordSendResult, { ok: true }> = {
+      ok: true,
+      via: 'webhook',
+      messageId: message?.id || undefined,
+      webhook,
+    };
+    scheduleDiscordMessageCleanup(channelId, result, botToken, payload.cleanupAfterMs);
+    return result;
   } catch (error: any) {
     const fallback = payload.fallbackToBot === false ? null : await sendDiscordViaBot(channelId, payload, botToken).catch(() => null);
     if (fallback?.ok) return fallback;

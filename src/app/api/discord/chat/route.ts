@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
-import { sendDiscordMessage, type DiscordSendResult } from '@/lib/discord-webhooks';
+import { sendDiscordMessage } from '@/lib/discord-webhooks';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getPublicAppOrigin } from '@/lib/public-origin';
@@ -13,9 +13,16 @@ export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
-const CLEANUP_DELAY_MS = 5 * 60 * 1000;
+const CLEANUP_DELAY_MS = 10 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 const SUPPORT_TICKET_COMMANDS = new Set(['support', 'ticket', 'doctor']);
+
+type DiscordReplyContext = {
+  userName: string;
+  command: string;
+  userAvatarUrl: string;
+  chatTagLogoUrl: string;
+};
 
 function debugEnabled(scope: string) {
   const value = String(process.env.DEBUG || '').toLowerCase();
@@ -46,34 +53,43 @@ function absolutePublicUrl(req: NextRequest, value: string) {
 }
 
 async function deleteDiscordMessage(channelId: string, messageId?: string) {
-  if (!DISCORD_BOT_TOKEN || !channelId || !messageId) return;
+  if (!DISCORD_BOT_TOKEN || !channelId || !messageId) {
+    console.warn('[Discord Chat] Cannot delete original message: missing bot token, channel id, or message id');
+    return false;
+  }
 
   const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
   }).catch(() => null);
 
-  if (response && !response.ok && response.status !== 404) {
-    console.error(`[Discord Chat] Failed to delete message: ${response.status} ${await response.text().catch(() => '')}`);
+  if (!response) {
+    console.error(`[Discord Chat] Failed to delete original message ${channelId}/${messageId}: request failed`);
+    return false;
   }
+  if (!response.ok && response.status !== 404) {
+    console.error(`[Discord Chat] Failed to delete message: ${response.status} ${await response.text().catch(() => '')}`);
+    return false;
+  }
+  return true;
 }
 
-async function cleanupSentDiscordMessage(channelId: string, result: DiscordSendResult | null) {
-  if (!result || !result.ok || !result.messageId) return;
-
-  setTimeout(() => {
-    if (result.via === 'webhook' && result.webhook?.id && result.webhook?.token) {
-      fetch(`https://discord.com/api/v10/webhooks/${result.webhook.id}/${result.webhook.token}/messages/${result.messageId}`, {
-        method: 'DELETE',
-      }).catch(() => {});
-      return;
-    }
-
-    deleteDiscordMessage(channelId, result.messageId).catch(() => {});
-  }, CLEANUP_DELAY_MS);
+function replyEmbedIdentity(context: DiscordReplyContext) {
+  const command = context.command.replace(/\s+/g, ' ').trim().slice(0, 1400);
+  return {
+    author: {
+      name: context.userName,
+      ...(context.userAvatarUrl ? { icon_url: context.userAvatarUrl } : {}),
+    },
+    ...(context.userAvatarUrl ? { thumbnail: { url: context.userAvatarUrl } } : {}),
+    footer: {
+      text: `${context.userName} • ${command || 'Chat Tag command'}`,
+      ...(context.chatTagLogoUrl ? { icon_url: context.chatTagLogoUrl } : {}),
+    },
+  };
 }
 
-async function sendDiscordReply(channelId: string, content: string) {
+async function sendDiscordReply(channelId: string, content: string, context: DiscordReplyContext) {
   const result = await sendDiscordMessage({
     channelId,
     content: '',
@@ -83,13 +99,14 @@ async function sendDiscordReply(channelId: string, content: string) {
         title: 'Chat Tag',
         description: content,
         color: 0x00d9ff,
-        footer: { text: 'SPMT Chat Tag' },
+        ...replyEmbedIdentity(context),
         timestamp: new Date().toISOString(),
       },
     ],
     allowedMentions: { parse: [] },
     botToken: DISCORD_BOT_TOKEN,
     recordHistorySource: 'discord/chat',
+    cleanupAfterMs: CLEANUP_DELAY_MS,
   });
   if (!result.ok) {
     throw new Error(result.error);
@@ -117,6 +134,7 @@ async function sendDiscordPackReply(
   channelId: string,
   userName: string,
   packData: any,
+  context: DiscordReplyContext,
 ) {
   const packCards = Array.isArray(packData.pack) ? packData.pack : [];
   const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
@@ -143,7 +161,7 @@ async function sendDiscordPackReply(
         inline: false,
       },
     ],
-    footer: { text: 'SPMT Chat Tag' },
+    ...replyEmbedIdentity(context),
     timestamp: new Date().toISOString(),
   };
   const cardEmbeds = packCards.slice(0, 5).map((card: any) => {
@@ -167,11 +185,11 @@ async function sendDiscordPackReply(
     allowedMentions: { parse: [] },
     botToken: DISCORD_BOT_TOKEN,
     recordHistorySource: 'discord/chat-pack',
+    cleanupAfterMs: CLEANUP_DELAY_MS,
   });
   if (!result.ok) {
     throw new Error(result.error);
   }
-  await cleanupSentDiscordMessage(channelId, result);
   return result;
 }
 
@@ -207,6 +225,12 @@ export async function POST(req: NextRequest) {
     const channelId = data.channelId || '';
     const messageId = data.messageId || data.userMessageId || '';
     const userName = rawUserName || 'Unknown';
+    const replyContext: DiscordReplyContext = {
+      userName,
+      command: String(message || rawMessage),
+      userAvatarUrl: absolutePublicUrl(req, data.userAvatar || data.avatarUrl || ''),
+      chatTagLogoUrl: absolutePublicUrl(req, '/brand/chat-tag-icon-192.png'),
+    };
 
     if (!message && channelId) {
       return NextResponse.json({ success: true, skipped: 'empty-message' });
@@ -288,9 +312,7 @@ export async function POST(req: NextRequest) {
 
     // Helper to reply
     const reply = async (text: string) => {
-      const result = await sendDiscordReply(channelId, text);
-      await cleanupSentDiscordMessage(channelId, result);
-      return result;
+      return sendDiscordReply(channelId, text, replyContext);
     };
 
     // Capture away state before any mutations (needed for away toggle)
@@ -547,7 +569,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, reply: 'pack-error' });
       }
 
-      await sendDiscordPackReply(req, channelId, userName, packData);
+      await sendDiscordPackReply(req, channelId, userName, packData, replyContext);
       return NextResponse.json({ success: true });
     }
 

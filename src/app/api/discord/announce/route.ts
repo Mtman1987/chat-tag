@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readAppState } from "@/lib/volume-store";
 import { buildGameStatePayload, postOrUpdateChatTagEmbed } from "@/lib/chat-tag-discord";
+import { applyCrownsToDiscordPayload } from "@/lib/discord-webhooks";
 import { getRuntimePublicUrl } from "@/lib/runtime-config.server";
 
 const DISCORD_WEBHOOK_URL =
@@ -11,7 +12,7 @@ const CHAT_TAG_AVATAR_URL =
   process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
   "";
 const DISCORD_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
-const TAG_EVENT_DELETE_DELAY_MS = 5 * 60 * 1000;
+const TAG_EVENT_DELETE_DELAY_MS = 10 * 60 * 1000;
 const PUBLIC_APP_ORIGIN = getRuntimePublicUrl(
   "appOrigin",
   process.env.CHAT_TAG_PUBLIC_URL ||
@@ -75,7 +76,8 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
     try {
       const webhookUrl = new URL(DISCORD_WEBHOOK_URL);
       webhookUrl.searchParams.set("wait", "true");
-      const freshPayload = JSON.parse(JSON.stringify(payload)) as Record<string, any>;
+      const crownedPayload = await applyCrownsToDiscordPayload(payload);
+      const freshPayload = JSON.parse(JSON.stringify(crownedPayload)) as Record<string, any>;
       const webhookPayload: Record<string, any> = {
         username: CHAT_TAG_WEBHOOK_NAME,
         ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
@@ -155,12 +157,21 @@ async function postDiscordWebhook(payload: Record<string, unknown>): Promise<Dis
       if (response.ok) {
         const sentMessage = await response.json().catch(() => null);
         if (sentMessage?.id) {
-          setTimeout(() => {
-            fetch(`${DISCORD_WEBHOOK_URL}/messages/${sentMessage.id}`, {
-              method: "DELETE",
-            }).catch((error) => {
+          setTimeout(async () => {
+            try {
+              const deleteBase = new URL(DISCORD_WEBHOOK_URL);
+              deleteBase.search = "";
+              deleteBase.hash = "";
+              deleteBase.pathname = `${deleteBase.pathname.replace(/\/$/, "")}/messages/${sentMessage.id}`;
+              const deleteResponse = await fetch(deleteBase.toString(), { method: "DELETE" });
+              if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                console.error(
+                  `[Announce] Discord webhook cleanup failed: ${deleteResponse.status} ${await deleteResponse.text().catch(() => "")}`,
+                );
+              }
+            } catch (error) {
               console.error("[Announce] Discord webhook cleanup failed:", error);
-            });
+            }
           }, TAG_EVENT_DELETE_DELAY_MS);
         }
         console.log(

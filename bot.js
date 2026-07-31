@@ -694,8 +694,9 @@ let liveMembersCache = {
   map: new Map(),
 };
 
-async function sendMessageViaAPI(targetChannel, message, forSourceOnly = false, attempt = 0) {
+async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = false, attempt = 0) {
   console.log(`[Bot] sendMessageViaAPI called: channel=${targetChannel}, forSourceOnly=${forSourceOnly}`);
+  const message = await withCrowns(rawMessage);
   const clientId = getTwitchClientId();
   
   // Get app access token — required for for_source_only support
