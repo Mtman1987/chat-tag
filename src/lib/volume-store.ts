@@ -32,6 +32,7 @@ export type AppState = {
   };
   discordMessages: {
     lastTagAnnouncement?: JsonObject;
+    announcements?: JsonObject[];
     history?: JsonObject[];
     chatTagPersistentEmbed?: JsonObject;
   };

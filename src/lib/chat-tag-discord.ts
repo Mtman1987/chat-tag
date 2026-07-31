@@ -86,6 +86,23 @@ export function buildGameStatePayload(state: AppState) {
 
   const currentIt = players.find((p) => p.isIt);
 
+  const storedAnnouncements = Array.isArray(state.discordMessages?.announcements)
+    ? state.discordMessages.announcements
+    : state.discordMessages?.lastTagAnnouncement
+      ? [state.discordMessages.lastTagAnnouncement]
+      : [];
+  const recentAnnouncements = [...storedAnnouncements]
+    .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
+    .slice(0, 3)
+    .map((announcement: any) => ({
+      id: announcement.id || '',
+      title: announcement.title || 'Chat Tag Update',
+      description: announcement.description || announcement.message || '',
+      details: Array.isArray(announcement.details) ? announcement.details : [],
+      kind: announcement.kind || 'update',
+      timestamp: toMillis(announcement.timestamp) || Date.now(),
+    }));
+
   const recentHistory = [...(state.tagHistory || [])]
     .sort((a: any, b: any) => (toMillis(b.timestamp) || 0) - (toMillis(a.timestamp) || 0))
     .slice(0, 25)
@@ -114,7 +131,11 @@ export function buildGameStatePayload(state: AppState) {
   return {
     tag: {
       currentIt: currentIt
-        ? { id: currentIt.id, twitchUsername: currentIt.twitchUsername }
+        ? {
+            id: currentIt.id,
+            twitchUsername: currentIt.twitchUsername,
+            avatarUrl: currentIt.avatarUrl || '',
+          }
         : null,
       isFreeForAll: !currentIt,
       lastTagTime: toMillis(state.tagGame.state.lastTagTime),
@@ -122,6 +143,7 @@ export function buildGameStatePayload(state: AppState) {
     },
     players,
     leaderboard,
+    recentAnnouncements,
     recentHistory,
     bingo,
     timestamp: Date.now(),
@@ -131,16 +153,41 @@ export function buildGameStatePayload(state: AppState) {
 export function buildChatTagEmbed(gameState: any) {
   const tag = gameState.tag || {};
   const leaderboard = gameState.leaderboard || [];
+  const announcements = gameState.recentAnnouncements || [];
   const history = gameState.recentHistory || [];
 
+  const taggedAt = Number(tag.lastTagTime || 0);
+  const taggedAtUnix = taggedAt > 0 ? Math.floor(taggedAt / 1000) : 0;
   const itLine = tag.currentIt
-    ? `🎯 **${tag.currentIt.twitchUsername}** is IT`
-    : '🔥 **FREE FOR ALL** - Anyone can tag for DOUBLE POINTS!';
-  const elapsed = tag.lastTagTime ? Math.floor((Date.now() - tag.lastTagTime) / 60000) : 0;
-  const timeLine = tag.lastTagTime ? `⏱️ Last tag ${elapsed} min ago` : '⏱️ No tags yet';
+    ? `🎯 **${tag.currentIt.twitchUsername} is IT**`
+    : '🔥 **FREE FOR ALL** — Anyone can tag for DOUBLE POINTS!';
+  const timeLine = tag.currentIt && taggedAtUnix
+    ? `⏳ Tagged <t:${taggedAtUnix}:R>\n🗓️ Holding the tag since <t:${taggedAtUnix}:F>`
+    : tag.lastTagTime
+      ? `⏱️ Last tag <t:${taggedAtUnix}:R>`
+      : '⏱️ No tags yet';
+  const announcementFields = announcements.slice(0, 3).map((announcement: any, index: number) => {
+    const timestamp = Number(announcement.timestamp || 0);
+    const unix = timestamp > 0 ? Math.floor(timestamp / 1000) : 0;
+    const details = Array.isArray(announcement.details)
+      ? announcement.details.filter(Boolean).slice(0, 5).join('\n')
+      : '';
+    const value = [
+      String(announcement.description || 'Chat Tag was updated.'),
+      details,
+      unix ? `🕒 <t:${unix}:R> • <t:${unix}:f>` : '',
+    ].filter(Boolean).join('\n\n').slice(0, 1024);
+    return {
+      name: index === 0
+        ? `📣 LATEST ANNOUNCEMENT — ${announcement.title || 'Chat Tag Update'}`
+        : `📢 ${announcement.title || 'Previous Announcement'}`,
+      value,
+      inline: false,
+    };
+  });
   const recentLines =
     history
-      .slice(0, 5)
+      .slice(0, 3)
       .map((h: any) => {
         const icon = h.blocked ? '🛡️' : h.doublePoints ? '🔥' : '🎯';
         if (h.blocked) return `${icon} ${h.taggerUsername} -> ${h.taggedUsername} (${h.blocked})`;
@@ -162,10 +209,14 @@ export function buildChatTagEmbed(gameState: any) {
         description: `${itLine}\n${timeLine}`,
         color: tag.isFreeForAll ? 0xff4500 : 0x00d9ff,
         fields: [
-          { name: '📜 Recent', value: recentLines, inline: false },
+          ...(announcementFields.length > 0
+            ? announcementFields
+            : [{ name: '📣 LATEST ANNOUNCEMENT', value: 'No announcements yet.', inline: false }]),
+          { name: '📜 Recent Tag History', value: recentLines, inline: false },
           { name: '🏆 Top 3', value: top3Lines, inline: true },
           { name: '📺 Overlay', value: '[Add to OBS](https://tinyurl.com/spmt-overlay)', inline: true },
         ],
+        ...(tag.currentIt?.avatarUrl ? { thumbnail: { url: tag.currentIt.avatarUrl } } : {}),
         footer: { text: 'type spmt controls to interact with chat tag' },
         timestamp: new Date().toISOString(),
       },

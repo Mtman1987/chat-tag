@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "typecheck": "npx next typegen && npx tsc --noEmit",
     "test:workspace-theme": "tsx --test tests/workspace-theme.test.ts",
-    "test:crowns": "node --test tests/chat-tag-crowns.test.mjs"
+    "test:crowns": "node --test tests/chat-tag-crowns.test.mjs",
+    "test:discord-dashboard": "npx tsx --test tests/chat-tag-discord-dashboard.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.3",
