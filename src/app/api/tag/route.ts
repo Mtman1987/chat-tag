@@ -5,7 +5,7 @@ import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { MAX_PASSES, getPassSpendDenial } from '@/lib/pass-policy';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
-import { crownUpstreamEventId, crownXpReward } from '@/lib/chat-tag-crown-rewards';
+import { crownMonthKey, crownUpstreamEventId, crownXpReward } from '@/lib/chat-tag-crown-rewards';
 import { buildXpIdempotencyKey, mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
 
 export const dynamic = 'force-dynamic';
@@ -115,21 +115,23 @@ async function awardCrownXp(input: {
   userId: string;
   place: number;
   month: string;
-  winner: { username: string; displayName?: string };
-}) {
+  monthKey: string;
+  username: string;
+  displayName?: string;
+}): Promise<boolean> {
   const delta = crownXpReward(input.place);
-  if (delta <= 0) return;
+  if (delta <= 0) return false;
 
   try {
     const resolved = await resolveChatTagSpmtUser({
       localUserId: input.userId,
-      twitchUsername: input.winner.username,
-      displayName: input.winner.displayName,
+      twitchUsername: input.username,
+      displayName: input.displayName,
     });
-    if (!resolved) return;
+    if (!resolved) return false;
 
-    const upstreamEventId = crownUpstreamEventId({ userId: input.userId, place: input.place, month: input.month });
-    await awardSpmtXp({
+    const upstreamEventId = crownUpstreamEventId({ userId: input.userId, place: input.place, monthKey: input.monthKey });
+    const result = await awardSpmtXp({
       userId: resolved.spmtUserId,
       sourceApp: 'chat-tag',
       eventType: 'chat-tag-crown',
@@ -147,11 +149,14 @@ async function awardCrownXp(input: {
         twitchUsername: resolved.twitchUsername,
         place: input.place,
         month: input.month,
+        monthKey: input.monthKey,
         surface: 'chat-tag',
       },
     });
+    return Boolean(result?.ok);
   } catch (error) {
     console.warn('[ChatTag] crown XP award skipped', error);
+    return false;
   }
 }
 
@@ -1009,11 +1014,20 @@ export async function POST(req: NextRequest) {
       const place = body.place; // 1, 2, or 3
       if (![1, 2, 3].includes(place)) return NextResponse.json({ error: 'place must be 1, 2, or 3' }, { status: 400 });
       const month = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
-      let winner: { username: string; displayName?: string } | null = null;
+      const monthKey = crownMonthKey();
+      const payoutKey = crownUpstreamEventId({ userId, place, monthKey });
+      const crowning: { winner: { username: string; displayName?: string } | null; alreadyPaid: boolean } = {
+        winner: null,
+        alreadyPaid: false,
+      };
       await updateAppState((state) => {
         const player = state.tagPlayers?.[userId];
         if (!player) return;
         if (!state.tagGame.state.monthlyWinners) state.tagGame.state.monthlyWinners = [];
+        // The admin UI removes a winner by clearing all crowns and re-setting the rest,
+        // so the paid purses are tracked separately from the winner list.
+        state.tagGame.state.crownPayouts = state.tagGame.state.crownPayouts || [];
+        crowning.alreadyPaid = state.tagGame.state.crownPayouts.some((entry: any) => entry?.key === payoutKey);
         // Remove any existing entry for this place or this player
         state.tagGame.state.monthlyWinners = state.tagGame.state.monthlyWinners.filter(
           (w: any) => w.place !== place && w.userId !== userId
@@ -1027,14 +1041,33 @@ export async function POST(req: NextRequest) {
           setAt: Date.now(),
         });
         state.tagGame.state.monthlyWinners.sort((a: any, b: any) => a.place - b.place);
-        winner = { username: player.twitchUsername || userId, displayName: player.displayName };
+        crowning.winner = { username: player.twitchUsername || userId, displayName: player.displayName };
       });
 
-      if (winner) {
-        void awardCrownXp({ userId, place, month, winner });
+      if (!crowning.winner) {
+        return NextResponse.json({ error: 'player not found' }, { status: 404 });
       }
 
-      return NextResponse.json({ success: true, crownXp: crownXpReward(place) });
+      let crownXp = 0;
+      if (!crowning.alreadyPaid) {
+        const paid = await awardCrownXp({
+          userId,
+          place,
+          month,
+          monthKey,
+          username: crowning.winner.username,
+          displayName: crowning.winner.displayName,
+        });
+        if (paid) {
+          crownXp = crownXpReward(place);
+          await updateAppState((state) => {
+            state.tagGame.state.crownPayouts = state.tagGame.state.crownPayouts || [];
+            state.tagGame.state.crownPayouts.push({ key: payoutKey, userId, place, monthKey, delta: crownXp, paidAt: Date.now() });
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true, crownXp });
     }
 
     if (action === 'clear-winners') {
