@@ -14,6 +14,7 @@
     "typecheck": "npx next typegen && npx tsc --noEmit",
     "test:workspace-theme": "tsx --test tests/workspace-theme.test.ts",
     "test:crowns": "node --test tests/chat-tag-crowns.test.mjs",
+    "test:crown-rewards": "npx tsx --test tests/chat-tag-crown-rewards.test.ts",
     "test:discord-dashboard": "npx tsx --test tests/chat-tag-discord-dashboard.test.ts",
     "test:quackverse-pack": "npx tsx --test tests/quackverse-pack-contract.test.ts"
   },

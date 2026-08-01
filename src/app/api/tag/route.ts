@@ -5,7 +5,8 @@ import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { MAX_PASSES, getPassSpendDenial } from '@/lib/pass-policy';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
-import { mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
+import { crownUpstreamEventId, crownXpReward } from '@/lib/chat-tag-crown-rewards';
+import { buildXpIdempotencyKey, mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,32 @@ function twitchIdFromPlayerId(value: unknown): string {
   return String(value || '').replace(/^user_/, '').trim();
 }
 
+async function resolveChatTagSpmtUser(input: {
+  localUserId: string;
+  twitchUsername?: string;
+  displayName?: string;
+}) {
+  let twitchId = twitchIdFromPlayerId(input.localUserId);
+  let twitchUsername = normalizeUsername(input.twitchUsername);
+  if (!/^\d+$/.test(twitchId) && twitchUsername) {
+    const twitchUser = await lookupTwitchUser(twitchUsername).catch(() => null);
+    if (twitchUser?.id) twitchId = twitchUser.id;
+    if (twitchUser?.login) twitchUsername = twitchUser.login;
+  }
+  if (!/^\d+$/.test(twitchId) || !twitchUsername) return null;
+
+  const identity = await grandfatherSpmtIdentity({
+    twitchId,
+    twitchUsername,
+    displayName: input.displayName || twitchUsername,
+    issueSession: false,
+  });
+  const spmtUserId = identity?.user?.id;
+  if (!spmtUserId) return null;
+
+  return { spmtUserId, twitchId, twitchUsername };
+}
+
 async function awardChatTagXp(input: {
   localUserId: string;
   twitchUsername?: string;
@@ -61,23 +88,9 @@ async function awardChatTagXp(input: {
   metadata?: Record<string, unknown>;
 }) {
   try {
-    let twitchId = twitchIdFromPlayerId(input.localUserId);
-    let twitchUsername = normalizeUsername(input.twitchUsername);
-    if (!/^\d+$/.test(twitchId) && twitchUsername) {
-      const twitchUser = await lookupTwitchUser(twitchUsername).catch(() => null);
-      if (twitchUser?.id) twitchId = twitchUser.id;
-      if (twitchUser?.login) twitchUsername = twitchUser.login;
-    }
-    if (!/^\d+$/.test(twitchId) || !twitchUsername) return;
-
-    const identity = await grandfatherSpmtIdentity({
-      twitchId,
-      twitchUsername,
-      displayName: input.displayName || twitchUsername,
-      issueSession: false,
-    });
-    const spmtUserId = identity?.user?.id;
-    if (!spmtUserId) return;
+    const resolved = await resolveChatTagSpmtUser(input);
+    if (!resolved) return;
+    const { spmtUserId, twitchId, twitchUsername } = resolved;
 
     const award = mappedXpAwardV1({
       userId: spmtUserId,
@@ -94,6 +107,51 @@ async function awardChatTagXp(input: {
     await awardSpmtXp(award);
   } catch (error) {
     console.warn('[ChatTag] SPMT XP award skipped', error);
+  }
+}
+
+// Tag points stay tracking-only; a crown pays a fixed SPMT XP purse instead.
+async function awardCrownXp(input: {
+  userId: string;
+  place: number;
+  month: string;
+  winner: { username: string; displayName?: string };
+}) {
+  const delta = crownXpReward(input.place);
+  if (delta <= 0) return;
+
+  try {
+    const resolved = await resolveChatTagSpmtUser({
+      localUserId: input.userId,
+      twitchUsername: input.winner.username,
+      displayName: input.winner.displayName,
+    });
+    if (!resolved) return;
+
+    const upstreamEventId = crownUpstreamEventId({ userId: input.userId, place: input.place, month: input.month });
+    await awardSpmtXp({
+      userId: resolved.spmtUserId,
+      sourceApp: 'chat-tag',
+      eventType: 'chat-tag-crown',
+      idempotencyKey: buildXpIdempotencyKey({
+        sourceApp: 'chat-tag',
+        eventType: 'chat-tag-crown',
+        upstreamEventId,
+        userId: resolved.spmtUserId,
+      }),
+      delta,
+      metadata: {
+        upstreamEventId,
+        localUserId: input.userId,
+        twitchId: resolved.twitchId,
+        twitchUsername: resolved.twitchUsername,
+        place: input.place,
+        month: input.month,
+        surface: 'chat-tag',
+      },
+    });
+  } catch (error) {
+    console.warn('[ChatTag] crown XP award skipped', error);
   }
 }
 
@@ -950,6 +1008,8 @@ export async function POST(req: NextRequest) {
     if (action === 'set-winner') {
       const place = body.place; // 1, 2, or 3
       if (![1, 2, 3].includes(place)) return NextResponse.json({ error: 'place must be 1, 2, or 3' }, { status: 400 });
+      const month = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+      let winner: { username: string; displayName?: string } | null = null;
       await updateAppState((state) => {
         const player = state.tagPlayers?.[userId];
         if (!player) return;
@@ -963,12 +1023,18 @@ export async function POST(req: NextRequest) {
           userId,
           username: player.twitchUsername || userId,
           place,
-          month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
+          month,
           setAt: Date.now(),
         });
         state.tagGame.state.monthlyWinners.sort((a: any, b: any) => a.place - b.place);
+        winner = { username: player.twitchUsername || userId, displayName: player.displayName };
       });
-      return NextResponse.json({ success: true });
+
+      if (winner) {
+        void awardCrownXp({ userId, place, month, winner });
+      }
+
+      return NextResponse.json({ success: true, crownXp: crownXpReward(place) });
     }
 
     if (action === 'clear-winners') {
