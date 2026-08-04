@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Starfield } from '@/components/starfield';
@@ -11,6 +11,8 @@ type RootShellProps = {
   children: React.ReactNode;
 };
 
+const WORKSPACE_REFRESH_MS = 30_000;
+
 function applyThemePreset(preset: string) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -20,6 +22,7 @@ function applyThemePreset(preset: string) {
 
 export function RootShell({ children }: RootShellProps) {
   const pathname = usePathname();
+  const revisionRef = useRef<number | null>(null);
   const isOverlayView =
     /^\/overlay\/[^/]+$/.test(pathname) ||
     pathname === '/quackverse-overlay' ||
@@ -33,50 +36,60 @@ export function RootShell({ children }: RootShellProps) {
     };
   }, [isOverlayView]);
 
-  useEffect(() => {
+  const loadTheme = useCallback(async (quiet = false) => {
     if (isOverlayView) return;
-
-    let cancelled = false;
-
-    const loadLocalSettings = async () => {
-      try {
-        const res = await fetch('/api/settings', { cache: 'no-store' });
-        if (!res.ok) return { uiThemePreset: 'cosmic', followWorkspaceTheme: true };
-        const data = await res.json();
-        return {
+    let settings = { uiThemePreset: 'cosmic', followWorkspaceTheme: true };
+    try {
+      const localResponse = await fetch('/api/settings', { cache: 'no-store' });
+      if (localResponse.ok) {
+        const data = await localResponse.json();
+        settings = {
           uiThemePreset: String(data.uiThemePreset || 'cosmic'),
           followWorkspaceTheme: data.followWorkspaceTheme !== false,
         };
-      } catch {
-        return { uiThemePreset: 'cosmic', followWorkspaceTheme: true };
       }
-    };
+    } catch {
+      // Use the safe local fallback below.
+    }
 
-    const loadTheme = async () => {
-      const settings = await loadLocalSettings();
-      if (settings.followWorkspaceTheme) {
-        try {
-          const workspace = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
-          if (workspace.ok) {
-            const body = await workspace.json().catch(() => ({}));
-            if (!cancelled && body?.tokens) {
-              applyWorkspaceThemeTokens(document.documentElement, body.tokens as WorkspaceThemeTokensV1);
-              return;
-            }
+    if (settings.followWorkspaceTheme) {
+      try {
+        const workspace = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
+        const body = await workspace.json().catch(() => ({}));
+        if (workspace.ok && body?.tokens) {
+          const revision = Number(body.revision || 0);
+          if (revisionRef.current !== revision || !document.documentElement.dataset.workspaceTheme) {
+            applyWorkspaceThemeTokens(document.documentElement, body.tokens as WorkspaceThemeTokensV1);
+            revisionRef.current = revision;
+            window.dispatchEvent(new CustomEvent('spmt-workspace-updated', { detail: body }));
           }
-        } catch {
-          // Fall back to the app-local preset below.
+          return;
         }
+      } catch {
+        if (quiet && document.documentElement.dataset.workspaceTheme) return;
       }
-      if (!cancelled) applyThemePreset(settings.uiThemePreset);
-    };
+    }
 
-    loadTheme();
-
-    return () => {
-      cancelled = true;
-    };
+    revisionRef.current = null;
+    applyThemePreset(settings.uiThemePreset);
   }, [isOverlayView]);
+
+  useEffect(() => {
+    if (isOverlayView) return;
+    void loadTheme();
+    const interval = window.setInterval(() => void loadTheme(true), WORKSPACE_REFRESH_MS);
+    const onFocus = () => void loadTheme(true);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void loadTheme(true);
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isOverlayView, loadTheme]);
 
   if (isOverlayView) {
     return <>{children}</>;
