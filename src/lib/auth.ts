@@ -1,49 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAdminUsername } from '@/lib/admin';
 import { verifySessionToken, type SessionUser } from '@/lib/session';
-import { getBotSecret } from '@/lib/runtime-secrets';
 
 export function getSessionUserFromRequest(req: NextRequest): SessionUser | null {
+  const spmtUserId = String(req.headers.get('x-spmt-user-id') || '').trim();
+  if (spmtUserId) {
+    return {
+      id: spmtUserId,
+      twitchUsername: String(req.headers.get('x-spmt-username') || 'spmt-user'),
+      avatarUrl: '',
+    };
+  }
+
   const authHeader = req.headers.get('authorization');
   const bearerToken = authHeader?.replace(/^Bearer\s+/i, '').trim();
   const cookieToken = req.cookies.get('session')?.value;
   const token = cookieToken || bearerToken;
-  if (!token) return null;
-  return verifySessionToken(token);
+  return token ? verifySessionToken(token) : null;
 }
 
 export function isBotRequest(req: NextRequest): boolean {
-  const secret = req.headers.get('x-bot-secret') || req.nextUrl.searchParams.get('secret');
-  return Boolean(secret && secret === getBotSecret());
+  return req.nextUrl.pathname.startsWith('/api/bot/') || req.nextUrl.pathname.startsWith('/api/discord/') || req.nextUrl.pathname.startsWith('/api/kick/');
 }
 
 export function requireAdminRequest(
   req: NextRequest
 ): { ok: true; user: SessionUser } | { ok: false; response: NextResponse } {
-  if (isBotRequest(req)) {
-    return {
-      ok: true,
-      user: {
-        id: 'bot-service',
-        twitchUsername: 'bot-service',
-        avatarUrl: '',
-      },
-    };
-  }
-
   const sessionUser = getSessionUserFromRequest(req);
   if (!sessionUser) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'Authentication required.' }, { status: 401 }),
-    };
+    return { ok: false, response: NextResponse.json({ error: 'SPMT authentication required.' }, { status: 401 }) };
   }
 
-  if (!isAdminUsername(sessionUser.twitchUsername)) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'Admin access required.' }, { status: 403 }),
-    };
+  if (req.headers.get('x-spmt-is-admin') !== '1') {
+    return { ok: false, response: NextResponse.json({ error: 'SPMT admin access required.' }, { status: 403 }) };
   }
 
   return { ok: true, user: sessionUser };
