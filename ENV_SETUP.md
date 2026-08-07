@@ -17,6 +17,11 @@ TWITCH_BOT_TOKEN=your_bot_oauth_token
 TWITCH_BROADCASTER_USERNAME=your_broadcaster_username
 TWITCH_BROADCASTER_TOKEN=your_broadcaster_oauth_token
 
+# Optional SPMT community sign-in. Twitch-only sign-in continues to work
+# without an SPMT account.
+SPMT_BASE_URL=https://spmt.live
+CHAT_TAG_CLIENT_SECRET=must_match_the_chat-tag_oauth_client_in_spmt
+
 TWITCH_CLIENT_ID=your_client_id
 TWITCH_CLIENT_SECRET=your_client_secret
 NEXT_PUBLIC_TWITCH_CLIENT_ID=your_client_id

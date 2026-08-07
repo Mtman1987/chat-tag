@@ -4,6 +4,18 @@ import { verifySessionToken } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   try {
+    const spmtUserId = String(req.headers.get('x-spmt-user-id') || '').trim();
+    if (spmtUserId) {
+      return NextResponse.json({
+        spmt: true,
+        twitch: {
+          id: spmtUserId,
+          name: decodeURIComponent(req.headers.get('x-spmt-display-name') || 'SPMT user'),
+          avatar: decodeURIComponent(req.headers.get('x-spmt-avatar-url') || ''),
+        },
+      });
+    }
+
     const authHeader = req.headers.get('authorization');
     const cookieToken = req.cookies.get('session')?.value;
     const token = authHeader?.replace('Bearer ', '') || cookieToken;

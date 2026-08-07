@@ -5,7 +5,6 @@ import { createSessionToken } from '@/lib/session';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getRuntimePublicValueWithDevFallback } from '@/lib/runtime-config.server';
 import { getBotSecret } from '@/lib/runtime-secrets';
-import { grandfatherSpmtIdentity } from '@/lib/spmt-client';
 
 function verifyDshBridge(searchParams: URLSearchParams) {
   const signature = String(searchParams.get('signature') || '');
@@ -23,17 +22,6 @@ function verifyDshBridge(searchParams: URLSearchParams) {
   const supplied = Buffer.from(signature, 'hex');
   const wanted = Buffer.from(expected, 'hex');
   return supplied.length === wanted.length && crypto.timingSafeEqual(supplied, wanted);
-}
-
-function setSpmtSessionCookie(response: NextResponse, accessToken: string | undefined, secure: boolean) {
-  if (!accessToken) return;
-  response.cookies.set('chat_tag_spmt_session', accessToken, {
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60,
-    httpOnly: true,
-    sameSite: 'lax',
-    secure,
-  });
 }
 
 function getConfiguredAppUrl(req: NextRequest) {
@@ -106,13 +94,6 @@ export async function GET(req: NextRequest) {
       sameSite: 'lax',
       secure: appUrl.startsWith('https://'),
     });
-    const grandfathered = await grandfatherSpmtIdentity({
-      twitchId: bridgedUserId,
-      twitchUsername: bridgedUsername,
-      displayName: searchParams.get('display_name') || bridgedUsername,
-      issueSession: true,
-    });
-    setSpmtSessionCookie(response, grandfathered?.accessToken, appUrl.startsWith('https://'));
     return response;
   }
 
@@ -212,14 +193,6 @@ export async function GET(req: NextRequest) {
     });
 
     response.cookies.set('chat_tag_oauth_state', '', { path: '/', maxAge: 0 });
-    const grandfathered = await grandfatherSpmtIdentity({
-      twitchId: twitchUser.id,
-      twitchUsername: twitchUser.login || twitchUser.display_name,
-      displayName: twitchUser.display_name,
-      issueSession: true,
-    });
-    setSpmtSessionCookie(response, grandfathered?.accessToken, appUrl.startsWith('https://'));
-
     return response;
   } catch (err: any) {
     callbackUrl.searchParams.set('error', 'server_error');

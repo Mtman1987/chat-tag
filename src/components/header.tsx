@@ -1,6 +1,6 @@
 'use client';
 
-import { Orbit, Settings, Info, LogIn, LogOut } from 'lucide-react';
+import { Orbit, Settings, Info, LogIn, LogOut, Users } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -70,16 +70,28 @@ export function Header() {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full border-white/15 bg-white/5 text-slate-100 hover:bg-white/10"
-                  onClick={() => {
-                    window.location.href = '/api/auth/twitch';
-                  }}
-                >
-                  <LogIn className="mr-2 h-4 w-4" /> Login
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-cyan-300/30 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20"
+                    onClick={() => {
+                      window.location.href = '/api/auth/spmt';
+                    }}
+                  >
+                    <Users className="mr-2 h-4 w-4" /> Sign in with SPMT
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-white/15 bg-white/5 text-slate-100 hover:bg-white/10"
+                    onClick={() => {
+                      window.location.href = '/api/auth/twitch';
+                    }}
+                  >
+                    <LogIn className="mr-2 h-4 w-4" /> Continue with Twitch
+                  </Button>
+                </div>
               )
             )}
 

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').replace(/\/$/, '');
 const SPMT_COOKIE = 'chat_tag_spmt_session';
+const SPMT_REFRESH_COOKIE = 'chat_tag_spmt_refresh';
 
 const PUBLIC_PREFIXES = [
   '/about',
@@ -41,8 +42,7 @@ function isAdmin(identity: any): boolean {
   return role === 'admin' || role === 'owner' || roles.includes('admin') || roles.includes('owner');
 }
 
-async function resolveIdentity(request: NextRequest) {
-  const token = request.cookies.get(SPMT_COOKIE)?.value || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+async function fetchSpmtIdentity(token: string) {
   if (!token) return null;
   const response = await fetch(`${SPMT_BASE_URL}/api/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
@@ -52,6 +52,51 @@ async function resolveIdentity(request: NextRequest) {
   const payload = await response.json().catch(() => null);
   const identity = payload?.user || payload?.profile || payload;
   return identity?.id ? identity : null;
+}
+
+async function refreshSpmtSession(request: NextRequest) {
+  const refreshToken = request.cookies.get(SPMT_REFRESH_COOKIE)?.value || '';
+  const clientSecret = String(process.env.CHAT_TAG_CLIENT_SECRET || '');
+  if (!refreshToken || !clientSecret) return null;
+  const response = await fetch(`${SPMT_BASE_URL}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: 'chat-tag',
+      client_secret: clientSecret,
+    }),
+    cache: 'no-store',
+  }).catch(() => null);
+  if (!response?.ok) return null;
+  const tokens = await response.json().catch(() => null);
+  if (!tokens?.access_token || !tokens?.refresh_token) return null;
+  const identity = tokens.user?.id ? tokens.user : await fetchSpmtIdentity(tokens.access_token);
+  return identity ? { identity, tokens } : null;
+}
+
+async function verifyLegacySession(request: NextRequest) {
+  const token = request.cookies.get('session')?.value || '';
+  const secret = process.env.NEXTAUTH_SECRET || process.env.BOT_SECRET_KEY || '';
+  if (!token || !secret) return null;
+  try {
+    const decodeBase64Url = (value: string) => {
+      const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+      return atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='));
+    };
+    const [payload, signature] = token.split('.');
+    if (!payload || !signature) return null;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const supplied = Uint8Array.from(decodeBase64Url(signature), (char) => char.charCodeAt(0));
+    const valid = await crypto.subtle.verify('HMAC', key, supplied, new TextEncoder().encode(payload));
+    if (!valid) return null;
+    const decoded = JSON.parse(new TextDecoder().decode(Uint8Array.from(decodeBase64Url(payload), (char) => char.charCodeAt(0))));
+    if (!decoded?.id || (decoded.exp && decoded.exp < Date.now())) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
 }
 
 function isStatic(pathname: string) {
@@ -90,16 +135,24 @@ export async function middleware(request: NextRequest) {
     if (!allowed) return new NextResponse('Quackverse testing tunnel only.', { status: 403 });
   }
 
-  if (PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || MACHINE_PREFIXES.some((prefix) => pathname.startsWith(prefix)) || isStatic(pathname)) {
+  if (pathname === '/' || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || MACHINE_PREFIXES.some((prefix) => pathname.startsWith(prefix)) || isStatic(pathname)) {
     return NextResponse.next();
   }
 
-  const identity = await resolveIdentity(request);
+  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  let identity = await fetchSpmtIdentity(accessToken);
+  let refreshed: Awaited<ReturnType<typeof refreshSpmtSession>> = null;
   if (!identity) {
-    if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'SPMT session required' }, { status: 401 });
-    const login = new URL('/api/auth/twitch', request.url);
-    login.searchParams.set('next', `${pathname}${search}`);
-    return NextResponse.redirect(login);
+    refreshed = await refreshSpmtSession(request);
+    if (refreshed) {
+      identity = refreshed.identity;
+      accessToken = refreshed.tokens.access_token;
+    }
+  }
+  const legacySession = identity ? null : await verifyLegacySession(request);
+  if (!identity && !legacySession) {
+    if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Sign in with SPMT or Twitch to continue' }, { status: 401 });
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   const admin = isAdmin(identity);
@@ -109,10 +162,20 @@ export async function middleware(request: NextRequest) {
   }
 
   const headers = new Headers(request.headers);
-  headers.set('x-spmt-user-id', String(identity.id));
-  headers.set('x-spmt-username', String(identity.username || identity.displayName || ''));
-  headers.set('x-spmt-is-admin', admin ? '1' : '0');
-  return NextResponse.next({ request: { headers } });
+  if (identity) {
+    headers.set('x-spmt-user-id', String(identity.id));
+    headers.set('x-spmt-username', encodeURIComponent(String(identity.username || '')));
+    headers.set('x-spmt-display-name', encodeURIComponent(String(identity.twitchUsername || identity.twitch_username || identity.displayName || identity.display_name || identity.username || 'SPMT user')));
+    headers.set('x-spmt-avatar-url', encodeURIComponent(String(identity.avatarUrl || identity.avatar_url || '')));
+    headers.set('x-spmt-is-admin', admin ? '1' : '0');
+  }
+  const response = NextResponse.next({ request: { headers } });
+  if (refreshed) {
+    const secure = request.nextUrl.protocol === 'https:';
+    response.cookies.set(SPMT_COOKIE, accessToken, { path: '/', maxAge: Number(refreshed.tokens.expires_in) || 7 * 24 * 60 * 60, httpOnly: true, sameSite: 'lax', secure });
+    response.cookies.set(SPMT_REFRESH_COOKIE, refreshed.tokens.refresh_token, { path: '/', maxAge: Number(refreshed.tokens.refresh_expires_in) || 30 * 24 * 60 * 60, httpOnly: true, sameSite: 'lax', secure });
+  }
+  return response;
 }
 
 export const config = {
