@@ -5,14 +5,33 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  test:
+    name: Test auth routing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run auth routing regression tests
+        run: npm run test:auth-routing
+
   deploy-web:
     name: Deploy web app
+    if: github.event_name != 'pull_request'
+    needs: test
     runs-on: ubuntu-latest
     concurrency: fly-deploy-web
     env:
@@ -30,9 +49,38 @@ jobs:
         run: flyctl deploy --remote-only --config fly.toml --ha=false
       - name: Verify chat-tag-new
         run: |
+          set -euo pipefail
           flyctl status --app chat-tag-new
+
+          base_url="https://chat-tag-new.fly.dev"
           curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
-            https://chat-tag-new.fly.dev/api/health
+            "$base_url/api/health"
+
+          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            "$base_url/api/tag" \
+            --output /tmp/chat-tag-roster.json
+          node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('/tmp/chat-tag-roster.json','utf8'));if(!Array.isArray(data.players))throw new Error('Public Chat Tag roster is unavailable');console.log('Public roster players:',data.players.length);"
+
+          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data '{"usernames":["twitch"]}' \
+            "$base_url/api/twitch/live" \
+            --output /tmp/chat-tag-live.json
+          node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('/tmp/chat-tag-live.json','utf8'));if(!Array.isArray(data.liveUsers)||!Array.isArray(data.allUsers))throw new Error('Twitch live lookup is unavailable');console.log('Twitch lookup users:',data.allUsers.length,'live:',data.liveUsers.length);"
+
+          anonymous_write_status="$(curl --silent --show-error \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data '{"action":"tag"}' \
+            --output /tmp/chat-tag-anonymous-write.json \
+            --write-out '%{http_code}' \
+            "$base_url/api/tag")"
+          if [ "$anonymous_write_status" != "401" ]; then
+            echo "Expected anonymous tag write to return 401, got $anonymous_write_status"
+            cat /tmp/chat-tag-anonymous-write.json
+            exit 1
+          fi
 
   deploy-bot:
     name: Deploy bot app

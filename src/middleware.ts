@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getBotSecret } from '@/lib/runtime-secrets';
 
 const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').replace(/\/$/, '');
 const SPMT_COOKIE = 'chat_tag_spmt_session';
@@ -25,8 +26,19 @@ const PUBLIC_PREFIXES = [
   '/favicon.ico',
 ];
 
-const MACHINE_PREFIXES = ['/api/bot/', '/api/discord/', '/api/kick/'];
 const ADMIN_PREFIXES = ['/api/admin/', '/api/settings', '/settings', '/api/logs', '/api/tag/mod-log'];
+
+function hasValidBotSecret(request: NextRequest): boolean {
+  const supplied = String(
+    request.headers.get('x-bot-secret') || request.nextUrl.searchParams.get('secret') || ''
+  ).trim();
+  if (!supplied) return false;
+  try {
+    return supplied === getBotSecret();
+  } catch {
+    return false;
+  }
+}
 
 function debugEnabled(scope: string) {
   const value = String(process.env.DEBUG || '').toLowerCase();
@@ -135,7 +147,14 @@ export async function middleware(request: NextRequest) {
     if (!allowed) return new NextResponse('Quackverse testing tunnel only.', { status: 403 });
   }
 
-  if (pathname === '/' || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || MACHINE_PREFIXES.some((prefix) => pathname.startsWith(prefix)) || isStatic(pathname)) {
+  const isPublicTagRead = request.method === 'GET' && pathname === '/api/tag';
+  if (pathname === '/' || isPublicTagRead || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || isStatic(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Service-to-service calls must prove possession of the shared secret.
+  // This restores bot access to /api/tag without exposing every machine route.
+  if (hasValidBotSecret(request)) {
     return NextResponse.next();
   }
 

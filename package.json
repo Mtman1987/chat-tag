@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "npx next typegen && npx tsc --noEmit",
+    "test:auth-routing": "npx tsx --test tests/auth-routing.test.ts",
     "test:workspace-theme": "tsx --test tests/workspace-theme.test.ts",
     "test:crowns": "node --test tests/chat-tag-crowns.test.mjs",
     "test:crown-rewards": "npx tsx --test tests/chat-tag-crown-rewards.test.ts",
