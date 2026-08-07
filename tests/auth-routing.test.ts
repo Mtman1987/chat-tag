@@ -22,7 +22,7 @@ after(() => {
   else process.env.QUACKVERSE_TUNNEL_ONLY = originalEnvironment.QUACKVERSE_TUNNEL_ONLY;
 });
 
-function request(pathname: string, init: RequestInit = {}) {
+function request(pathname: string, init: ConstructorParameters<typeof NextRequest>[1] = {}) {
   return new NextRequest(`https://chat-tag.test${pathname}`, init);
 }
 
