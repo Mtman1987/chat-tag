@@ -5,18 +5,18 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  deploy-web:
-    name: Deploy web app
+  test:
+    name: Test auth routing
     runs-on: ubuntu-latest
-    concurrency: fly-deploy-web
-    env:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
@@ -27,6 +27,17 @@ jobs:
         run: npm ci
       - name: Run auth routing regression tests
         run: npm run test:auth-routing
+
+  deploy-web:
+    name: Deploy web app
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    concurrency: fly-deploy-web
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@v1
       - name: Check Fly token
         run: |
