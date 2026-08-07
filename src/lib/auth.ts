@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, type SessionUser } from '@/lib/session';
+import { getBotSecret } from '@/lib/runtime-secrets';
 
 export function getSessionUserFromRequest(req: NextRequest): SessionUser | null {
   const spmtUserId = String(req.headers.get('x-spmt-user-id') || '').trim();
@@ -19,12 +20,31 @@ export function getSessionUserFromRequest(req: NextRequest): SessionUser | null 
 }
 
 export function isBotRequest(req: NextRequest): boolean {
-  return req.nextUrl.pathname.startsWith('/api/bot/') || req.nextUrl.pathname.startsWith('/api/discord/') || req.nextUrl.pathname.startsWith('/api/kick/');
+  const supplied = String(
+    req.headers.get('x-bot-secret') || req.nextUrl.searchParams.get('secret') || ''
+  ).trim();
+  if (!supplied) return false;
+  try {
+    return supplied === getBotSecret();
+  } catch {
+    return false;
+  }
 }
 
 export function requireAdminRequest(
   req: NextRequest
 ): { ok: true; user: SessionUser } | { ok: false; response: NextResponse } {
+  if (isBotRequest(req)) {
+    return {
+      ok: true,
+      user: {
+        id: 'bot-service',
+        twitchUsername: 'bot-service',
+        avatarUrl: '',
+      },
+    };
+  }
+
   const sessionUser = getSessionUserFromRequest(req);
   if (!sessionUser) {
     return { ok: false, response: NextResponse.json({ error: 'SPMT authentication required.' }, { status: 401 }) };
