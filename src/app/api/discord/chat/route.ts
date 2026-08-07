@@ -8,11 +8,13 @@ import { getPlayerHelpText, getRulesText, getModHelpText } from '@/lib/chat-tag-
 import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser, replaceDiscordUserMentions } from '@/lib/chat-tag-player-lookup';
 import { getBotSecret } from '@/lib/runtime-secrets';
 import { parseDiscordChatPayload } from '@/lib/discord-chat-payload';
+import { buildChatTagStandardEmbed } from '@/lib/chat-tag-embeds';
 
 export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
+const CHAT_TAG_AVATAR_URL = process.env.CHAT_TAG_AVATAR_URL || process.env.DISCORD_CHAT_TAG_AVATAR_URL || '';
 const CLEANUP_DELAY_MS = 10 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 const SUPPORT_TICKET_COMMANDS = new Set(['support', 'ticket', 'doctor']);
@@ -94,13 +96,14 @@ async function sendDiscordReply(channelId: string, content: string, context: Dis
     content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
     embeds: [
-      {
+      buildChatTagStandardEmbed({
         title: 'Chat Tag',
         description: content,
-        color: 0x00d9ff,
-        ...replyEmbedIdentity(context),
-        timestamp: new Date().toISOString(),
-      },
+        authorName: context.userName || CHAT_TAG_WEBHOOK_NAME,
+        authorIconUrl: context.userAvatarUrl || CHAT_TAG_AVATAR_URL,
+        thumbnailUrl: context.chatTagLogoUrl,
+        footerText: `${context.userName} • ${context.command || 'Chat Tag command'}`,
+      }),
     ],
     allowedMentions: { parse: [] },
     botToken: DISCORD_BOT_TOKEN,

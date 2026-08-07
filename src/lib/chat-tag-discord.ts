@@ -1,6 +1,7 @@
 import { readAppState, toMillis, updateAppState, type AppState } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { applyCrownsToDiscordPayload } from '@/lib/discord-webhooks';
+import { buildChatTagStandardEmbed } from '@/lib/chat-tag-embeds';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
@@ -222,10 +223,12 @@ export function buildChatTagEmbed(gameState: any) {
 
   return {
     embeds: [
-      {
+      buildChatTagStandardEmbed({
         title: '🏷️ SPMT Chat Tag',
         description: `${itLine}\n${timeLine}`,
-        color: tag.isFreeForAll ? 0xff4500 : 0x00d9ff,
+        status: tag.isFreeForAll ? 'warning' : 'info',
+        authorName: CHAT_TAG_WEBHOOK_NAME,
+        authorIconUrl: CHAT_TAG_AVATAR_URL,
         fields: [
           ...(announcementFields.length > 0
             ? announcementFields
@@ -233,10 +236,9 @@ export function buildChatTagEmbed(gameState: any) {
           { name: '📜 Recent Tag History', value: recentLines, inline: false },
           { name: '🏆 Top 3', value: top3Lines, inline: true },
         ],
-        ...(tag.currentIt?.avatarUrl ? { thumbnail: { url: tag.currentIt.avatarUrl } } : {}),
-        footer: { text: 'type spmt controls to interact with chat tag' },
-        timestamp: new Date().toISOString(),
-      },
+        thumbnailUrl: tag.currentIt?.avatarUrl,
+        footerText: 'SPMT • Type spmt controls to interact with chat tag',
+      }),
     ],
     components: [],
     allowed_mentions: { parse: [] },
