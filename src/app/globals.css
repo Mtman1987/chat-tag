@@ -279,3 +279,27 @@
   74% { opacity: 1; }
   82%, 100% { transform: translate3d(130vw, 38vh, 0) rotate(-18deg); opacity: 0; }
 }
+
+/* The settings controls are the important content; the decorative preview was hiding them below the fold. */
+[data-route='/settings'] .cosmic-hero {
+  display: none;
+}
+
+[data-route='/settings'] .cosmic-page {
+  padding-top: 1rem;
+}
+
+/* Keep the Quackverse full-card reader centered in the current viewport and scroll inside it. */
+div.fixed.right-4.top-4.z-50[class*="w-[min(22rem"] {
+  left: 50% !important;
+  right: auto !important;
+  top: 50% !important;
+  bottom: auto !important;
+  width: min(24rem, calc(100vw - 1.5rem)) !important;
+  max-height: calc(100dvh - 1.5rem) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  transform: translate(-50%, -50%) !important;
+}

@@ -96,7 +96,7 @@ export function RootShell({ children }: RootShellProps) {
   }
 
   return (
-    <div className="cosmic-shell" data-workspace-shell>
+    <div className="cosmic-shell" data-workspace-shell data-route={pathname}>
       <Starfield />
       <div className="relative z-10 min-h-screen">
         <Header />
