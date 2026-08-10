@@ -8,6 +8,7 @@ import { getPlayerHelpText, getRulesText, getModHelpText } from '@/lib/chat-tag-
 import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser, replaceDiscordUserMentions } from '@/lib/chat-tag-player-lookup';
 import { getBotSecret } from '@/lib/runtime-secrets';
 import { parseDiscordChatPayload } from '@/lib/discord-chat-payload';
+import { finalizePrivateDmDiscordMessage } from '@/lib/private-dm-finalizer';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ type DiscordReplyContext = {
   command: string;
   userAvatarUrl: string;
   chatTagLogoUrl: string;
+  isPrivate: boolean;
 };
 
 function debugEnabled(scope: string) {
@@ -110,6 +112,9 @@ async function sendDiscordReply(channelId: string, content: string, context: Dis
   if (!result.ok) {
     throw new Error(result.error);
   }
+  if (context.isPrivate && result.messageId) {
+    await finalizePrivateDmDiscordMessage(channelId, result.messageId);
+  }
   return result;
 }
 
@@ -189,6 +194,9 @@ async function sendDiscordPackReply(
   if (!result.ok) {
     throw new Error(result.error);
   }
+  if (context.isPrivate && result.messageId) {
+    await finalizePrivateDmDiscordMessage(channelId, result.messageId);
+  }
   return result;
 }
 
@@ -229,6 +237,7 @@ export async function POST(req: NextRequest) {
       command: String(message || rawMessage),
       userAvatarUrl: absolutePublicUrl(req, data.userAvatar || data.avatarUrl || ''),
       chatTagLogoUrl: absolutePublicUrl(req, '/brand/chat-tag-icon-192.png'),
+      isPrivate: Boolean(data.isDM || data.isDirectMessage || data.is_direct_message),
     };
 
     if (!message && channelId) {
