@@ -1,19 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Gamepad2, Sparkles, Users } from 'lucide-react';
+import { Gamepad2, Radio, Sparkles, Users } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CommunityList } from '@/components/community-list';
 import { Leaderboard } from '@/components/leaderboard';
 import { QuackverseCardGame } from '@/components/quackverse-card-game';
 import { ChatTagGame } from '@/components/chat-tag-game';
-import { LiveDiscordMembers } from '@/components/live-discord-members';
-import { Card } from '@/components/ui/card';
+import { useLiveStreamers } from '@/contexts/live-streamers-context';
 
 export function MainDashboard() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(true);
+  const { liveStreamers, allCommunityMembers, isLoading: liveLoading } = useLiveStreamers();
 
   const fetchPlayers = useCallback(async () => {
     try {
@@ -39,13 +39,13 @@ export function MainDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchPlayers();
-    const interval = setInterval(fetchPlayers, 15000);
-    return () => clearInterval(interval);
+    void fetchPlayers();
+    const interval = window.setInterval(() => void fetchPlayers(), 15_000);
+    return () => window.clearInterval(interval);
   }, [fetchPlayers]);
 
   const memoizedPlayers = useMemo(() => players, [players]);
-  const activePlayers = useMemo(() => memoizedPlayers.filter((player) => player.isActive).length, [memoizedPlayers]);
+  const communityCount = allCommunityMembers.length || memoizedPlayers.length;
 
   if (playersLoading) {
     return (
@@ -57,53 +57,50 @@ export function MainDashboard() {
 
   return (
     <main className="cosmic-page" data-workspace-main>
-      <section className="mb-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div>
-          <div className="cosmic-status">Live game hub</div>
-          <h1 className="mt-2 font-headline text-2xl font-bold text-white md:text-3xl">Pick what you want to do.</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-400">Play ChatTag, check the community, or jump into Quackverse. Administrative controls stay behind the guarded settings area.</p>
+      <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <div className="cosmic-status"><Radio className="h-3.5 w-3.5" /> Community game hub</div>
+          <h1 className="mt-3 font-headline text-3xl font-bold tracking-tight text-white md:text-4xl">Tag the community. Jump into Quackverse.</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">The game stays front and center. Live community status lives in the sidebar, and owner controls stay behind the authenticated settings route.</p>
         </div>
-        <div className="flex gap-2 text-xs">
-          <div className="min-w-20 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-            <div className="font-headline text-lg text-white">{activePlayers}</div>
+        <div className="grid grid-cols-3 gap-2 text-xs sm:flex">
+          <div className="min-w-24 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] px-4 py-2.5 text-center backdrop-blur">
+            <div className="font-headline text-xl text-emerald-200">{liveLoading ? '—' : liveStreamers.length}</div>
             <div className="text-slate-500">Live</div>
           </div>
-          <div className="min-w-20 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-            <div className="font-headline text-lg text-white">{memoizedPlayers.length}</div>
+          <div className="min-w-24 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-center backdrop-blur">
+            <div className="font-headline text-xl text-white">{communityCount}</div>
+            <div className="text-slate-500">Community</div>
+          </div>
+          <div className="min-w-24 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-center backdrop-blur">
+            <div className="font-headline text-xl text-white">{memoizedPlayers.length}</div>
             <div className="text-slate-500">Players</div>
           </div>
         </div>
       </section>
 
-      <Card className="rounded-[1.35rem] border-white/10 bg-white/[0.045] p-3 shadow-[0_24px_80px_rgba(3,8,24,0.3)] backdrop-blur-xl sm:p-5">
-        <Tabs defaultValue="play" className="w-full" data-workspace-tabs-root>
-          <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl border border-white/10 bg-slate-950/55 p-1" data-workspace-tabs>
-            <TabsTrigger value="play" className="gap-2 rounded-lg py-2.5 font-headline"><Gamepad2 className="h-4 w-4" />Play</TabsTrigger>
-            <TabsTrigger value="community" className="gap-2 rounded-lg py-2.5 font-headline"><Users className="h-4 w-4" />Community</TabsTrigger>
-            <TabsTrigger value="quackverse" className="gap-2 rounded-lg py-2.5 font-headline"><Sparkles className="h-4 w-4" />Quackverse</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="play" className="w-full" data-workspace-tabs-root>
+        <TabsList className="grid h-auto w-full max-w-3xl grid-cols-3 gap-1 rounded-xl border border-white/10 bg-slate-950/65 p-1 shadow-sm backdrop-blur-xl" data-workspace-tabs>
+          <TabsTrigger value="play" className="gap-2 rounded-lg py-2.5 font-headline"><Gamepad2 className="h-4 w-4" />Play</TabsTrigger>
+          <TabsTrigger value="community" className="gap-2 rounded-lg py-2.5 font-headline"><Users className="h-4 w-4" />Community</TabsTrigger>
+          <TabsTrigger value="quackverse" className="gap-2 rounded-lg py-2.5 font-headline"><Sparkles className="h-4 w-4" />Quackverse</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="play" className="mt-5">
-            <ChatTagGame players={memoizedPlayers} />
-          </TabsContent>
+        <TabsContent value="play" className="mt-4">
+          <ChatTagGame players={memoizedPlayers} />
+        </TabsContent>
 
-          <TabsContent value="community" className="mt-5 space-y-5">
-            <div className="rounded-xl border border-white/10 bg-black/15 p-4">
-              <h2 className="font-headline text-lg text-white">Who is here right now?</h2>
-              <p className="mt-1 text-sm text-slate-400">Live members first; standings and community details are grouped underneath instead of occupying the game screen.</p>
-            </div>
-            <LiveDiscordMembers />
-            <div className="grid gap-5 xl:grid-cols-2">
-              <CommunityList />
-              <Leaderboard players={memoizedPlayers} />
-            </div>
-          </TabsContent>
+        <TabsContent value="community" className="mt-4">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
+            <CommunityList players={memoizedPlayers} />
+            <Leaderboard players={memoizedPlayers} />
+          </div>
+        </TabsContent>
 
-          <TabsContent value="quackverse" className="mt-5">
-            <QuackverseCardGame />
-          </TabsContent>
-        </Tabs>
-      </Card>
+        <TabsContent value="quackverse" className="mt-4">
+          <QuackverseCardGame />
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }
