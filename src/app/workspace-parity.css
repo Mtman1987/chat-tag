@@ -1,0 +1,49 @@
+:root[data-workspace-theme] body {
+  background-color: #03050b !important;
+  background-image:
+    linear-gradient(180deg, rgba(2, 6, 18, 0.28), rgba(2, 6, 18, 0.72)),
+    var(--workspace-background-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+:root[data-workspace-theme] .cosmic-shell {
+  background: transparent !important;
+}
+
+:root[data-workspace-theme] .cosmic-shell::before {
+  background:
+    radial-gradient(circle at 18% 18%, hsl(var(--primary) / calc(0.18 * var(--workspace-nebula-intensity, 0.8))), transparent 24rem),
+    radial-gradient(circle at 82% 70%, hsl(var(--accent) / calc(0.12 * var(--workspace-nebula-intensity, 0.8))), transparent 28rem) !important;
+}
+
+:root[data-workspace-theme] [data-workspace-particles] {
+  opacity: var(--workspace-star-density, 0.7);
+}
+
+:root[data-workspace-theme] :is(.cosmic-card, .cosmic-panel, .cosmic-tile),
+:root[data-workspace-theme] [data-workspace-main] .bg-card,
+:root[data-workspace-theme] [data-workspace-main] [class*="bg-card/"],
+:root[data-workspace-theme] [data-workspace-main] [class*="bg-background/"] {
+  background: hsl(var(--card) / calc(var(--workspace-glass-opacity, 0.65) * 0.72)) !important;
+  border-color: hsl(var(--primary) / calc(0.28 * var(--workspace-border-strength, 0.6))) !important;
+  backdrop-filter: blur(var(--workspace-blur-strength, 22px)) !important;
+}
+
+:root[data-workspace-theme] [data-workspace-main] .bg-background {
+  background-color: hsl(var(--background) / calc(var(--workspace-glass-opacity, 0.65) * 0.54)) !important;
+}
+
+:root[data-workspace-theme] [data-workspace-sidebar] {
+  background: hsl(var(--background) / calc(var(--workspace-glass-opacity, 0.65) * 0.78)) !important;
+  border-color: hsl(var(--primary) / calc(0.3 * var(--workspace-border-strength, 0.6))) !important;
+  backdrop-filter: blur(var(--workspace-blur-strength, 22px));
+}
+
+:root[data-workspace-theme] [data-workspace-topbar] {
+  background: hsl(var(--card) / calc(var(--workspace-glass-opacity, 0.65) * 0.56)) !important;
+  border-color: hsl(var(--primary) / calc(0.28 * var(--workspace-border-strength, 0.6))) !important;
+  backdrop-filter: blur(var(--workspace-blur-strength, 22px));
+}
