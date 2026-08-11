@@ -16,7 +16,7 @@ function fixtureRoot() {
 }
 
 const tokens = {
-  themeId: 'nebula',
+  themeId: 'nebula-purple',
   background: '#000000',
   surface: '#112233',
   text: '#ffffff',
@@ -37,12 +37,13 @@ const tokens = {
   overlayWorkspace: { enabled: true, widgets: [{ id: 'clock' }], workflows: ['scene.start'] },
 } as unknown as WorkspaceThemeTokensV1;
 
-test('applies all shared colors, layout attributes, and overlay metadata', () => {
+test('applies all shared colors, layout attributes, background artwork, and overlay metadata', () => {
   const { root, values } = fixtureRoot();
   applyWorkspaceThemeTokens(root, tokens);
   assert.equal(root.dataset.appTheme, 'workspace');
   assert.equal(values.get('--background'), '0 0% 0%');
-  assert.equal(values.get('--radius'), '0.8rem');
+  assert.equal(values.get('--radius'), '26px');
+  assert.equal(values.get('--workspace-background-image'), 'url("https://spacemountain.live/assets/theme-nebula-purple-background.webp")');
   assert.equal(values.get('--workspace-shooting-star-duration'), '12s');
   assert.equal(root.dataset.workspaceTabStyle, 'pill');
   assert.equal(root.dataset.workspaceOverlayEnabled, 'true');
@@ -54,6 +55,7 @@ test('clears shared colors and workspace metadata before a local preset', () => 
   applyWorkspaceThemeTokens(root, tokens);
   clearWorkspaceThemeTokens(root);
   assert.equal(values.has('--background'), false);
+  assert.equal(values.has('--workspace-background-image'), false);
   assert.equal(values.has('--workspace-glow-intensity'), false);
   assert.equal(root.dataset.workspaceTheme, undefined);
   assert.equal(root.dataset.workspaceOverlayWorkflows, undefined);
