@@ -1,6 +1,6 @@
 'use client';
 
-import { Gamepad2, LogIn, LogOut, MessageCircle, MonitorUp, Settings, ShieldCheck, Users } from 'lucide-react';
+import { Gamepad2, LogIn, LogOut, MessageCircle, MonitorUp, ShieldCheck, Users } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -19,14 +19,17 @@ const primaryNavItems = [
 export function Header() {
   const { user, isUserLoading, logout } = useSession();
   const pathname = usePathname();
-  const isSettingsRoute = pathname === '/settings' || pathname.startsWith('/settings/');
-  const sectionTitle = isSettingsRoute
-    ? 'Settings'
-    : pathname === '/messages' || pathname.startsWith('/messages/')
-      ? 'Messages'
-      : pathname === '/overlay' || pathname.startsWith('/overlay/')
-        ? 'Overlay'
-        : 'Play';
+  const isAdminRoute = pathname === '/settings/game-controls' || pathname.startsWith('/settings/game-controls/');
+  const isSettingsRoute = pathname === '/settings';
+  const sectionTitle = isAdminRoute
+    ? 'Admin'
+    : isSettingsRoute
+      ? 'Settings'
+      : pathname === '/messages' || pathname.startsWith('/messages/')
+        ? 'Messages'
+        : pathname === '/overlay' || pathname.startsWith('/overlay/')
+          ? 'Overlay'
+          : 'Play';
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl" data-workspace-topbar>
@@ -71,9 +74,9 @@ export function Header() {
               size="icon"
               asChild
               className="h-9 w-9 rounded-lg border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
-              title="Owner settings"
+              title="Admin"
             >
-              <Link href="/settings"><Settings className="h-4 w-4" /></Link>
+              <Link href="/settings/game-controls"><ShieldCheck className="h-4 w-4" /></Link>
             </Button>
           )}
 
