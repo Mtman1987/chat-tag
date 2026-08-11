@@ -5,32 +5,36 @@ import { resolve } from 'node:path';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-test('header exposes one compact task navigation row and keeps admin settings secondary', () => {
+test('header exposes one compact public task row and keeps admin navigation inside settings', () => {
   const header = read('src/components/header.tsx');
 
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /href: '\/', label: 'Play'/);
   assert.match(header, /href: '\/messages', label: 'Messages'/);
   assert.match(header, /href: '\/overlay', label: 'Overlay'/);
-  assert.match(header, /href="\/settings"/);
+  assert.match(header, /isSettingsRoute/);
+  assert.match(header, /\/settings\/game-controls/);
   assert.doesNotMatch(header, /href: '\/settings', label: 'Settings'/);
+  assert.doesNotMatch(header, /isClientAdminUsername/);
   assert.doesNotMatch(header, /href: '\/about'/);
   assert.doesNotMatch(header, /Quackverse-Command|Quackverse-Preview|Quackverse-Guide/);
 });
 
-test('home opens on Play and isolates community, Quackverse, and admin workflows', () => {
+test('home opens on Play and keeps all admin workflows off the public dashboard', () => {
   const dashboard = read('src/app/main-dashboard.tsx');
+  const adminPage = read('src/app/settings/game-controls/page.tsx');
 
   assert.match(dashboard, /defaultValue="play"/);
   assert.match(dashboard, /TabsTrigger value="play"/);
   assert.match(dashboard, /TabsTrigger value="community"/);
   assert.match(dashboard, /TabsTrigger value="quackverse"/);
-  assert.match(dashboard, /TabsTrigger value="admin"/);
-  assert.match(dashboard, /ChatTagGame players=\{memoizedPlayers\} adminMode=\{isAdmin\}/);
+  assert.doesNotMatch(dashboard, /TabsTrigger value="admin"/);
+  assert.match(dashboard, /ChatTagGame players=\{memoizedPlayers\} \/>/);
+  assert.doesNotMatch(dashboard, /adminMode/);
   assert.equal((dashboard.match(/<ChatTagGame/g) || []).length, 1);
   assert.equal((dashboard.match(/<CommunityList/g) || []).length, 1);
   assert.equal((dashboard.match(/<Leaderboard/g) || []).length, 1);
-  assert.match(dashboard, /href="\/settings"/);
+  assert.match(adminPage, /<ChatTagGame adminMode \/>/);
   assert.doesNotMatch(dashboard, /Live Preview/);
   assert.doesNotMatch(dashboard, /cosmic-grid/);
 });

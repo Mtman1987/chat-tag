@@ -8,7 +8,6 @@ import { Button } from './ui/button';
 import { ActivityFeed } from './activity-feed';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useSession } from '@/contexts/session-context';
-import { isClientAdminUsername } from '@/lib/client-admin';
 import { cn } from '@/lib/utils';
 
 const primaryNavItems = [
@@ -20,7 +19,7 @@ const primaryNavItems = [
 export function Header() {
   const { user, isUserLoading, logout } = useSession();
   const pathname = usePathname();
-  const isAdmin = isClientAdminUsername(user?.twitchUsername);
+  const isSettingsRoute = pathname === '/settings' || pathname.startsWith('/settings/');
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl" data-workspace-topbar>
@@ -58,9 +57,9 @@ export function Header() {
 
         <div className="flex shrink-0 items-center gap-1.5">
           <ActivityFeed />
-          {isAdmin && (
-            <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" title="Admin settings">
-              <Link href="/settings"><Settings className="h-4 w-4" /></Link>
+          {isSettingsRoute && (
+            <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" title="Guarded admin game controls">
+              <Link href={pathname === '/settings/game-controls' ? '/settings' : '/settings/game-controls'}><Settings className="h-4 w-4" /></Link>
             </Button>
           )}
 
