@@ -2,9 +2,22 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { Gamepad2, MessageCircle, MonitorUp, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  Gamepad2,
+  MessageCircle,
+  MonitorUp,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Radio,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useLiveStreamers } from '@/contexts/live-streamers-context';
+import { useSession } from '@/contexts/session-context';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -21,17 +34,19 @@ export function SuiteSidebar({
   onToggle: () => void;
 }) {
   const pathname = usePathname();
+  const { user } = useSession();
+  const { liveStreamers, refreshStreamers, isLoading } = useLiveStreamers();
 
   return (
     <aside
       className={cn(
         'relative z-20 hidden h-screen shrink-0 flex-col border-r border-white/10 transition-[width] duration-200 md:flex',
-        collapsed ? 'w-16' : 'w-64',
+        collapsed ? 'w-16' : 'w-72',
       )}
       data-workspace-sidebar
       data-collapsed={collapsed ? 'true' : 'false'}
     >
-      <div className={cn('flex h-16 items-center border-b border-white/10 px-3', collapsed ? 'justify-center' : 'justify-between')}>
+      <div className={cn('flex h-16 shrink-0 items-center border-b border-white/10 px-3', collapsed ? 'justify-center' : 'justify-between')}>
         <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="ChatTag home">
           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/20">
             <Image src="/brand/chat-tag-icon-192.png" alt="ChatTag" fill priority className="object-contain p-1" />
@@ -51,12 +66,12 @@ export function SuiteSidebar({
       </div>
 
       {collapsed && (
-        <Button variant="ghost" size="icon" onClick={onToggle} className="mx-auto mt-2 h-9 w-9" title="Expand navigation">
+        <Button variant="ghost" size="icon" onClick={onToggle} className="mx-auto mt-2 h-9 w-9 shrink-0" title="Expand navigation">
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
       )}
 
-      <nav className="flex flex-1 flex-col gap-1 p-2" aria-label="ChatTag suite navigation">
+      <nav className="flex shrink-0 flex-col gap-1 p-2" aria-label="ChatTag suite navigation">
         {navItems.map((item) => {
           const active = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
@@ -77,13 +92,97 @@ export function SuiteSidebar({
             </Link>
           );
         })}
+        {user?.isAdmin && (
+          <Link
+            href="/settings"
+            aria-current={pathname === '/settings' || pathname.startsWith('/settings/') ? 'page' : undefined}
+            title={collapsed ? 'Owner settings' : undefined}
+            className={cn(
+              'flex h-11 items-center rounded-xl text-sm font-semibold transition',
+              collapsed ? 'justify-center px-0' : 'gap-3 px-3',
+              pathname === '/settings' || pathname.startsWith('/settings/')
+                ? 'bg-primary/15 text-white'
+                : 'text-slate-300 hover:bg-white/[0.07] hover:text-white',
+            )}
+          >
+            <Settings className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Settings</span>}
+          </Link>
+        )}
       </nav>
 
-      {!collapsed && (
-        <div className="border-t border-white/10 px-4 py-4 text-[11px] leading-relaxed text-slate-400">
-          Space Mountain workspace
+      <section className={cn('min-h-0 flex-1 border-t border-white/10', collapsed ? 'px-1 py-2' : 'px-3 py-3')} aria-label="Live community">
+        {!collapsed && (
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <Radio className="h-3.5 w-3.5 text-emerald-300" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Live community</div>
+              <div className="text-[10px] text-slate-500">{isLoading ? 'Checking Twitch…' : `${liveStreamers.length} streaming now`}</div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-slate-400 hover:text-white"
+              onClick={() => void refreshStreamers()}
+              title="Refresh live community"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
+            </Button>
+          </div>
+        )}
+
+        <div className="h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {liveStreamers.length > 0 ? (
+            <div className={cn('space-y-1', collapsed && 'flex flex-col items-center gap-1 space-y-0')}>
+              {liveStreamers.map((streamer) => (
+                <a
+                  key={streamer.id}
+                  href={`https://www.twitch.tv/${encodeURIComponent(streamer.username)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={collapsed ? `${streamer.username} — live on Twitch` : undefined}
+                  className={cn(
+                    'group flex min-w-0 items-center rounded-xl transition hover:bg-white/[0.07]',
+                    collapsed ? 'justify-center p-1' : 'gap-2.5 px-2 py-2',
+                  )}
+                >
+                  <div className="relative shrink-0">
+                    <Avatar className={cn('border border-emerald-300/35', collapsed ? 'h-8 w-8' : 'h-9 w-9')}>
+                      <AvatarImage src={streamer.avatar || undefined} alt={streamer.username} />
+                      <AvatarFallback className="text-[10px]">{streamer.username.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-950 bg-emerald-400" />
+                  </div>
+                  {!collapsed && (
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-semibold text-slate-200 group-hover:text-white">{streamer.username}</div>
+                      <div className="truncate text-[10px] text-slate-500">{streamer.isSharedChat ? 'Shared chat · Live' : 'Live on Twitch'}</div>
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          ) : !isLoading && !collapsed ? (
+            <div className="rounded-xl border border-white/8 bg-white/[0.025] px-3 py-3 text-xs leading-relaxed text-slate-500">
+              No configured community channels are live right now.
+            </div>
+          ) : null}
         </div>
-      )}
+      </section>
+
+      <div className={cn('shrink-0 border-t border-white/10 px-3 pt-3 text-[11px] text-slate-400', collapsed ? 'pb-20' : 'pb-20')}>
+        {collapsed ? (
+          user?.isAdmin ? <ShieldCheck className="mx-auto h-4 w-4 text-primary" aria-label="Owner session" /> : null
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate">Space Mountain workspace</div>
+              {user?.isAdmin && <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Owner connected</div>}
+            </div>
+            {user?.isAdmin && <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />}
+          </div>
+        )}
+      </div>
     </aside>
   );
 }
