@@ -23,6 +23,19 @@ test('public header does not use a browser username allowlist to expose admin co
   assert.match(text, /\/settings\/game-controls/);
 });
 
+test('desktop ChatTag navigation uses the collapsible suite sidebar without admin links', () => {
+  const sidebar = source('src/components/suite-sidebar.tsx');
+  const shell = source('src/components/root-shell.tsx');
+  assert.match(sidebar, /data-workspace-sidebar/);
+  assert.match(sidebar, /PanelLeftClose/);
+  assert.match(sidebar, /PanelLeftOpen/);
+  assert.match(sidebar, /href: '\/'/);
+  assert.match(sidebar, /href: '\/messages'/);
+  assert.match(sidebar, /href: '\/overlay'/);
+  assert.doesNotMatch(sidebar, /\/settings/);
+  assert.match(shell, /<SuiteSidebar collapsed=\{sidebarCollapsed\} onToggle=\{toggleSidebar\} \/>/);
+});
+
 test('client admin presentation is disabled outside the middleware-guarded settings namespace', () => {
   const helper = source('src/lib/client-admin.ts');
   assert.match(helper, /pathname === '\/settings'/);
