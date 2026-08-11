@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-test('header exposes one compact public task row and keeps admin navigation inside settings', () => {
+test('header exposes one compact public task row and only exposes settings from trusted session authority', () => {
   const header = read('src/components/header.tsx');
 
   assert.match(header, /overflow-x-auto/);
@@ -13,7 +13,8 @@ test('header exposes one compact public task row and keeps admin navigation insi
   assert.match(header, /href: '\/messages', label: 'Messages'/);
   assert.match(header, /href: '\/overlay', label: 'Overlay'/);
   assert.match(header, /isSettingsRoute/);
-  assert.match(header, /\/settings\/game-controls/);
+  assert.match(header, /user\?\.isAdmin/);
+  assert.match(header, /href="\/settings"/);
   assert.doesNotMatch(header, /href: '\/settings', label: 'Settings'/);
   assert.doesNotMatch(header, /isClientAdminUsername/);
   assert.doesNotMatch(header, /href: '\/about'/);
@@ -37,6 +38,15 @@ test('home opens on Play and keeps all admin workflows off the public dashboard'
   assert.match(adminPage, /<ChatTagGame adminMode \/>/);
   assert.doesNotMatch(dashboard, /Live Preview/);
   assert.doesNotMatch(dashboard, /cosmic-grid/);
+});
+
+test('home live status is derived from the community live roster instead of tag active state', () => {
+  const dashboard = read('src/app/main-dashboard.tsx');
+  const liveContext = read('src/contexts/live-streamers-context.tsx');
+  assert.match(dashboard, /useLiveStreamers/);
+  assert.match(dashboard, /liveStreamers\.length/);
+  assert.doesNotMatch(dashboard, /filter\(\(player\) => player\.isActive\)\.length/);
+  assert.match(liveContext, /\/api\/discord\/live-members/);
 });
 
 test('settings start with controls and enlarged cards stay inside the viewport', () => {
