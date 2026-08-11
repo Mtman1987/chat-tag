@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import { Orbitron, Roboto } from 'next/font/google';
 import './globals.css';
+import './workspace-parity.css';
 import { Toaster } from "@/components/ui/toaster";
 import { RootShell } from '@/components/root-shell';
 import { LiveStreamersProvider } from '@/contexts/live-streamers-context';
