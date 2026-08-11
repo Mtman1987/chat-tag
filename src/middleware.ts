@@ -5,6 +5,7 @@ import { getBotSecret } from '@/lib/runtime-secrets';
 const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').replace(/\/$/, '');
 const SPMT_COOKIE = 'chat_tag_spmt_session';
 const SPMT_REFRESH_COOKIE = 'chat_tag_spmt_refresh';
+const DEFAULT_OWNER_USERNAMES = ['mtman1987'];
 
 const PUBLIC_PREFIXES = [
   '/about',
@@ -47,11 +48,31 @@ function debugEnabled(scope: string) {
   return scopes.some((item) => item === '1' || item === 'true' || item === '*' || item === 'all' || item === scope);
 }
 
+function trustedOwnerUsernames(): Set<string> {
+  const configured = String(process.env.CHAT_TAG_OWNER_USERNAMES || '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(configured.length > 0 ? configured : DEFAULT_OWNER_USERNAMES);
+}
+
 function isAdmin(identity: any): boolean {
   if (identity?.isAdmin === true || identity?.is_admin === true || identity?.is_admin === 1) return true;
   const role = String(identity?.role || '').toLowerCase();
   const roles = Array.isArray(identity?.roles) ? identity.roles.map((value: unknown) => String(value).toLowerCase()) : [];
-  return role === 'admin' || role === 'owner' || roles.includes('admin') || roles.includes('owner');
+  if (role === 'admin' || role === 'owner' || roles.includes('admin') || roles.includes('owner')) return true;
+
+  const ownerNames = trustedOwnerUsernames();
+  const verifiedNames = [
+    identity?.username,
+    identity?.twitchUsername,
+    identity?.twitch_username,
+    identity?.displayName,
+    identity?.display_name,
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+  return verifiedNames.some((value) => ownerNames.has(value));
 }
 
 async function fetchSpmtIdentity(token: string) {
@@ -148,7 +169,8 @@ export async function middleware(request: NextRequest) {
   }
 
   const isPublicTagRead = request.method === 'GET' && pathname === '/api/tag';
-  if (pathname === '/' || isPublicTagRead || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || isStatic(pathname)) {
+  const isPublicLiveMembersRead = request.method === 'GET' && pathname === '/api/discord/live-members';
+  if (pathname === '/' || isPublicTagRead || isPublicLiveMembersRead || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || isStatic(pathname)) {
     return NextResponse.next();
   }
 
