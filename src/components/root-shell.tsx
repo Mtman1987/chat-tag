@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Starfield } from '@/components/starfield';
+import { SuiteSidebar } from '@/components/suite-sidebar';
 import type { WorkspaceThemeTokensV1 } from '@spmt/sdk';
 import { applyWorkspaceThemeTokens, clearWorkspaceThemeTokens } from '@/lib/workspace-theme';
 
@@ -12,6 +13,7 @@ type RootShellProps = {
 };
 
 const WORKSPACE_REFRESH_MS = 30_000;
+const SIDEBAR_STORAGE_KEY = 'chat-tag-suite-sidebar-collapsed';
 
 function applyThemePreset(preset: string) {
   if (typeof document === 'undefined') return;
@@ -23,6 +25,8 @@ function applyThemePreset(preset: string) {
 export function RootShell({ children }: RootShellProps) {
   const pathname = usePathname();
   const revisionRef = useRef<number | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarHydratedRef = useRef(false);
   const isOverlayView =
     /^\/overlay\/[^/]+$/.test(pathname) ||
     pathname === '/quackverse-overlay' ||
@@ -34,6 +38,22 @@ export function RootShell({ children }: RootShellProps) {
     return () => {
       document.body.classList.remove('overlay-route');
     };
+  }, [isOverlayView]);
+
+  useEffect(() => {
+    if (isOverlayView || sidebarHydratedRef.current) return;
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (saved === 'true' || saved === 'false') {
+      setSidebarCollapsed(saved === 'true');
+      sidebarHydratedRef.current = true;
+    }
+  }, [isOverlayView]);
+
+  const applySidebarPreference = useCallback(() => {
+    if (isOverlayView || sidebarHydratedRef.current) return;
+    const canonicalCollapsed = document.documentElement.dataset.workspaceSidebarCollapsed === 'true';
+    setSidebarCollapsed(canonicalCollapsed);
+    sidebarHydratedRef.current = true;
   }, [isOverlayView]);
 
   const loadTheme = useCallback(async (quiet = false) => {
@@ -63,6 +83,7 @@ export function RootShell({ children }: RootShellProps) {
             revisionRef.current = revision;
             window.dispatchEvent(new CustomEvent('spmt-workspace-updated', { detail: body }));
           }
+          applySidebarPreference();
           return;
         }
       } catch {
@@ -72,7 +93,8 @@ export function RootShell({ children }: RootShellProps) {
 
     revisionRef.current = null;
     applyThemePreset(settings.uiThemePreset);
-  }, [isOverlayView]);
+    applySidebarPreference();
+  }, [applySidebarPreference, isOverlayView]);
 
   useEffect(() => {
     if (isOverlayView) return;
@@ -91,14 +113,24 @@ export function RootShell({ children }: RootShellProps) {
     };
   }, [isOverlayView, loadTheme]);
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      sidebarHydratedRef.current = true;
+      return next;
+    });
+  }, []);
+
   if (isOverlayView) {
     return <>{children}</>;
   }
 
   return (
-    <div className="cosmic-shell" data-workspace-shell data-route={pathname}>
+    <div className="cosmic-shell flex min-h-screen" data-workspace-shell data-route={pathname}>
       <Starfield />
-      <div className="relative z-10 min-h-screen">
+      <SuiteSidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+      <div className="relative z-10 min-w-0 flex-1">
         <Header />
         {children}
       </div>

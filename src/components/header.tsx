@@ -20,21 +20,29 @@ export function Header() {
   const { user, isUserLoading, logout } = useSession();
   const pathname = usePathname();
   const isSettingsRoute = pathname === '/settings' || pathname.startsWith('/settings/');
+  const sectionTitle = isSettingsRoute
+    ? 'Settings'
+    : pathname === '/messages' || pathname.startsWith('/messages/')
+      ? 'Messages'
+      : pathname === '/overlay' || pathname.startsWith('/overlay/')
+        ? 'Overlay'
+        : 'Play';
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl" data-workspace-topbar>
-      <div className="mx-auto flex w-full max-w-[1500px] items-center gap-3 px-3 py-2.5 sm:px-5 md:px-8">
-        <Link href="/" className="flex min-w-0 shrink-0 items-center gap-2.5" aria-label="ChatTag home">
+      <div className="mx-auto flex w-full max-w-[1500px] items-center gap-3 px-3 py-2 sm:px-5 md:px-6">
+        <Link href="/" className="flex min-w-0 shrink-0 items-center gap-2.5 md:hidden" aria-label="ChatTag home">
           <div className="relative h-10 w-24 overflow-hidden rounded-lg border border-white/10 bg-slate-950/70 shadow-[0_8px_24px_rgba(34,211,238,0.14)] sm:h-11 sm:w-28">
             <Image src="/brand/chat-tag-logo.png" alt="ChatTag" fill priority className="object-contain p-1" />
           </div>
-          <div className="hidden xl:block">
-            <div className="font-headline text-base font-bold tracking-wide text-white">ChatTag</div>
-            <div className="text-[11px] text-slate-400">Play · Community · Quackverse</div>
-          </div>
         </Link>
 
-        <nav className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-workspace-tabs aria-label="ChatTag navigation">
+        <div className="hidden min-w-0 flex-1 md:block">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Space Mountain workspace</p>
+          <h1 className="truncate font-headline text-base font-bold tracking-wide text-white">{sectionTitle}</h1>
+        </div>
+
+        <nav className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:hidden" data-workspace-tabs aria-label="ChatTag navigation">
           {primaryNavItems.map((item) => {
             const active = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
