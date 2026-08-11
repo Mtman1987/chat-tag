@@ -36,11 +36,13 @@ export function SuiteSidebar({
   const pathname = usePathname();
   const { user } = useSession();
   const { liveStreamers, refreshStreamers, isLoading } = useLiveStreamers();
+  const adminActive = pathname === '/settings/game-controls' || pathname.startsWith('/settings/game-controls/');
+  const settingsActive = pathname === '/settings';
 
   return (
     <aside
       className={cn(
-        'relative z-20 hidden h-screen shrink-0 flex-col border-r border-white/10 transition-[width] duration-200 md:flex',
+        'relative z-20 hidden min-h-screen self-stretch shrink-0 flex-col border-r border-white/10 transition-[width] duration-200 md:flex',
         collapsed ? 'w-16' : 'w-72',
       )}
       data-workspace-sidebar
@@ -92,26 +94,41 @@ export function SuiteSidebar({
             </Link>
           );
         })}
+
         {user?.isAdmin && (
-          <Link
-            href="/settings"
-            aria-current={pathname === '/settings' || pathname.startsWith('/settings/') ? 'page' : undefined}
-            title={collapsed ? 'Owner settings' : undefined}
-            className={cn(
-              'flex h-11 items-center rounded-xl text-sm font-semibold transition',
-              collapsed ? 'justify-center px-0' : 'gap-3 px-3',
-              pathname === '/settings' || pathname.startsWith('/settings/')
-                ? 'bg-primary/15 text-white'
-                : 'text-slate-300 hover:bg-white/[0.07] hover:text-white',
-            )}
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Settings</span>}
-          </Link>
+          <>
+            <div className={cn('my-1 border-t border-white/10', collapsed ? 'mx-2' : 'mx-1')} />
+            <Link
+              href="/settings/game-controls"
+              aria-current={adminActive ? 'page' : undefined}
+              title={collapsed ? 'Admin' : undefined}
+              className={cn(
+                'flex h-11 items-center rounded-xl text-sm font-semibold transition',
+                collapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                adminActive ? 'bg-primary/15 text-white' : 'text-primary hover:bg-primary/10 hover:text-primary',
+              )}
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Admin</span>}
+            </Link>
+            <Link
+              href="/settings"
+              aria-current={settingsActive ? 'page' : undefined}
+              title={collapsed ? 'Settings' : undefined}
+              className={cn(
+                'flex h-11 items-center rounded-xl text-sm font-semibold transition',
+                collapsed ? 'justify-center px-0' : 'gap-3 px-3',
+                settingsActive ? 'bg-primary/15 text-white' : 'text-slate-300 hover:bg-white/[0.07] hover:text-white',
+              )}
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Settings</span>}
+            </Link>
+          </>
         )}
       </nav>
 
-      <section className={cn('min-h-0 flex-1 border-t border-white/10', collapsed ? 'px-1 py-2' : 'px-3 py-3')} aria-label="Live community">
+      <section className={cn('flex flex-1 flex-col border-t border-white/10', collapsed ? 'px-1 py-2' : 'px-3 py-3')} aria-label="Live community">
         {!collapsed && (
           <div className="mb-2 flex items-center gap-2 px-1">
             <Radio className="h-3.5 w-3.5 text-emerald-300" />
@@ -131,7 +148,7 @@ export function SuiteSidebar({
           </div>
         )}
 
-        <div className="h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex-1">
           {liveStreamers.length > 0 ? (
             <div className={cn('space-y-1', collapsed && 'flex flex-col items-center gap-1 space-y-0')}>
               {liveStreamers.map((streamer) => (
@@ -170,7 +187,7 @@ export function SuiteSidebar({
         </div>
       </section>
 
-      <div className={cn('shrink-0 border-t border-white/10 px-3 pt-3 text-[11px] text-slate-400', collapsed ? 'pb-20' : 'pb-20')}>
+      <div className="shrink-0 border-t border-white/10 px-3 pb-20 pt-3 text-[11px] text-slate-400">
         {collapsed ? (
           user?.isAdmin ? <ShieldCheck className="mx-auto h-4 w-4 text-primary" aria-label="Owner session" /> : null
         ) : (

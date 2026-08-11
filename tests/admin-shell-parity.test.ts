@@ -18,15 +18,16 @@ test('public ChatTag dashboard keeps admin mode out of game components and uses 
   assert.doesNotMatch(text, /filter\(\(player\) => player\.isActive\)\.length/);
 });
 
-test('header exposes owner settings only from server-backed session authority', () => {
+test('header exposes the guarded Admin surface only from server-backed session authority', () => {
   const text = source('src/components/header.tsx');
   assert.doesNotMatch(text, /isClientAdminUsername/);
   assert.match(text, /user\?\.isAdmin/);
-  assert.match(text, /href="\/settings"/);
-  assert.match(text, /Owner settings/);
+  assert.match(text, /href="\/settings\/game-controls"/);
+  assert.match(text, /title="Admin"/);
+  assert.match(text, /isAdminRoute/);
 });
 
-test('desktop ChatTag navigation fills the suite sidebar with the live community and server-authorized settings', () => {
+test('desktop ChatTag navigation exposes a visible owner Admin channel and fills the sidebar with the live community', () => {
   const sidebar = source('src/components/suite-sidebar.tsx');
   const shell = source('src/components/root-shell.tsx');
   assert.match(sidebar, /data-workspace-sidebar/);
@@ -38,7 +39,12 @@ test('desktop ChatTag navigation fills the suite sidebar with the live community
   assert.match(sidebar, /liveStreamers/);
   assert.match(sidebar, /Live community/);
   assert.match(sidebar, /user\?\.isAdmin/);
+  assert.match(sidebar, /href="\/settings\/game-controls"/);
+  assert.match(sidebar, />Admin</);
   assert.match(sidebar, /href="\/settings"/);
+  assert.match(sidebar, /min-h-screen self-stretch/);
+  assert.doesNotMatch(sidebar, /h-screen shrink-0/);
+  assert.doesNotMatch(sidebar, /overflow-y-auto/);
   assert.match(shell, /<SuiteSidebar collapsed=\{sidebarCollapsed\} onToggle=\{toggleSidebar\} \/>/);
 });
 

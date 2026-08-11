@@ -5,16 +5,18 @@ import { resolve } from 'node:path';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-test('header exposes one compact public task row and only exposes settings from trusted session authority', () => {
+test('header exposes one compact public task row and a dedicated Admin shortcut from trusted session authority', () => {
   const header = read('src/components/header.tsx');
 
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /href: '\/', label: 'Play'/);
   assert.match(header, /href: '\/messages', label: 'Messages'/);
   assert.match(header, /href: '\/overlay', label: 'Overlay'/);
+  assert.match(header, /isAdminRoute/);
   assert.match(header, /isSettingsRoute/);
   assert.match(header, /user\?\.isAdmin/);
-  assert.match(header, /href="\/settings"/);
+  assert.match(header, /href="\/settings\/game-controls"/);
+  assert.match(header, /title="Admin"/);
   assert.doesNotMatch(header, /href: '\/settings', label: 'Settings'/);
   assert.doesNotMatch(header, /isClientAdminUsername/);
   assert.doesNotMatch(header, /href: '\/about'/);
