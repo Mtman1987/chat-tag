@@ -23,11 +23,20 @@ test('public header does not use a browser username allowlist to expose admin co
   assert.match(text, /\/settings\/game-controls/);
 });
 
-test('game admin controls live under the middleware-guarded settings namespace', () => {
+test('client admin presentation is disabled outside the middleware-guarded settings namespace', () => {
+  const helper = source('src/lib/client-admin.ts');
+  assert.match(helper, /pathname === '\/settings'/);
+  assert.match(helper, /pathname\.startsWith\('\/settings\/'\)/);
+  assert.match(helper, /!username \|\| !isGuardedAdminSurface\(\)/);
+});
+
+test('game and Quackverse content administration live under the guarded settings namespace', () => {
   const page = source('src/app/settings/game-controls/page.tsx');
   const middleware = source('src/middleware.ts');
   assert.match(page, /SPMT admin guarded/);
   assert.match(page, /<ChatTagGame adminMode \/>/);
+  assert.match(page, /<QuackverseArtManager \/>/);
+  assert.match(page, /public Cards tab remains read-only/);
   assert.match(middleware, /'\/settings'/);
   assert.match(middleware, /SPMT admin required/);
 });

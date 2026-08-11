@@ -12,7 +12,13 @@ export function getClientAdminUsernames(): string[] {
   return configured.length > 0 ? configured : DEFAULT_ADMIN_USERNAMES;
 }
 
+function isGuardedAdminSurface(): boolean {
+  if (typeof window === 'undefined') return true;
+  const pathname = String(window.location.pathname || '');
+  return pathname === '/settings' || pathname.startsWith('/settings/');
+}
+
 export function isClientAdminUsername(username?: string | null): boolean {
-  if (!username) return false;
+  if (!username || !isGuardedAdminSurface()) return false;
   return getClientAdminUsernames().includes(String(username).toLowerCase());
 }
