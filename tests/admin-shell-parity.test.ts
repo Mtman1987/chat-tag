@@ -7,23 +7,26 @@ function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), 'utf8');
 }
 
-test('public ChatTag dashboard does not render admin navigation or enable game admin mode', () => {
+test('public ChatTag dashboard keeps admin mode out of game components and uses the real live roster count', () => {
   const text = source('src/app/main-dashboard.tsx');
   assert.doesNotMatch(text, /value="admin"/);
   assert.doesNotMatch(text, /adminMode=\{isAdmin\}/);
   assert.doesNotMatch(text, /isClientAdminUsername/);
   assert.match(text, /<ChatTagGame players=\{memoizedPlayers\} \/>/);
-  assert.match(text, /Administrative controls stay behind the guarded settings area/);
+  assert.match(text, /useLiveStreamers/);
+  assert.match(text, /liveStreamers\.length/);
+  assert.doesNotMatch(text, /filter\(\(player\) => player\.isActive\)\.length/);
 });
 
-test('public header does not use a browser username allowlist to expose admin controls', () => {
+test('header exposes owner settings only from server-backed session authority', () => {
   const text = source('src/components/header.tsx');
   assert.doesNotMatch(text, /isClientAdminUsername/);
-  assert.match(text, /isSettingsRoute/);
-  assert.match(text, /\/settings\/game-controls/);
+  assert.match(text, /user\?\.isAdmin/);
+  assert.match(text, /href="\/settings"/);
+  assert.match(text, /Owner settings/);
 });
 
-test('desktop ChatTag navigation uses the collapsible suite sidebar without admin links', () => {
+test('desktop ChatTag navigation fills the suite sidebar with the live community and server-authorized settings', () => {
   const sidebar = source('src/components/suite-sidebar.tsx');
   const shell = source('src/components/root-shell.tsx');
   assert.match(sidebar, /data-workspace-sidebar/);
@@ -32,18 +35,30 @@ test('desktop ChatTag navigation uses the collapsible suite sidebar without admi
   assert.match(sidebar, /href: '\/'/);
   assert.match(sidebar, /href: '\/messages'/);
   assert.match(sidebar, /href: '\/overlay'/);
-  assert.doesNotMatch(sidebar, /\/settings/);
+  assert.match(sidebar, /liveStreamers/);
+  assert.match(sidebar, /Live community/);
+  assert.match(sidebar, /user\?\.isAdmin/);
+  assert.match(sidebar, /href="\/settings"/);
   assert.match(shell, /<SuiteSidebar collapsed=\{sidebarCollapsed\} onToggle=\{toggleSidebar\} \/>/);
 });
 
-test('client admin presentation is disabled outside the middleware-guarded settings namespace', () => {
+test('middleware recognizes the verified platform owner before guarded settings checks', () => {
+  const middleware = source('src/middleware.ts');
+  assert.match(middleware, /DEFAULT_OWNER_USERNAMES = \['mtman1987'\]/);
+  assert.match(middleware, /CHAT_TAG_OWNER_USERNAMES/);
+  assert.match(middleware, /verifiedNames\.some/);
+  assert.match(middleware, /headers\.set\('x-spmt-is-admin', admin \? '1' : '0'\)/);
+  assert.match(middleware, /isPublicLiveMembersRead/);
+});
+
+test('client admin helper cannot create authority outside middleware-guarded settings', () => {
   const helper = source('src/lib/client-admin.ts');
   assert.match(helper, /pathname === '\/settings'/);
   assert.match(helper, /pathname\.startsWith\('\/settings\/'\)/);
   assert.match(helper, /!username \|\| !isGuardedAdminSurface\(\)/);
 });
 
-test('game and Quackverse content administration live under the guarded settings namespace', () => {
+test('game and Quackverse content administration remain under the guarded settings namespace', () => {
   const page = source('src/app/settings/game-controls/page.tsx');
   const middleware = source('src/middleware.ts');
   assert.match(page, /SPMT admin guarded/);
