@@ -10,6 +10,7 @@ import {
   viewerPayload,
 } from '@/lib/quackverse-access';
 import { quackverseCards, type QuackverseCard } from '@/lib/quackverse-data';
+import { chooseQuackverseNpcAction } from '@/lib/quackverse-npc';
 import { findQuackverseStructuredEffect, getQuackverseAbilityCost, summarizeQuackverseGear } from '@/lib/quackverse-effects';
 import { quackverseRoomKeyFromParams, quackverseScopeFromParams } from '@/lib/quackverse-rooms';
 import { updateAppState } from '@/lib/volume-store';
@@ -864,6 +865,9 @@ export async function POST(req: NextRequest) {
     let activeSeat = requestSeat || existingSeat;
     const controlsActiveSeat = activeSeat && state.activePlayer === activeSeat;
     const controlsActiveNpc = Boolean(state.npcPlayers[state.activePlayer] && (activeSeat || adminRequest || allowLocalSetup));
+    const npcTurnRequested = actionType === 'pass' && controlsActiveNpc;
+    if (npcTurnRequested) Object.assign(body, chooseQuackverseNpcAction(state));
+    const controlsCurrentAction = Boolean(controlsActiveSeat || npcTurnRequested);
     const reject = (error: string, status = 403) => ({ state, error, status });
 
     if (['loadMockGame', 'setClaimedPlayer'].includes(actionType) && !adminRequest) {
@@ -941,7 +945,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.type === 'move') {
-      if (!controlsActiveSeat) return reject('It is not your turn.');
+      if (!controlsCurrentAction) return reject('It is not your turn.');
       const from = Number(body.from);
       const to = Number(body.to);
       const piece = state.grid[from];
@@ -955,7 +959,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.type === 'place') {
-      if (!controlsActiveSeat) return reject('It is not your turn.');
+      if (!controlsCurrentAction) return reject('It is not your turn.');
       const targetIndex = Number(body.targetIndex);
       const instanceId = String(body.instanceId || '');
       const pile = state.battlePiles[state.activePlayer];
@@ -979,7 +983,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.type === 'attack') {
-      if (!controlsActiveSeat) return reject('It is not your turn.');
+      if (!controlsCurrentAction) return reject('It is not your turn.');
       const attackerIndex = Number(body.attackerIndex);
       const targetIndex = Number(body.targetIndex);
       const attacker = state.grid[attackerIndex];
@@ -1010,12 +1014,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.type === 'useAbility') {
-      if (!controlsActiveSeat) return reject('It is not your turn.');
+      if (!controlsCurrentAction) return reject('It is not your turn.');
       resolveAbility(state, Number(body.sourceIndex), typeof body.ability === 'string' ? body.ability : undefined);
     }
 
     if (body.type === 'attachGear') {
-      if (!controlsActiveSeat) return reject('It is not your turn.');
+      if (!controlsCurrentAction) return reject('It is not your turn.');
       const targetIndex = Number(body.targetIndex);
       const instanceId = String(body.instanceId || '');
       const target = state.grid[targetIndex];
@@ -1032,9 +1036,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (npcTurnRequested && body.type !== 'pass' && !state.winner) {
+      endTurn(state, true);
+    }
+
     if (body.type === 'pass') {
       if (!controlsActiveSeat && !controlsActiveNpc) return reject('It is not your turn.');
-      addLog(state, `${state.activePlayer === 'playerOne' ? 'P1' : 'P2'} passed.`);
+      addLog(
+        state,
+        npcTurnRequested
+          ? `${state.activePlayer === 'playerOne' ? 'P1' : 'P2'} NPC had no legal board action and passed.`
+          : `${state.activePlayer === 'playerOne' ? 'P1' : 'P2'} passed.`,
+      );
       endTurn(state);
     }
 
