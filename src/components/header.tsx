@@ -1,6 +1,6 @@
 'use client';
 
-import { Gamepad2, LogIn, LogOut, MessageCircle, MonitorUp, Settings, Users } from 'lucide-react';
+import { Gamepad2, LogIn, LogOut, MessageCircle, MonitorUp, Settings, ShieldCheck, Users } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -65,9 +65,15 @@ export function Header() {
 
         <div className="flex shrink-0 items-center gap-1.5">
           <ActivityFeed />
-          {isSettingsRoute && (
-            <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" title="Guarded admin game controls">
-              <Link href={pathname === '/settings/game-controls' ? '/settings' : '/settings/game-controls'}><Settings className="h-4 w-4" /></Link>
+          {user?.isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              className="h-9 w-9 rounded-lg border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+              title="Owner settings"
+            >
+              <Link href="/settings"><Settings className="h-4 w-4" /></Link>
             </Button>
           )}
 
@@ -80,7 +86,11 @@ export function Header() {
                 </Avatar>
                 <div className="hidden min-w-0 sm:block">
                   <div className="max-w-28 truncate text-xs font-semibold text-slate-100">{user.twitchUsername}</div>
-                  {user.level !== null ? <div className="text-[10px] text-cyan-200/75">Level {user.level}</div> : null}
+                  {user.isAdmin ? (
+                    <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary"><ShieldCheck className="h-3 w-3" />Owner</div>
+                  ) : user.level !== null ? (
+                    <div className="text-[10px] text-cyan-200/75">Level {user.level}</div>
+                  ) : null}
                 </div>
                 <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8 rounded-md text-slate-400 hover:bg-white/10 hover:text-white">
                   <LogOut className="h-4 w-4" />
