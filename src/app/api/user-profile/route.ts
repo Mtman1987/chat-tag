@@ -6,8 +6,11 @@ export async function GET(req: NextRequest) {
   try {
     const spmtUserId = String(req.headers.get('x-spmt-user-id') || '').trim();
     if (spmtUserId) {
+      const isAdmin = req.headers.get('x-spmt-is-admin') === '1';
       return NextResponse.json({
         spmt: true,
+        isAdmin,
+        role: isAdmin ? 'owner' : 'member',
         twitch: {
           id: spmtUserId,
           name: decodeURIComponent(req.headers.get('x-spmt-display-name') || 'SPMT user'),
@@ -33,6 +36,8 @@ export async function GET(req: NextRequest) {
     const user = state.users[session.id];
 
     return NextResponse.json({
+      isAdmin: false,
+      role: 'member',
       twitch: {
         id: session.id,
         name: user?.twitchUsername || session.twitchUsername,
