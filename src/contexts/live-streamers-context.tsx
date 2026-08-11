@@ -41,23 +41,22 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
       );
       const seen = new Set<string>();
 
-      const communityMembers: LiveStreamer[] = allMembers
-        .map((member) => {
-          const username = String(member?.username || member?.login || '').trim().toLowerCase();
-          if (!username) return null;
-          seen.add(username);
-          const live = liveByUsername.get(username);
-          return {
-            id: String(member?.id || live?.discordId || username),
-            username,
-            avatar: member?.profile_image_url || member?.avatar || undefined,
-            isActive: Boolean(live),
-            isSharedChat: Boolean(live?.isSharedChat),
-            sharedWith: Array.isArray(live?.sharedWith) ? live.sharedWith : [],
-            sharedSessionId: live?.sharedSessionId || null,
-          } satisfies LiveStreamer;
-        })
-        .filter((member): member is LiveStreamer => Boolean(member));
+      const communityMembers = allMembers.reduce<LiveStreamer[]>((members, member) => {
+        const username = String(member?.username || member?.login || '').trim().toLowerCase();
+        if (!username) return members;
+        seen.add(username);
+        const live = liveByUsername.get(username);
+        members.push({
+          id: String(member?.id || live?.discordId || username),
+          username,
+          avatar: member?.profile_image_url || member?.avatar || undefined,
+          isActive: Boolean(live),
+          isSharedChat: Boolean(live?.isSharedChat),
+          sharedWith: Array.isArray(live?.sharedWith) ? live.sharedWith : [],
+          sharedSessionId: live?.sharedSessionId || null,
+        });
+        return members;
+      }, []);
 
       for (const live of liveMembers) {
         const username = String(live?.twitchUsername || live?.username || '').trim().toLowerCase();
