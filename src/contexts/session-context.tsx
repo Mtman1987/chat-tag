@@ -7,6 +7,8 @@ interface SessionUser {
   avatarUrl: string;
   xp: number | null;
   level: number | null;
+  isAdmin: boolean;
+  role: 'owner' | 'member';
 }
 
 interface SessionContextState {
@@ -30,7 +32,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     async function loadSession() {
       try {
-        const response = await fetch('/api/user-profile', { credentials: 'same-origin' });
+        const response = await fetch('/api/user-profile', { credentials: 'same-origin', cache: 'no-store' });
         const data = response.ok ? await response.json() : null;
         const twitch = data?.twitch;
 
@@ -38,7 +40,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('twitchUsername', twitch.name);
           localStorage.setItem('twitchAvatar', twitch.avatar || '');
           if (!cancelled) {
-            setUser({ twitchUsername: twitch.name, avatarUrl: twitch.avatar || '', xp: null, level: null });
+            const isAdmin = data?.isAdmin === true;
+            setUser({
+              twitchUsername: twitch.name,
+              avatarUrl: twitch.avatar || '',
+              xp: null,
+              level: null,
+              isAdmin,
+              role: isAdmin ? 'owner' : 'member',
+            });
             void fetch('/api/spmt/xp', { credentials: 'same-origin', cache: 'no-store' })
               .then((xpResponse) => xpResponse.ok ? xpResponse.json() : null)
               .then((xpData) => {
@@ -57,11 +67,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         // A cached profile may keep the shell readable during a short outage,
-        // but it is never treated as authentication authority.
+        // but it is never treated as authentication or administrator authority.
         const username = localStorage.getItem('twitchUsername');
         const avatar = localStorage.getItem('twitchAvatar');
         if (username && !cancelled) {
-          setUser({ twitchUsername: username, avatarUrl: avatar || '', xp: null, level: null });
+          setUser({ twitchUsername: username, avatarUrl: avatar || '', xp: null, level: null, isAdmin: false, role: 'member' });
           return;
         }
       }
