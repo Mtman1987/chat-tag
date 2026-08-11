@@ -28,68 +28,70 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
 
   const fetchStreamers = useCallback(async () => {
     try {
-      // Read from tagPlayers as the single source of truth
-      const tagRes = await fetch('/api/tag', { cache: 'no-store' });
-      if (!tagRes.ok) return;
-      const tagData = await tagRes.json();
-      const players: any[] = tagData.players || [];
+      const response = await fetch('/api/discord/live-members', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      const liveMembers: any[] = Array.isArray(data?.liveMembers) ? data.liveMembers : [];
+      const allMembers: any[] = Array.isArray(data?.allMembers) ? data.allMembers : [];
 
-      const playerUsernames = players
-        .map((p: any) => (p.twitchUsername || p.username || '').toLowerCase())
-        .filter(Boolean);
+      const liveByUsername = new Map(
+        liveMembers
+          .map((member) => [String(member?.twitchUsername || member?.username || '').toLowerCase(), member] as const)
+          .filter(([username]) => Boolean(username)),
+      );
+      const seen = new Set<string>();
 
-      if (playerUsernames.length === 0) {
-        setLiveStreamers([]);
-        setAllCommunityMembers([]);
-        return;
-      }
-
-      const liveRes = await fetch('/api/twitch/live', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames: playerUsernames })
-      });
-
-      if (liveRes.ok) {
-        const { liveUsers, allUsers } = await liveRes.json();
-        const safeAllUsers = allUsers || [];
-        const safeLiveUsers = liveUsers || [];
-
-        const communityMembers: LiveStreamer[] = players.map((player: any) => {
-          const channelName = (player.twitchUsername || player.username || '').toLowerCase();
-          const liveUser = safeLiveUsers.find((u: any) => u?.username?.toLowerCase() === channelName);
-          let twitchUser = safeAllUsers.find((u: any) => u?.username?.toLowerCase() === channelName);
-          if (!twitchUser) twitchUser = liveUser;
-          const isLive = Boolean(liveUser);
-          const avatar = twitchUser?.profile_image_url
-            || player.avatarUrl
-            || `https://ui-avatars.com/api/?name=${channelName}&background=random`;
-
+      const communityMembers: LiveStreamer[] = allMembers
+        .map((member) => {
+          const username = String(member?.username || member?.login || '').trim().toLowerCase();
+          if (!username) return null;
+          seen.add(username);
+          const live = liveByUsername.get(username);
           return {
-            id: channelName,
-            username: twitchUser?.displayName || liveUser?.displayName || channelName,
-            avatar,
-            isActive: isLive,
-            isSharedChat: Boolean(liveUser?.isSharedChat),
-            sharedWith: liveUser?.sharedWith || [],
-            sharedSessionId: liveUser?.sharedSessionId || null,
-          };
-        });
+            id: String(member?.id || live?.discordId || username),
+            username,
+            avatar: member?.profile_image_url || member?.avatar || undefined,
+            isActive: Boolean(live),
+            isSharedChat: Boolean(live?.isSharedChat),
+            sharedWith: Array.isArray(live?.sharedWith) ? live.sharedWith : [],
+            sharedSessionId: live?.sharedSessionId || null,
+          } satisfies LiveStreamer;
+        })
+        .filter((member): member is LiveStreamer => Boolean(member));
 
-        setAllCommunityMembers(communityMembers);
-        setLiveStreamers(communityMembers.filter(m => m.isActive));
+      for (const live of liveMembers) {
+        const username = String(live?.twitchUsername || live?.username || '').trim().toLowerCase();
+        if (!username || seen.has(username)) continue;
+        communityMembers.push({
+          id: String(live?.discordId || live?.id || username),
+          username,
+          avatar: live?.profile_image_url || live?.avatar || undefined,
+          isActive: true,
+          isSharedChat: Boolean(live?.isSharedChat),
+          sharedWith: Array.isArray(live?.sharedWith) ? live.sharedWith : [],
+          sharedSessionId: live?.sharedSessionId || null,
+        });
       }
+
+      communityMembers.sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.username.localeCompare(b.username));
+      setAllCommunityMembers(communityMembers);
+      setLiveStreamers(communityMembers.filter((member) => member.isActive));
     } catch (error) {
-      console.error('Failed to fetch streamers:', error);
+      console.error('Failed to fetch community live roster:', error);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchStreamers();
-    const interval = setInterval(fetchStreamers, 600000);
-    return () => clearInterval(interval);
+    void fetchStreamers();
+    const interval = window.setInterval(() => void fetchStreamers(), 60_000);
+    const onFocus = () => void fetchStreamers();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [fetchStreamers]);
 
   return (
@@ -97,7 +99,7 @@ export function LiveStreamersProvider({ children }: { children: ReactNode }) {
       liveStreamers,
       allCommunityMembers,
       refreshStreamers: fetchStreamers,
-      isLoading
+      isLoading,
     }}>
       {children}
     </LiveStreamersContext.Provider>
