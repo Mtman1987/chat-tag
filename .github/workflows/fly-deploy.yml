@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: Test auth routing
+    name: Test auth routing and workspace shell
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -27,6 +27,12 @@ jobs:
         run: npm ci
       - name: Run auth routing regression tests
         run: npm run test:auth-routing
+      - name: Run canonical Personal overlay regression
+        run: node --import tsx --test tests/canonical-personal-overlay.test.ts tests/admin-shell-parity.test.ts tests/layout-cleanup.test.ts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
 
   deploy-web:
     name: Deploy web app
