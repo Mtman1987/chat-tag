@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { requireAdminRequest } from '@/lib/auth';
 import { quackverseCards } from '@/lib/quackverse-data';
+import { getQuackverseVisualCanon } from '@/lib/quackverse-visual-canon';
 import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
 import {
   normalizeQuackverseArtManifest,
@@ -55,27 +56,54 @@ function familyDirection(family: ArtFamily) {
     case 'photon-ranger':
       return 'Photon Ranger family: sleek white, pale gold and electric cyan speed armor with feather-shaped light energy and bright photon trails.';
     default:
-      return 'Match the established Quackverse visual language shown by the supplied finished-card references without copying a specific existing character.';
+      return 'General Quackverse military family: preserve the established cinematic fantasy/science-fiction waterfowl language without copying a specific existing character.';
   }
+}
+
+function visualCanonForCard(card: any) {
+  const legacyFamily = familyForCard(card);
+  return getQuackverseVisualCanon({
+    ...card,
+    family: legacyFamily,
+  });
 }
 
 function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily) {
   const motion = variant === 'hover'
-    ? 'dynamic action-keyframe composition with motion trails and energetic lighting'
-    : 'clean collectible-card illustration with a strong centered hero composition';
+    ? 'Dynamic action-keyframe composition with controlled motion trails and energetic lighting.'
+    : 'Clean collectible-card illustration with a strong centered full-character hero composition.';
+
+  if (card.type === 'Equipment') {
+    return [
+      'QUACKVERSE EQUIPMENT ART.',
+      `Create original artwork for the card "${card.name}".`,
+      `Role/theme: ${card.role || card.effect || 'Quackverse equipment'}.`,
+      familyDirection(family),
+      motion,
+      'Subject must be one premium fantasy/science-fiction equipment item, clearly readable as the primary object.',
+      'Detailed materials, cinematic lighting, dramatic atmosphere and premium collectible-card rendering.',
+      'ARTWORK ONLY. No card frame, no stats, no captions, no written text, no logo, no watermark and no UI.',
+    ].filter(Boolean).join(' ');
+  }
+
+  const canon = visualCanonForCard(card);
   return [
-    'QUACKVERSE CHARACTER ART.',
-    `Create original artwork for the card "${card.name}".`,
-    card.type === 'Equipment'
-      ? 'Subject: a premium fantasy/sci-fi equipment item from the Quackverse, clearly readable as one primary object.'
-      : 'Subject: an anthropomorphic humanoid duck hero: unmistakable duck bill, expressive duck eyes, visible feather details, upright humanoid proportions, two arms and two legs. Do not make a human wearing a duck mask and do not make a normal realistic duck.',
-    `Card type: ${card.type}. Role/theme: ${card.role || 'Quackverse adventurer'}. Rarity: ${card.rarity || 'Unknown'}.`,
-    card.effect ? `Ability/theme inspiration: ${card.effect}.` : '',
-    card.flavor ? `Character flavor: ${card.flavor}.` : '',
+    'QUACKVERSE CANON CHARACTER ART.',
+    `Create original artwork for the existing Quackverse character "${card.name}".`,
+    'CANONICAL IDENTITY IS FIXED. Do not redesign the species, plumage pattern, body silhouette, armor language, signature weapon or palette hierarchy.',
+    `Species: ${canon.species}. Required plumage/anatomy: ${canon.plumage}.`,
+    'The subject is an anthropomorphic upright waterfowl person with unmistakable species-correct bill, expressive avian eyes, visible feather detail, two arms and two legs. Never make a human in a bird mask and never make a normal four-legged or realistic bird.',
+    `Class: ${canon.className}. Subclass/role: ${canon.subclass}. Body silhouette: ${canon.build}.`,
+    `Visual affinity: ${canon.affinity}. Armor canon: ${canon.armorStyle}.`,
+    `Signature weapon or focus: ${canon.signatureWeapon}. Keep it clearly readable and do not replace it with a random weapon.`,
+    `Palette hierarchy: ${canon.palette.join(', ')}. Effects: ${canon.vfx}.`,
     familyDirection(family),
-    motion + '.',
-    'Premium polished fantasy/science-fiction trading-card illustration, strong readable silhouette, detailed materials, cinematic lighting, dramatic atmosphere, character/object dominant in frame.',
-    'ARTWORK ONLY. No card frame, no stats, no captions, no written text, no logo, no watermark, no UI.',
+    card.effect ? `Ability/theme inspiration: ${card.effect}.` : '',
+    card.flavor ? `Character attitude cue: ${card.flavor}.` : '',
+    motion,
+    canon.artStyle,
+    'Use a distinct face, pose and silhouette appropriate to this specific character. Preserve realistic feather/material detail and cinematic depth while keeping the character dominant in frame.',
+    'ARTWORK ONLY. No card frame, no stats, no captions, no written text, no logo, no watermark and no UI.',
   ].filter(Boolean).join(' ');
 }
 
@@ -91,19 +119,27 @@ function absoluteArtUrl(value: unknown, origin: string): string | null {
 
 function referenceImagesFor(card: any, origin: string): string[] {
   const family = familyForCard(card);
+  const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
+
+  const sameAffinity = canon
+    ? quackverseCards
+        .filter((candidate) => candidate.id !== card.id && candidate.type === 'Duck')
+        .filter((candidate) => visualCanonForCard(candidate).affinity === canon.affinity)
+        .map((candidate) => absoluteArtUrl(candidate.artUrl, origin))
+        .filter((value): value is string => Boolean(value))
+    : [];
+
   const sameFamily = quackverseCards
     .filter((candidate) => candidate.id !== card.id && family !== 'general' && familyForCard(candidate) === family)
     .map((candidate) => absoluteArtUrl(candidate.artUrl, origin))
     .filter((value): value is string => Boolean(value));
-
-  if (sameFamily.length >= 3) return [...new Set(sameFamily)].slice(0, 3);
 
   const broadReferences = quackverseCards
     .filter((candidate) => candidate.id !== card.id)
     .map((candidate) => absoluteArtUrl(candidate.artUrl, origin))
     .filter((value): value is string => Boolean(value));
 
-  return [...new Set([...sameFamily, ...broadReferences])].slice(0, 3);
+  return [...new Set([...sameAffinity, ...sameFamily, ...broadReferences])].slice(0, 3);
 }
 
 async function callStreamWeaverImage(prompt: string, body: any, referenceImages: string[]) {
@@ -209,6 +245,7 @@ export async function POST(req: NextRequest) {
       const family = familyForCard(card);
       const references = referenceImagesFor(card, req.nextUrl.origin);
       const prompt = buildPrompt(card, variant, family);
+      const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
       const generated = await callStreamWeaverImage(prompt, body, references);
       const image = await fetchGeneratedImage(generated.imageUrl);
       const asset = await persistGeneratedArt(card.id, variant, image.bytes, image.mimeType, generated.provider);
@@ -217,6 +254,17 @@ export async function POST(req: NextRequest) {
         name: card.name,
         variant,
         family,
+        canon: canon
+          ? {
+              species: canon.species,
+              affinity: canon.affinity,
+              className: canon.className,
+              subclass: canon.subclass,
+              signatureWeapon: canon.signatureWeapon,
+              palette: canon.palette,
+            }
+          : null,
+        prompt: body?.includePrompt === true ? prompt : undefined,
         referenceCount: references.length,
         provider: generated.provider,
         success: true,
@@ -235,6 +283,6 @@ export async function POST(req: NextRequest) {
     results,
     note: variant === 'hover'
       ? 'The current image route returns still images. True GIF/video hover generation remains a later animation step.'
-      : 'Static Quackverse art is generated one image per card through StreamWeaver using finished Quackverse art as visual references when available.',
+      : 'Static Quackverse art is generated one image per card through StreamWeaver using the permanent visual canon plus matching-affinity finished art references.',
   });
 }
