@@ -1,0 +1,16 @@
+const fs = require('node:fs');
+const path = 'src/middleware.ts';
+let source = fs.readFileSync(path, 'utf8');
+
+const identityMarker = `async function fetchSpmtIdentity(token: string) {\n  if (!token) return null;\n  const response = await fetch(\`${'${SPMT_BASE_URL}'}/api/oauth/userinfo\`, {\n    headers: { Authorization: \`Bearer ${'${token}'}\`, Accept: 'application/json' },\n    cache: 'no-store',\n  }).catch(() => null);\n  if (!response?.ok) return null;\n  const payload = await response.json().catch(() => null);\n  const identity = payload?.user || payload?.profile || payload;\n  return identity?.id ? identity : null;\n}\n`;
+if (!source.includes(identityMarker)) throw new Error('fetchSpmtIdentity marker changed');
+const serviceHelper = `${identityMarker}\nasync function isAuthorizedDshServiceToken(token: string) {\n  if (!token) return false;\n  const response = await fetch(\`${'${SPMT_BASE_URL}'}/api/oauth/serviceinfo\`, {\n    headers: { Authorization: \`Bearer ${'${token}'}\`, Accept: 'application/json' },\n    cache: 'no-store',\n  }).catch(() => null);\n  if (!response?.ok) return false;\n  const payload = await response.json().catch(() => null);\n  const scopes = Array.isArray(payload?.scopes) ? payload.scopes.map(String) : [];\n  return payload?.token_use === 'client_credentials'\n    && payload?.client_id === 'discord-stream-hub'\n    && scopes.includes('discord:control');\n}\n`;
+source = source.replace(identityMarker, serviceHelper);
+
+const serviceMarker = `  // Service-to-service calls must prove possession of the shared secret.\n  // This restores bot access to /api/tag without exposing every machine route.\n  if (hasValidBotSecret(request)) {\n    return NextResponse.next();\n  }\n\n  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '') || '';`;
+if (!source.includes(serviceMarker)) throw new Error('service auth marker changed');
+const serviceReplacement = `  const authorizationToken = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '') || '';\n  if (pathname === '/api/discord/chat' && request.method === 'POST' && await isAuthorizedDshServiceToken(authorizationToken)) {\n    return NextResponse.next();\n  }\n\n  // Legacy bot-secret access remains limited to existing internal routes while\n  // cross-app Discord delivery uses SPMT service OAuth above.\n  if (hasValidBotSecret(request)) {\n    return NextResponse.next();\n  }\n\n  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || authorizationToken;`;
+source = source.replace(serviceMarker, serviceReplacement);
+fs.writeFileSync(path, source);
+
+fs.writeFileSync('tests/dsh-service-discord-auth.test.cjs', `const fs = require('node:fs');\nconst test = require('node:test');\nconst assert = require('node:assert/strict');\n\nconst source = fs.readFileSync('src/middleware.ts', 'utf8');\n\ntest('DSH Discord delivery uses scoped SPMT service OAuth', () => {\n  assert.match(source, /\/api\/oauth\/serviceinfo/);\n  assert.match(source, /payload\\?\\.client_id === 'discord-stream-hub'/);\n  assert.match(source, /scopes\\.includes\\('discord:control'\\)/);\n  assert.match(source, /pathname === '\/api\/discord\/chat'[\\s\\S]*isAuthorizedDshServiceToken/);\n});\n`);
