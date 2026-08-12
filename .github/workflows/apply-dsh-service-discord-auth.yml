@@ -1,0 +1,40 @@
+name: Apply DSH service Discord auth patch
+
+on:
+  push:
+    branches:
+      - fix/dsh-service-discord-auth-20260812
+    paths:
+      - scripts/patch-dsh-service-discord-auth.cjs
+      - .github/workflows/apply-dsh-service-discord-auth.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/dsh-service-discord-auth-20260812
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: node scripts/patch-dsh-service-discord-auth.cjs
+      - name: Validate
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Commit validated patch
+        run: |
+          rm scripts/patch-dsh-service-discord-auth.cjs .github/workflows/apply-dsh-service-discord-auth.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/middleware.ts tests/dsh-service-discord-auth.test.cjs scripts/patch-dsh-service-discord-auth.cjs .github/workflows/apply-dsh-service-discord-auth.yml
+          git commit -m "Authorize DSH Discord delivery with SPMT service OAuth"
+          git push origin HEAD:fix/dsh-service-discord-auth-20260812
