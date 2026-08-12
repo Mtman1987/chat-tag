@@ -75,12 +75,15 @@ test('game and Quackverse content administration remain under the guarded settin
   assert.match(middleware, /SPMT admin required/);
 });
 
-test('ChatTag shared Worktray remains visible even when SPMT needs reconnecting', () => {
+test('ChatTag shared Worktray remains visible and consumes one canonical Personal renderer', () => {
   const text = source('src/components/spmt-workspace-host.tsx');
   assert.match(text, /aria-label="SPMT workspace tray"/);
   assert.match(text, /Reconnect SPMT workspace/);
   assert.match(text, /const reconnectHref = '\/api\/auth\/spmt'/);
-  assert.match(text, /left: `\$\{Number\(widget\.x \|\| 0\)\}%`/);
+  assert.match(text, /data-canonical-personal-overlay="true"/);
+  assert.match(text, /src=\{personalOverlayUrl\}/);
+  assert.doesNotMatch(text, /widgets\.map\(/);
+  assert.doesNotMatch(text, /left: `\$\{Number\(widget\.x/);
   assert.match(text, /window\.setInterval\(\(\) => void refresh\(\), 30_000\)/);
   assert.doesNotMatch(text, /if \(hiddenRoute \|\| embedded \|\| !connected\) return null/);
 });
