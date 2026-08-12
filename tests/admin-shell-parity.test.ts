@@ -75,6 +75,7 @@ test('game and Quackverse content administration remain under the guarded settin
   assert.match(middleware, /SPMT admin required/);
 });
 
+// The canonical Personal scene is composed by SPMT; ChatTag only consumes it.
 test('ChatTag shared Worktray remains visible and consumes one canonical Personal renderer', () => {
   const text = source('src/components/spmt-workspace-host.tsx');
   assert.match(text, /aria-label="SPMT workspace tray"/);
