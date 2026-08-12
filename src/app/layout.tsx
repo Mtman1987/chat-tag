@@ -7,6 +7,7 @@ import { RootShell } from '@/components/root-shell';
 import { LiveStreamersProvider } from '@/contexts/live-streamers-context';
 import { SessionProvider } from '@/contexts/session-context';
 import { SpmtWorkspaceHost } from '@/components/spmt-workspace-host';
+import { PersonalOverlayHost } from '@/components/personal-overlay-host';
 
 const orbitron = Orbitron({
   subsets: ['latin'],
@@ -46,6 +47,7 @@ export default function RootLayout({
         <SessionProvider>
           <LiveStreamersProvider>
             <RootShell>{children}</RootShell>
+            <PersonalOverlayHost />
             <SpmtWorkspaceHost />
             <Toaster />
           </LiveStreamersProvider>
