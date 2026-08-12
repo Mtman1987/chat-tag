@@ -15,11 +15,33 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream({
     start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-      };
       let closed = false;
       let lastUpdatedAt = '';
+      let statePoll: ReturnType<typeof setInterval> | null = null;
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        if (statePoll) clearInterval(statePoll);
+        if (heartbeat) clearInterval(heartbeat);
+        try {
+          controller.close();
+        } catch {
+          // The runtime may already have closed the controller after a client disconnect.
+        }
+      };
+
+      const send = (event: string, data: unknown) => {
+        if (closed) return false;
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          return true;
+        } catch {
+          cleanup();
+          return false;
+        }
+      };
 
       send('ready', { ok: true });
 
@@ -30,6 +52,7 @@ export async function GET(req: NextRequest) {
         if (closed) return;
         try {
           const appState = await readAppState();
+          if (closed) return;
           const raw = appState.quackverseRooms?.[roomKey] || (!scopedRoom ? appState.quackverse : {});
           const state = normalizeQuackverseState(raw as Partial<QuackverseSavedState>);
 
@@ -38,28 +61,22 @@ export async function GET(req: NextRequest) {
           const viewer = viewerPayload(sessionUser, state);
           const seat = viewer?.seat || getClaimedSeat(state, viewerUserId);
           send('state', redactQuackverseStateForViewer(state, seat));
-
         } catch {
-          send('error', { message: 'Failed to read Quackverse state' });
+          if (!closed) send('error', { message: 'Failed to read Quackverse state' });
         }
       };
 
       void sendLatestState();
 
-      const statePoll = setInterval(() => {
+      statePoll = setInterval(() => {
         void sendLatestState();
       }, 1000);
 
-      const heartbeat = setInterval(() => {
+      heartbeat = setInterval(() => {
         send('ping', { at: Date.now() });
       }, 25000);
 
-      req.signal.addEventListener('abort', () => {
-        closed = true;
-        clearInterval(statePoll);
-        clearInterval(heartbeat);
-        controller.close();
-      });
+      req.signal.addEventListener('abort', cleanup, { once: true });
     },
   });
 
