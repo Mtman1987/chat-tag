@@ -7,7 +7,6 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 
 test('header exposes one compact public task row and a dedicated Admin shortcut from trusted session authority', () => {
   const header = read('src/components/header.tsx');
-
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /href: '\/', label: 'Play'/);
   assert.match(header, /href: '\/messages', label: 'Messages'/);
@@ -26,7 +25,6 @@ test('header exposes one compact public task row and a dedicated Admin shortcut 
 test('home opens on Play and keeps all admin workflows off the public dashboard', () => {
   const dashboard = read('src/app/main-dashboard.tsx');
   const adminPage = read('src/app/settings/game-controls/page.tsx');
-
   assert.match(dashboard, /defaultValue="play"/);
   assert.match(dashboard, /TabsTrigger value="play"/);
   assert.match(dashboard, /TabsTrigger value="community"/);
@@ -54,10 +52,27 @@ test('home live status is derived from the community live roster instead of tag 
 test('settings start with controls and enlarged cards stay inside the viewport', () => {
   const shell = read('src/components/root-shell.tsx');
   const styles = read('src/app/globals.css');
-
   assert.match(shell, /data-route=\{pathname\}/);
   assert.match(styles, /\[data-route='\/settings'\] \.cosmic-hero/);
   assert.match(styles, /max-height: calc\(100dvh - 1\.5rem\)/);
   assert.match(styles, /transform: translate\(-50%, -50%\)/);
   assert.match(styles, /overflow-y: auto/);
+});
+
+test('shared shell consumes the canonical Personal overlay and keeps footer recovery out of band', () => {
+  const host = read('src/components/spmt-workspace-host.tsx');
+  const theme = read('src/app/api/spmt/workspace-theme/route.ts');
+  const renderer = read('src/app/tenant/[tenant]/personal/route.ts');
+  const proxy = read('src/app/api/spmt/personal-render/[...path]/route.ts');
+  assert.match(host, /data-canonical-personal-overlay="true"/);
+  assert.match(host, /src=\{personalOverlayUrl\}/);
+  assert.doesNotMatch(host, /widgets\.map\(/);
+  assert.doesNotMatch(host, /overlay\.widgets/);
+  assert.match(host, /Personal overlay \{personalOverlayVisible \? 'On' : 'Off'\}/);
+  assert.match(host, /Copy Public URL/);
+  assert.match(host, /Copy Personal URL/);
+  assert.match(host, /event\.altKey && event\.shiftKey && event\.key\.toLowerCase\(\) === 'f'/);
+  assert.match(theme, /api\/tenant-scene\?output=personal/);
+  assert.match(renderer, /personal-render\/tenant/);
+  assert.match(proxy, /cloud-xbox/);
 });
