@@ -11,21 +11,27 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
-  const [profileResponse, overlayResponse] = await Promise.all([
+  const [profileResponse, overlayResponse, tenantResponse] = await Promise.all([
     fetch(`${SPMT_BASE_URL}/api/workspace-profile`, { headers, cache: 'no-store' }),
     fetch(`${SPMT_BASE_URL}/api/overlay-workspace`, { headers, cache: 'no-store' }),
+    fetch(`${SPMT_BASE_URL}/api/tenant-scene?output=personal`, { headers, cache: 'no-store' }),
   ]);
-  const [payload, overlayPayload] = await Promise.all([
+  const [payload, overlayPayload, tenantPayload] = await Promise.all([
     profileResponse.json().catch(() => null),
     overlayResponse.json().catch(() => null),
+    tenantResponse.json().catch(() => null),
   ]);
   if (!profileResponse.ok || !payload?.profile) {
     return NextResponse.json({ error: payload?.error || 'Workspace theme unavailable' }, { status: profileResponse.status || 502 });
   }
 
+  const tenant = tenantResponse.ok ? String(tenantPayload?.tenant || '') : '';
   return NextResponse.json({
     tokens: workspaceThemeTokens(payload.profile, 'chat-tag', overlayResponse.ok ? overlayPayload?.layout || null : null),
     revision: payload.profile.revision,
     updatedAt: payload.profile.updatedAt,
+    tenant: tenant || null,
+    tenantOutputs: tenantResponse.ok && tenantPayload?.urls ? tenantPayload.urls : null,
+    personalOverlayUrl: tenant ? `/tenant/${encodeURIComponent(tenant)}/personal` : null,
   });
 }
