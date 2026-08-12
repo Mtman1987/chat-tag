@@ -471,9 +471,14 @@ function sleep(ms) {
 // Forward Twitch events to DSH for leaderboard points.
 let dshErrorSuppressedUntil = 0;
 let dshErrorCount = 0;
+let dshLegacyEndpointUnavailable = false;
 const DSH_ERROR_WINDOW_MS = 60000;
 
 async function forwardToDSH(eventData) {
+  if (dshLegacyEndpointUnavailable) {
+    return { success: false, status: 404, skipped: true };
+  }
+
   try {
     const r = await fetch(`${DSH_API_BASE}/api/twitch/events`, {
       method: 'POST',
@@ -489,6 +494,11 @@ async function forwardToDSH(eventData) {
     }
 
     if (!r.ok) {
+      if (r.status === 404) {
+        dshLegacyEndpointUnavailable = true;
+        console.log('[DSH] Legacy Twitch event endpoint is not available; disabling Chat Tag forwarding for this process. DSH direct Twitch monitoring remains authoritative.');
+        return { success: false, status: r.status, skipped: true };
+      }
       if (Date.now() < dshErrorSuppressedUntil) return { success: false, status: r.status };
       dshErrorCount++;
       if (dshErrorCount > 3) {
