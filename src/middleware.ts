@@ -87,6 +87,20 @@ async function fetchSpmtIdentity(token: string) {
   return identity?.id ? identity : null;
 }
 
+async function isAuthorizedDshServiceToken(token: string) {
+  if (!token) return false;
+  const response = await fetch(`${SPMT_BASE_URL}/api/oauth/serviceinfo`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    cache: 'no-store',
+  }).catch(() => null);
+  if (!response?.ok) return false;
+  const payload = await response.json().catch(() => null);
+  const scopes = Array.isArray(payload?.scopes) ? payload.scopes.map(String) : [];
+  return payload?.token_use === 'client_credentials'
+    && payload?.client_id === 'discord-stream-hub'
+    && scopes.includes('discord:control');
+}
+
 async function refreshSpmtSession(request: NextRequest) {
   const refreshToken = request.cookies.get(SPMT_REFRESH_COOKIE)?.value || '';
   const clientSecret = String(process.env.CHAT_TAG_CLIENT_SECRET || '');
@@ -174,13 +188,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Service-to-service calls must prove possession of the shared secret.
-  // This restores bot access to /api/tag without exposing every machine route.
+  const authorizationToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  if (pathname === '/api/discord/chat' && request.method === 'POST' && await isAuthorizedDshServiceToken(authorizationToken)) {
+    return NextResponse.next();
+  }
+
+  // Legacy bot-secret access remains limited to existing internal routes while
+  // cross-app Discord delivery uses SPMT service OAuth above.
   if (hasValidBotSecret(request)) {
     return NextResponse.next();
   }
 
-  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || authorizationToken;
   let identity = await fetchSpmtIdentity(accessToken);
   let refreshed: Awaited<ReturnType<typeof refreshSpmtSession>> = null;
   if (!identity) {
