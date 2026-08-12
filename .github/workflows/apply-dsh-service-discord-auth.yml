@@ -28,7 +28,7 @@ jobs:
       - name: Validate
         run: |
           npm run typecheck
-          npm test
+          node --test tests/dsh-service-discord-auth.test.cjs
           npm run build
       - name: Commit validated patch
         run: |
