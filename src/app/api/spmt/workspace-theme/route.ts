@@ -23,8 +23,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: payload?.error || 'Workspace theme unavailable' }, { status: profileResponse.status || 502 });
   }
 
+  const tenant = personalResponse.ok ? String(personalPayload?.tenant || '').trim().toLowerCase() : '';
+  const personalCanonical = personalResponse.ok && typeof personalPayload?.canonicalUrl === 'string'
+    ? personalPayload.canonicalUrl
+    : (tenant ? `${SPMT_BASE_URL}/tenant/${encodeURIComponent(tenant)}/personal` : null);
+
   return NextResponse.json({
     tokens: workspaceThemeTokens(payload.profile, 'chat-tag', null),
+    tenant: tenant || null,
+    tenantOutputs: tenant ? {
+      public: `${SPMT_BASE_URL}/tenant/${encodeURIComponent(tenant)}/public`,
+      personal: personalCanonical,
+    } : null,
+    // This launch URL contains the narrow read-only Personal render key in the
+    // fragment. SPMT consumes it client-side and removes it from the address bar.
     personalOverlayUrl: personalResponse.ok && typeof personalPayload?.url === 'string' ? personalPayload.url : null,
     revision: payload.profile.revision,
     updatedAt: payload.profile.updatedAt,
