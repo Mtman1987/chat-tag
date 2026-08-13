@@ -23,7 +23,9 @@ test('Worktray controls Personal visibility without controlling footer visibilit
   assert.match(worktray, /Personal overlay \{personalOverlayVisible \? 'On' : 'Off'\}/);
   assert.match(worktray, /window\.dispatchEvent\(new CustomEvent\(PERSONAL_VISIBILITY_EVENT/);
   assert.match(worktray, /event\.altKey && event\.shiftKey && event\.key\.toLowerCase\(\) === 'f'/);
-  assert.match(worktray, /if \(!footerVisible\) return null/);
+  assert.match(worktray, /if \(hiddenRoute \|\| !footerVisible\) return null/);
+  assert.doesNotMatch(worktray, /if \(hiddenRoute \|\| embedded/);
+  assert.match(worktray, /data-workspace-footer="true"/);
   assert.match(worktray, /Copy Public URL/);
   assert.match(worktray, /Copy Personal URL/);
 });
