@@ -5,7 +5,7 @@ import { getBotSecret } from '@/lib/runtime-secrets';
 const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').replace(/\/$/, '');
 const SPMT_COOKIE = 'chat_tag_spmt_session';
 const SPMT_REFRESH_COOKIE = 'chat_tag_spmt_refresh';
-const DEFAULT_OWNER_USERNAMES = ['mtman1987'];
+const SPMT_REQUEST_TIMEOUT_MS = 5000;
 
 const PUBLIC_PREFIXES = [
   '/about',
@@ -29,10 +29,13 @@ const PUBLIC_PREFIXES = [
 
 const ADMIN_PREFIXES = ['/api/admin/', '/api/settings', '/settings', '/api/logs', '/api/tag/mod-log'];
 
+function requestSignal(): AbortSignal | undefined {
+  if (typeof AbortSignal === 'undefined' || typeof AbortSignal.timeout !== 'function') return undefined;
+  return AbortSignal.timeout(SPMT_REQUEST_TIMEOUT_MS);
+}
+
 function hasValidBotSecret(request: NextRequest): boolean {
-  const supplied = String(
-    request.headers.get('x-bot-secret') || request.nextUrl.searchParams.get('secret') || ''
-  ).trim();
+  const supplied = String(request.headers.get('x-bot-secret') || '').trim();
   if (!supplied) return false;
   try {
     return supplied === getBotSecret();
@@ -48,12 +51,13 @@ function debugEnabled(scope: string) {
   return scopes.some((item) => item === '1' || item === 'true' || item === '*' || item === 'all' || item === scope);
 }
 
-function trustedOwnerUsernames(): Set<string> {
-  const configured = String(process.env.CHAT_TAG_OWNER_USERNAMES || '')
-    .split(',')
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-  return new Set(configured.length > 0 ? configured : DEFAULT_OWNER_USERNAMES);
+function trustedOwnerUserIds(): Set<string> {
+  return new Set(
+    String(process.env.CHAT_TAG_OWNER_USER_IDS || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 }
 
 function isAdmin(identity: any): boolean {
@@ -62,17 +66,8 @@ function isAdmin(identity: any): boolean {
   const roles = Array.isArray(identity?.roles) ? identity.roles.map((value: unknown) => String(value).toLowerCase()) : [];
   if (role === 'admin' || role === 'owner' || roles.includes('admin') || roles.includes('owner')) return true;
 
-  const ownerNames = trustedOwnerUsernames();
-  const verifiedNames = [
-    identity?.username,
-    identity?.twitchUsername,
-    identity?.twitch_username,
-    identity?.displayName,
-    identity?.display_name,
-  ]
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter(Boolean);
-  return verifiedNames.some((value) => ownerNames.has(value));
+  const identityId = String(identity?.id || '').trim();
+  return Boolean(identityId && trustedOwnerUserIds().has(identityId));
 }
 
 async function fetchSpmtIdentity(token: string) {
@@ -80,6 +75,7 @@ async function fetchSpmtIdentity(token: string) {
   const response = await fetch(`${SPMT_BASE_URL}/api/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     cache: 'no-store',
+    signal: requestSignal(),
   }).catch(() => null);
   if (!response?.ok) return null;
   const payload = await response.json().catch(() => null);
@@ -101,6 +97,7 @@ async function refreshSpmtSession(request: NextRequest) {
       client_secret: clientSecret,
     }),
     cache: 'no-store',
+    signal: requestSignal(),
   }).catch(() => null);
   if (!response?.ok) return null;
   const tokens = await response.json().catch(() => null);
@@ -174,8 +171,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Service-to-service calls must prove possession of the shared secret.
-  // This restores bot access to /api/tag without exposing every machine route.
+  // Service-to-service calls must prove possession of the shared secret in a
+  // request header. Secrets in query strings leak through URLs, logs, history,
+  // analytics and referrers, so they are intentionally not accepted here.
   if (hasValidBotSecret(request)) {
     return NextResponse.next();
   }
