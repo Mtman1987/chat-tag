@@ -48,11 +48,14 @@ test('desktop ChatTag navigation exposes a visible owner Admin channel and fills
   assert.match(shell, /<SuiteSidebar collapsed=\{sidebarCollapsed\} onToggle=\{toggleSidebar\} \/>/);
 });
 
-test('middleware recognizes the verified platform owner before guarded settings checks', () => {
+test('middleware derives owner authority only from verified SPMT claims or immutable user IDs', () => {
   const middleware = source('src/middleware.ts');
-  assert.match(middleware, /DEFAULT_OWNER_USERNAMES = \['mtman1987'\]/);
-  assert.match(middleware, /CHAT_TAG_OWNER_USERNAMES/);
-  assert.match(middleware, /verifiedNames\.some/);
+  assert.doesNotMatch(middleware, /DEFAULT_OWNER_USERNAMES/);
+  assert.doesNotMatch(middleware, /CHAT_TAG_OWNER_USERNAMES/);
+  assert.doesNotMatch(middleware, /verifiedNames\.some/);
+  assert.match(middleware, /CHAT_TAG_OWNER_USER_IDS/);
+  assert.match(middleware, /identity\?\.is_admin/);
+  assert.match(middleware, /identityId && trustedOwnerUserIds\(\)\.has\(identityId\)/);
   assert.match(middleware, /headers\.set\('x-spmt-is-admin', admin \? '1' : '0'\)/);
   assert.match(middleware, /isPublicLiveMembersRead/);
 });
