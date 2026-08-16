@@ -43,7 +43,7 @@ function AssetPreview({ card, entry }: { card: QuackverseCard; entry?: Quackvers
   const src = hovered ? hoverUrl : staticUrl;
 
   return (
-    <div className="space-y-3">
+    <div className="relative z-0 space-y-3">
       <div
         className="overflow-hidden rounded-lg border border-white/10 bg-slate-950"
         onMouseEnter={() => setHovered(true)}
@@ -181,7 +181,7 @@ export function QuackverseArtManager() {
   const selectedEntry = manifest[String(selectedCard.id)] || null;
 
   return (
-    <section className="rounded-lg border border-white/10 bg-black/20 p-4">
+    <section data-quackverse-art-manager className="relative z-[60] isolate rounded-lg border border-white/10 bg-black/20 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-headline text-lg text-white">Card Art Manager</h3>
@@ -193,7 +193,7 @@ export function QuackverseArtManager() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+        <div className="relative z-10 rounded-lg border border-white/10 bg-white/[0.03] p-3">
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -211,7 +211,7 @@ export function QuackverseArtManager() {
                     type="button"
                     onClick={() => setSelectedCardId(card.id)}
                     className={cn(
-                      'w-full rounded-md border p-2 text-left transition',
+                      'relative z-10 w-full rounded-md border p-2 text-left transition',
                       active ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04] hover:border-cyan-300/60',
                     )}
                   >
@@ -232,7 +232,7 @@ export function QuackverseArtManager() {
           </ScrollArea>
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+        <div className="relative z-10 rounded-lg border border-white/10 bg-white/[0.03] p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-normal text-slate-400">Selected card</div>
@@ -247,15 +247,15 @@ export function QuackverseArtManager() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <AssetPreview card={selectedCard} entry={selectedEntry} />
 
-              <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-3">
+            <div data-quackverse-art-actions className="relative z-20 space-y-4 rounded-lg border border-white/10 bg-black/20 p-3 pointer-events-auto">
               <div className="space-y-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3">
                 <div className="text-sm font-semibold text-white">Generate with StreamWeaver SeaArt</div>
-                <div className="grid gap-2">
+                <div className="relative z-30 grid gap-2 pointer-events-auto">
                   <Button
                     type="button"
                     disabled={loading}
                     onClick={() => void generateAsset('static', [selectedCard.id])}
-                    className="justify-start"
+                    className="relative z-30 justify-start pointer-events-auto"
                   >
                     Generate Static Art
                   </Button>
@@ -264,7 +264,7 @@ export function QuackverseArtManager() {
                     variant="secondary"
                     disabled={loading}
                     onClick={() => void generateAsset('hover', [selectedCard.id])}
-                    className="justify-start"
+                    className="relative z-30 justify-start pointer-events-auto"
                   >
                     Generate Hover Still
                   </Button>
@@ -279,7 +279,7 @@ export function QuackverseArtManager() {
                         .map((card) => card.id);
                       void generateAsset('static', missing);
                     }}
-                    className="justify-start"
+                    className="relative z-30 justify-start pointer-events-auto"
                   >
                     Fill Next 5 Missing
                   </Button>
@@ -290,7 +290,7 @@ export function QuackverseArtManager() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="relative z-20 space-y-2 pointer-events-auto">
                 <div className="text-sm font-semibold text-white">Static image</div>
                 <input
                   type="file"
@@ -301,11 +301,11 @@ export function QuackverseArtManager() {
                     void uploadAsset('static', file);
                     event.target.value = '';
                   }}
-                  className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-cyan-300/20 file:px-3 file:py-2 file:text-cyan-50 hover:file:bg-cyan-300/30"
+                  className="relative z-30 block w-full text-sm text-slate-300 pointer-events-auto file:mr-3 file:rounded-md file:border-0 file:bg-cyan-300/20 file:px-3 file:py-2 file:text-cyan-50 hover:file:bg-cyan-300/30"
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="relative z-20 space-y-2 pointer-events-auto">
                 <div className="text-sm font-semibold text-white">Hover GIF</div>
                 <input
                   type="file"
@@ -316,7 +316,7 @@ export function QuackverseArtManager() {
                     void uploadAsset('hover', file);
                     event.target.value = '';
                   }}
-                  className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-fuchsia-300/20 file:px-3 file:py-2 file:text-fuchsia-50 hover:file:bg-fuchsia-300/30"
+                  className="relative z-30 block w-full text-sm text-slate-300 pointer-events-auto file:mr-3 file:rounded-md file:border-0 file:bg-fuchsia-300/20 file:px-3 file:py-2 file:text-fuchsia-50 hover:file:bg-fuchsia-300/30"
                 />
               </div>
 
