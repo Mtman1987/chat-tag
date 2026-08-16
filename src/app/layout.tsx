@@ -46,6 +46,7 @@ export default function RootLayout({
     <html lang="en" className={`${orbitron.variable} ${roboto.variable} dark`}>
       <body className="font-body antialiased min-h-screen relative">
         <Script src="https://spmt.live/shared/ecosystem-header.js" data-app="chat-tag" strategy="afterInteractive" />
+        <Script src="https://spmt.live/shared/workspace-controller.js" strategy="afterInteractive" />
         <SessionProvider>
           <LiveStreamersProvider>
             <RootShell>{children}</RootShell>
