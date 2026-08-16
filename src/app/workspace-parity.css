@@ -47,3 +47,12 @@
   border-color: hsl(var(--primary) / calc(0.28 * var(--workspace-border-strength, 0.6))) !important;
   backdrop-filter: blur(var(--workspace-blur-strength, 22px));
 }
+
+/* Quackverse's floating card inspector used to start at top: 4px, directly
+   underneath the shared ecosystem bar. On admin/card-art surfaces this also
+   put the inspector over the image-generation controls. Keep that floating
+   card below the shared bar while the art manager establishes its own local
+   action layer. */
+body:has([data-quackverse-art-manager]) .fixed.right-4.top-4.z-50 {
+  top: calc(var(--spmt-ecosystem-header-height, 38px) + 1rem) !important;
+}
