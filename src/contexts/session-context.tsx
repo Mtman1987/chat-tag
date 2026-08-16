@@ -23,9 +23,56 @@ const SessionContext = createContext<SessionContextState>({
   logout: async () => {},
 });
 
+const SESSION_CACHE_KEY = 'spmt.cache.v1.chat-tag.session';
+
+type CachedSessionEnvelope = {
+  version: 1;
+  savedAt: string;
+  user: Pick<SessionUser, 'twitchUsername' | 'avatarUrl' | 'xp' | 'level'>;
+};
+
+function readCachedUser(): SessionUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cached = JSON.parse(localStorage.getItem(SESSION_CACHE_KEY) || 'null') as CachedSessionEnvelope | null;
+    if (!cached || cached.version !== 1 || !cached.user?.twitchUsername) return null;
+    return {
+      twitchUsername: cached.user.twitchUsername,
+      avatarUrl: cached.user.avatarUrl || '',
+      xp: Number.isFinite(cached.user.xp) ? cached.user.xp : null,
+      level: Number.isFinite(cached.user.level) ? cached.user.level : null,
+      // Cached display data is never administrator authority.
+      isAdmin: false,
+      role: 'member',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function cacheUser(user: SessionUser) {
+  try {
+    localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+      version: 1,
+      savedAt: new Date().toISOString(),
+      user: {
+        twitchUsername: user.twitchUsername,
+        avatarUrl: user.avatarUrl,
+        xp: user.xp,
+        level: user.level,
+      },
+    } satisfies CachedSessionEnvelope));
+  } catch {}
+}
+
+function clearCachedUser() {
+  try { localStorage.removeItem(SESSION_CACHE_KEY); } catch {}
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [isUserLoading, setIsUserLoading] = useState(true);
+  const initialUser = typeof window !== 'undefined' ? readCachedUser() : null;
+  const [user, setUser] = useState<SessionUser | null>(initialUser);
+  const [isUserLoading, setIsUserLoading] = useState(!initialUser);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,54 +88,56 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('twitchAvatar', twitch.avatar || '');
           if (!cancelled) {
             const isAdmin = data?.isAdmin === true;
-            setUser({
+            const nextUser: SessionUser = {
               twitchUsername: twitch.name,
               avatarUrl: twitch.avatar || '',
               xp: null,
               level: null,
               isAdmin,
               role: isAdmin ? 'owner' : 'member',
-            });
+            };
+            cacheUser(nextUser);
+            setUser(nextUser);
             void fetch('/api/spmt/xp', { credentials: 'same-origin', cache: 'no-store' })
               .then((xpResponse) => xpResponse.ok ? xpResponse.json() : null)
               .then((xpData) => {
                 const xp = Number(xpData?.xp);
                 const level = Number(xpData?.level);
                 if (cancelled || !Number.isFinite(xp) || !Number.isFinite(level)) return;
-                setUser((current) => current ? {
-                  ...current,
-                  xp: Math.max(0, Math.trunc(xp)),
-                  level: Math.max(1, Math.trunc(level)),
-                } : current);
+                setUser((current) => {
+                  if (!current) return current;
+                  const updated = {
+                    ...current,
+                    xp: Math.max(0, Math.trunc(xp)),
+                    level: Math.max(1, Math.trunc(level)),
+                  };
+                  cacheUser(updated);
+                  return updated;
+                });
               })
               .catch(() => {});
           }
           return;
         }
+
+        // Only an authoritative auth rejection clears the restored shell. A 5xx
+        // or other transient response leaves the last-known display state intact.
+        if (response.status !== 401 && response.status !== 403) return;
       } catch {
-        // A cached profile may keep the shell readable during a short outage,
-        // but it is never treated as authentication or administrator authority.
-        const username = localStorage.getItem('twitchUsername');
-        const avatar = localStorage.getItem('twitchAvatar');
-        if (username && !cancelled) {
-          setUser({ twitchUsername: username, avatarUrl: avatar || '', xp: null, level: null, isAdmin: false, role: 'member' });
-          return;
-        }
+        return;
       }
 
       if (!cancelled) {
         localStorage.removeItem('session');
         localStorage.removeItem('twitchUsername');
         localStorage.removeItem('twitchAvatar');
+        clearCachedUser();
         setUser(null);
-        setIsUserLoading(false);
       }
     }
 
     void loadSession().finally(() => {
-      if (!cancelled) {
-        setIsUserLoading(false);
-      }
+      if (!cancelled) setIsUserLoading(false);
     });
     window.addEventListener('storage', loadSession);
     return () => {
@@ -102,6 +151,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('session');
     localStorage.removeItem('twitchUsername');
     localStorage.removeItem('twitchAvatar');
+    clearCachedUser();
     setUser(null);
     window.dispatchEvent(new Event('storage'));
   };
