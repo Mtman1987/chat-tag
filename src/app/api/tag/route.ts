@@ -7,6 +7,7 @@ import { MAX_PASSES, getPassSpendDenial } from '@/lib/pass-policy';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
 import { crownMonthKey, crownUpstreamEventId, crownXpReward } from '@/lib/chat-tag-crown-rewards';
 import { buildXpIdempotencyKey, mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
+import { inferPlayerHistory, markPlayerPlayed } from '@/lib/player-history';
 
 export const dynamic = 'force-dynamic';
 
@@ -268,6 +269,16 @@ function isPlayerImmune(state: any, player: TagPlayer | undefined, taggerId: str
 export async function GET() {
   try {
     const state = await readAppState();
+    const historyChanged = Object.values(state.tagPlayers || {})
+      .map((player: any) => inferPlayerHistory(state, player))
+      .some(Boolean);
+    if (historyChanged) {
+      await updateAppState((current) => {
+        for (const player of Object.values(current.tagPlayers || {}) as any[]) {
+          inferPlayerHistory(current, player);
+        }
+      });
+    }
     const blacklisted = new Set(
       (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => normalizeUsername(channel))
     );
@@ -381,6 +392,7 @@ export async function POST(req: NextRequest) {
         if (!player) return;
         
         player.lastChatAt = Date.now();
+        markPlayerPlayed(player, player.lastChatAt);
         if (body.channel) player.lastSeenChannel = body.channel;
         
         if (player.sleepingImmunity || player.offlineImmunity) {
@@ -464,6 +476,9 @@ export async function POST(req: NextRequest) {
         const historyId = makeId('hist');
         const tagId = makeId('tag');
         const timestamp = Date.now();
+
+        markPlayerPlayed(tagger, timestamp);
+        markPlayerPlayed(target, timestamp);
 
         state.tagHistory.push({
           id: historyId,
@@ -594,6 +609,7 @@ export async function POST(req: NextRequest) {
         if (existingByUsername) return { error: 'Already in game' };
 
         const isAnyoneIt = Object.values(state.tagPlayers).some((p: any) => p.isIt);
+        const joinedAt = new Date().toISOString();
         state.tagPlayers[resolvedUserId] = {
           id: resolvedUserId,
           twitchUsername: normalizedUsername,
@@ -604,6 +620,11 @@ export async function POST(req: NextRequest) {
           isIt: !isAnyoneIt,
           isActive: false,
           isPlayer: true,
+          joinedAt,
+          firstPlayedAt: joinedAt,
+          lastPlayedAt: joinedAt,
+          playedDays: [joinedAt.slice(0, 10)],
+          daysPlayed: 1,
         };
 
         if (normalizedUsername) {
@@ -758,6 +779,9 @@ export async function POST(req: NextRequest) {
         const historyId = makeId('hist');
         const tagId = makeId('tag');
         const timestamp = Date.now();
+
+        markPlayerPlayed(tagger, timestamp);
+        markPlayerPlayed(target, timestamp);
 
         state.tagHistory.push({
           id: historyId,

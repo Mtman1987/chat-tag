@@ -17,9 +17,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'channel is required' }, { status: 400 });
   }
 
-  await updateAppState((state) => {
+  const added = await updateAppState((state) => {
     const list = state.botSettings.blacklistedChannels.channels || [];
-    if (!list.includes(normalized)) list.push(normalized);
+    const wasAdded = !list.includes(normalized);
+    if (wasAdded) list.push(normalized);
     state.botSettings.blacklistedChannels.channels = list;
     delete state.botChannels[normalized];
 
@@ -49,9 +50,11 @@ export async function POST(req: NextRequest) {
       state.tagGame.state.currentIt = null;
       state.tagGame.state.lastTagTime = Date.now();
     }
+
+    return wasAdded;
   });
 
-  return NextResponse.json({ success: true, channel: normalized });
+  return NextResponse.json({ success: true, channel: normalized, added, alreadyBlacklisted: !added });
 }
 
 export async function DELETE(req: NextRequest) {
