@@ -1,4 +1,5 @@
 import type {Metadata} from 'next';
+import Script from 'next/script';
 import { Orbitron, Roboto } from 'next/font/google';
 import './globals.css';
 import './workspace-parity.css';
@@ -44,6 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${orbitron.variable} ${roboto.variable} dark`}>
       <body className="font-body antialiased min-h-screen relative">
+        <Script src="https://spmt.live/shared/ecosystem-header.js" data-app="chat-tag" strategy="afterInteractive" />
         <SessionProvider>
           <LiveStreamersProvider>
             <RootShell>{children}</RootShell>
