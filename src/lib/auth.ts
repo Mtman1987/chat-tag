@@ -5,10 +5,15 @@ import { getBotSecret } from '@/lib/runtime-secrets';
 export function getSessionUserFromRequest(req: NextRequest): SessionUser | null {
   const spmtUserId = String(req.headers.get('x-spmt-user-id') || '').trim();
   if (spmtUserId) {
+    const displayName = decodeURIComponent(
+      req.headers.get('x-spmt-display-name')
+      || req.headers.get('x-spmt-username')
+      || 'spmt-user',
+    );
     return {
       id: spmtUserId,
-      twitchUsername: String(req.headers.get('x-spmt-username') || 'spmt-user'),
-      avatarUrl: '',
+      twitchUsername: displayName,
+      avatarUrl: decodeURIComponent(req.headers.get('x-spmt-avatar-url') || ''),
     };
   }
 
