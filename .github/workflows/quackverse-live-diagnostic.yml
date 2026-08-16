@@ -1,4 +1,4 @@
-name: Quackverse Live Diagnostic
+name: Quackverse Live Recovery
 
 on:
   push:
@@ -9,12 +9,20 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  recover:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Inspect live Quackverse collection keys
+      - name: Back up and merge split Quackverse identity
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          flyctl ssh console -a chat-tag-new -C "node -e 'const fs=require(\"fs\");const s=JSON.parse(fs.readFileSync(\"/data/app-state.json\",\"utf8\"));const cs=(s.quackverse&&s.quackverse.collections)||{};const users=s.users||{};for(const [k,v] of Object.entries(cs)){const raw=k.replace(/^user_/,\"\");const u=users[raw]||users[k]||{};console.log(JSON.stringify({key:k,cards:Array.isArray(v.cards)?v.cards.length:0,username:u.twitchUsername||u.username||\"\",userRecordId:u.id||\"\"}));} const a=cs[\"user_94371378\"]||{};const b=cs[\"user_d696355b-e13a-408b-b21a-bcfa8dec15e0\"]||{};const counts=new Map();for(const id of (a.cards||[]))counts.set(id,(counts.get(id)||0)+1);let overlap=0;const extras=[];for(const id of (b.cards||[])){const n=counts.get(id)||0;if(n>0){overlap++;counts.set(id,n-1);}else extras.push(id);}console.log(JSON.stringify({comparison:{legacyCount:(a.cards||[]).length,spmtCount:(b.cards||[]).length,multisetOverlap:overlap,genuinelyNewCount:extras.length,genuinelyNewCardIds:extras,legacyLastPack:a.lastPack||[],spmtLastPack:b.lastPack||[],legacyOpenedToday:a.openedToday||0,spmtOpenedToday:b.openedToday||0,legacyOpenedAtDay:a.openedAtDay||\"\",spmtOpenedAtDay:b.openedAtDay||\"\"}}));'"
+          set -euo pipefail
+          payload="$(base64 -w 0 scripts/quackverse-live-identity-migrate.cjs)"
+          flyctl ssh console -a chat-tag-new -C "echo '$payload' | base64 -d > /tmp/quackverse-live-identity-migrate.cjs && node /tmp/quackverse-live-identity-migrate.cjs"
+      - name: Verify recovered collection
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a chat-tag-new -C "node -e 'const fs=require(\"fs\");const s=JSON.parse(fs.readFileSync(\"/data/app-state.json\",\"utf8\"));const c=s.quackverse?.collections||{};console.log(JSON.stringify({mtmanCards:c[\"user_94371378\"]?.cards?.length||0,splitStillPresent:Boolean(c[\"user_d696355b-e13a-408b-b21a-bcfa8dec15e0\"]),openedToday:c[\"user_94371378\"]?.openedToday||0,openedAtDay:c[\"user_94371378\"]?.openedAtDay||\"\",lastPack:c[\"user_94371378\"]?.lastPack||[],backups:fs.readdirSync(\"/data/backups\").filter(n=>n.startsWith(\"app-state-quackverse-pre-identity-\")).slice(-3)}));'"
