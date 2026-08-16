@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react';
 export default function OverlayLandingPage() {
   const [userId, setUserId] = useState('');
   const [previewKey, setPreviewKey] = useState(0);
+  const [cycleMinutes, setCycleMinutes] = useState(7);
+  const [hudOnSeconds, setHudOnSeconds] = useState(45);
+  const [hudOffSeconds, setHudOffSeconds] = useState(120);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -20,7 +23,9 @@ export default function OverlayLandingPage() {
   }, []);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const overlayUrl = userId ? `${origin}/overlay/${userId}` : '';
+  const overlayUrl = userId
+    ? `${origin}/overlay/${userId}?cycle=${Math.max(5, cycleMinutes) * 60}&hudOn=${Math.max(5, hudOnSeconds)}&hudOff=${Math.max(0, hudOffSeconds)}`
+    : '';
   const previewUrl = `${origin}/overlay/preview`;
 
   const triggerPreview = (kind: string) => {
@@ -61,7 +66,46 @@ export default function OverlayLandingPage() {
       </section>
 
       {overlayUrl ? (
-        <section className="cosmic-card space-y-3">
+        <section className="cosmic-card space-y-4">
+          <div>
+            <div className="text-sm text-slate-400">Overlay timing</div>
+            <p className="mt-1 text-xs text-slate-500">The status HUD fades away between appearances. Set Hidden to 0 seconds to keep it permanently visible.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="space-y-1 text-sm text-slate-300">
+              <span>Periodic cards (minutes)</span>
+              <input
+                type="number"
+                min={5}
+                max={60}
+                value={cycleMinutes}
+                onChange={(event) => setCycleMinutes(Math.max(5, Number(event.target.value) || 7))}
+                className="w-full rounded-xl border border-white/10 bg-black/45 px-3 py-2 text-white"
+              />
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
+              <span>HUD visible (seconds)</span>
+              <input
+                type="number"
+                min={5}
+                max={600}
+                value={hudOnSeconds}
+                onChange={(event) => setHudOnSeconds(Math.max(5, Number(event.target.value) || 45))}
+                className="w-full rounded-xl border border-white/10 bg-black/45 px-3 py-2 text-white"
+              />
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
+              <span>HUD hidden (seconds)</span>
+              <input
+                type="number"
+                min={0}
+                max={3600}
+                value={hudOffSeconds}
+                onChange={(event) => setHudOffSeconds(Math.max(0, Number(event.target.value) || 0))}
+                className="w-full rounded-xl border border-white/10 bg-black/45 px-3 py-2 text-white"
+              />
+            </label>
+          </div>
           <div className="text-sm text-slate-400">Your overlay URL</div>
           <div className="rounded-xl bg-black/55 px-4 py-3 font-mono text-sm text-cyan-100 break-all">
             {overlayUrl}
@@ -79,7 +123,7 @@ export default function OverlayLandingPage() {
         <section className="cosmic-card space-y-3">
           <p>Sign in with Twitch to get your personal overlay URL, or use this format:</p>
           <div className="rounded-xl bg-black/55 px-4 py-3 font-mono text-sm text-cyan-100">
-            {origin}/overlay/user_YOUR_TWITCH_ID
+            {origin}/overlay/user_YOUR_TWITCH_ID?cycle=420&amp;hudOn=45&amp;hudOff=120
           </div>
           <p className="text-sm text-slate-400">Find your user ID by typing "spmt score" in any chat with the bot.</p>
         </section>
@@ -101,9 +145,9 @@ export default function OverlayLandingPage() {
         <div className="cosmic-card">
           <h2 className="mb-4 font-headline text-2xl text-white">What it shows</h2>
           <ul className="list-disc space-y-3 pl-5 text-sm leading-7 text-slate-300">
-            <li><b>Always visible:</b> who&apos;s IT or FFA status, your stats, passes, and wins.</li>
+            <li><b>Timed HUD:</b> who&apos;s IT or FFA status, your stats, passes, and wins fade in and out using the timing above.</li>
             <li><b>Full-screen alerts:</b> tag events, double points, and free-for-all announcements.</li>
-            <li><b>Periodic:</b> recent tag history rotates through on a timer.</li>
+            <li><b>Periodic:</b> leaderboard, recent tag history, and live cards rotate using the interval above.</li>
           </ul>
         </div>
       </section>
