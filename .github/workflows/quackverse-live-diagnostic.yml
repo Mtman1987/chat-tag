@@ -1,0 +1,20 @@
+name: Quackverse Live Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnose-quackverse-collection-20260816
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Inspect live Quackverse collection keys
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a chat-tag-new -C "node -e 'const fs=require(\"fs\");const s=JSON.parse(fs.readFileSync(\"/data/app-state.json\",\"utf8\"));const cs=(s.quackverse&&s.quackverse.collections)||{};const users=s.users||{};for(const [k,v] of Object.entries(cs)){const raw=k.replace(/^user_/,\"\");const u=users[raw]||users[k]||{};console.log(JSON.stringify({key:k,cards:Array.isArray(v.cards)?v.cards.length:0,username:u.twitchUsername||u.username||\"\",userRecordId:u.id||\"\"}));}'"
