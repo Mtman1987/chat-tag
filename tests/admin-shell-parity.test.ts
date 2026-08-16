@@ -78,6 +78,17 @@ test('game and Quackverse content administration remain under the guarded settin
   assert.match(middleware, /SPMT admin required/);
 });
 
+test('Quackverse art generation and upload controls stay above card inspectors and remain clickable', () => {
+  const manager = source('src/components/quackverse-art-manager.tsx');
+  assert.match(manager, /data-quackverse-art-manager/);
+  assert.match(manager, /relative z-\[60\] isolate/);
+  assert.match(manager, /data-quackverse-art-actions/);
+  assert.match(manager, /relative z-20/);
+  assert.match(manager, /Generate Static Art/);
+  assert.match(manager, /Generate Hover Still/);
+  assert.match(manager, /pointer-events-auto/);
+});
+
 test('ChatTag Worktray no longer reconstructs overlay widgets', () => {
   const text = source('src/components/spmt-workspace-host.tsx');
   assert.match(text, /aria-label="SPMT workspace tray"/);
