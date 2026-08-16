@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getBotSecret } from '@/lib/runtime-secrets';
+import { resolveChatTagAppUserId } from '@/lib/quackverse-identity';
 
 const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').replace(/\/$/, '');
 const SPMT_COOKIE = 'chat_tag_spmt_session';
@@ -188,7 +189,10 @@ export async function middleware(request: NextRequest) {
       accessToken = refreshed.tokens.access_token;
     }
   }
-  const legacySession = identity ? null : await verifyLegacySession(request);
+  // A valid signed ChatTag/Twitch session is app identity evidence, not SPMT
+  // authority. Read it even when SPMT is present so legacy app-owned data such
+  // as Quackverse collections stays attached to the immutable Twitch user ID.
+  const legacySession = await verifyLegacySession(request);
   if (!identity && !legacySession) {
     if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Sign in with SPMT or Twitch to continue' }, { status: 401 });
     return NextResponse.redirect(new URL('/', request.url));
@@ -202,7 +206,9 @@ export async function middleware(request: NextRequest) {
 
   const headers = new Headers(request.headers);
   if (identity) {
-    headers.set('x-spmt-user-id', String(identity.id));
+    const appUserId = resolveChatTagAppUserId(identity, legacySession) || String(identity.id);
+    headers.set('x-spmt-user-id', appUserId);
+    headers.set('x-spmt-canonical-user-id', String(identity.id));
     headers.set('x-spmt-username', encodeURIComponent(String(identity.username || '')));
     headers.set('x-spmt-display-name', encodeURIComponent(String(identity.twitchUsername || identity.twitch_username || identity.displayName || identity.display_name || identity.username || 'SPMT user')));
     headers.set('x-spmt-avatar-url', encodeURIComponent(String(identity.avatarUrl || identity.avatar_url || '')));
