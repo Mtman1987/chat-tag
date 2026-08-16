@@ -20,9 +20,9 @@ jobs:
         run: |
           set -euo pipefail
           payload="$(base64 -w 0 scripts/quackverse-live-identity-migrate.cjs)"
-          flyctl ssh console -a chat-tag-new -C "echo '$payload' | base64 -d > /tmp/quackverse-live-identity-migrate.cjs && node /tmp/quackverse-live-identity-migrate.cjs"
+          flyctl ssh console -a chat-tag-new -C "node -e \"eval(Buffer.from('$payload','base64').toString('utf8'))\""
       - name: Verify recovered collection
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          flyctl ssh console -a chat-tag-new -C "node -e 'const fs=require(\"fs\");const s=JSON.parse(fs.readFileSync(\"/data/app-state.json\",\"utf8\"));const c=s.quackverse?.collections||{};console.log(JSON.stringify({mtmanCards:c[\"user_94371378\"]?.cards?.length||0,splitStillPresent:Boolean(c[\"user_d696355b-e13a-408b-b21a-bcfa8dec15e0\"]),openedToday:c[\"user_94371378\"]?.openedToday||0,openedAtDay:c[\"user_94371378\"]?.openedAtDay||\"\",lastPack:c[\"user_94371378\"]?.lastPack||[],backups:fs.readdirSync(\"/data/backups\").filter(n=>n.startsWith(\"app-state-quackverse-pre-identity-\")).slice(-3)}));'"
+          flyctl ssh console -a chat-tag-new -C "node -e 'const fs=require(\"fs\");const s=JSON.parse(fs.readFileSync(\"/data/app-state.json\",\"utf8\"));const c=s.quackverse?.collections||{};const d=\"/data/backups\";console.log(JSON.stringify({mtmanCards:c[\"user_94371378\"]?.cards?.length||0,splitStillPresent:Boolean(c[\"user_d696355b-e13a-408b-b21a-bcfa8dec15e0\"]),openedToday:c[\"user_94371378\"]?.openedToday||0,openedAtDay:c[\"user_94371378\"]?.openedAtDay||\"\",lastPack:c[\"user_94371378\"]?.lastPack||[],backups:fs.existsSync(d)?fs.readdirSync(d).filter(n=>n.startsWith(\"app-state-quackverse-pre-identity-\")).slice(-3):[]}));'"
