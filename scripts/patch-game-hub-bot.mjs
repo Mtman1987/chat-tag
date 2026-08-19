@@ -19,9 +19,16 @@ if (!source.includes(chatMarker)) {
   source = source.replace(chatTarget, chatReplacement);
 }
 
+const parserTarget = `    const args = normalizedMsg.toLowerCase().split(/\\s+/).slice(1);\n    const cmd = args[0];`;
+const parserReplacement = `    let args = normalizedMsg.toLowerCase().split(/\\s+/).slice(1);\n    let cmd = args[0];`;
+if (source.includes(parserTarget)) source = source.replace(parserTarget, parserReplacement);
+if (!source.includes(parserReplacement)) {
+  throw new Error('Games Hub command parser could not be made rewriteable.');
+}
+
 const commandMarker = "apiCall('/api/game-hub/command'";
 const commandTarget = `    const mutedData = await apiCall('/api/bot/muted');\n    const isMuted = mutedData?.muted?.includes(channelName);\n    \n    if (isMirroredSharedMessage) {`;
-const commandReplacement = `    const mutedData = await apiCall('/api/bot/muted');\n    const isMuted = mutedData?.muted?.includes(channelName);\n\n    // Games Hub owns only its canonical SPMT namespace. Unknown commands fall\n    // through to the existing Chat Tag parser unchanged.\n    const gamesHubCommand = await apiCall('/api/game-hub/command', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        channel: channelName,\n        userId: tags['user-id'] || '',\n        username: senderLogin,\n        displayName: user,\n        message: rawMessage,\n        isBroadcaster: tags?.badges?.broadcaster === '1' || senderLogin === channelName,\n        isModerator: Boolean(tags?.mod),\n        isAdmin: isAdminUser,\n      }),\n    });\n    if (gamesHubCommand?.handled) {\n      if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);\n      return;\n    }\n    \n    if (isMirroredSharedMessage) {`;
+const commandReplacement = `    const mutedData = await apiCall('/api/bot/muted');\n    const isMuted = mutedData?.muted?.includes(channelName);\n\n    // Games Hub owns only its canonical SPMT namespace. Unknown commands fall\n    // through to the existing Chat Tag parser unchanged. Chat Tag's namespaced\n    // commands are rewritten into its proven legacy action parser after the Hub\n    // has recorded membership/scope, avoiding duplicate Tag business logic.\n    const gamesHubCommand = await apiCall('/api/game-hub/command', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        channel: channelName,\n        userId: tags['user-id'] || '',\n        username: senderLogin,\n        displayName: user,\n        message: rawMessage,\n        isBroadcaster: tags?.badges?.broadcaster === '1' || senderLogin === channelName,\n        isModerator: Boolean(tags?.mod),\n        isAdmin: isAdminUser,\n      }),\n    });\n    if (gamesHubCommand?.rewriteCommand) {\n      const rewritten = String(gamesHubCommand.rewriteCommand || '')\n        .trim()\n        .toLowerCase()\n        .replace(/^!?@?spmt\\s+/, '');\n      args = rewritten.split(/\\s+/).filter(Boolean);\n      cmd = args[0];\n    }\n    if (gamesHubCommand?.handled) {\n      if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);\n      return;\n    }\n    \n    if (isMirroredSharedMessage) {`;
 
 if (!source.includes(commandMarker)) {
   if (!source.includes(commandTarget)) {
@@ -35,6 +42,8 @@ if (
   !source.includes("userId: tags['user-id'] || ''") ||
   !source.includes(commandMarker) ||
   !source.includes('gamesHubCommand?.handled') ||
+  !source.includes('gamesHubCommand?.rewriteCommand') ||
+  !source.includes('let args = normalizedMsg') ||
   !source.includes('channel: channelName')
 ) {
   throw new Error('Games Hub bot patch contract is incomplete.');
