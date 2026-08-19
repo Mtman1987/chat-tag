@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState } from '@/lib/volume-store';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-catalog';
+import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { normalizeGameOverlayProfile } from '@/lib/game-hub-overlays';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,8 @@ export async function GET(
       shortName: game!.shortName,
       runtime: game!.runtime,
       status: game!.status,
-      commands: game!.commands,
+      commands: canonicalPlayerCommands(game!),
+      streamerCommands: canonicalStreamerCommands(game!),
       chatSignals: game!.chatSignals || [],
       nativeOverlayPath: game!.nativeOverlayPath || null,
     }));
