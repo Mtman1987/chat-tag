@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { canonicalJoinCommand, canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
-import { getGameHubGame } from '@/lib/game-hub-catalog';
+import { getGameHubGame } from '@/lib/game-hub-registry';
 import { getGameHubGameStats, normalizeGameHubChannel, resolveChannelGameIds } from '@/lib/game-hub-state';
 import { readAppState } from '@/lib/volume-store';
 
