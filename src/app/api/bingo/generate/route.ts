@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
 import { commonBingoPhrases } from '@/lib/bingo-data';
+import { BINGO_CENTER_INDEX, BINGO_CENTER_PLACEHOLDER, resetPersonalBingoProgress } from '@/lib/bingo-game';
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -45,35 +47,40 @@ async function generateWithGemini(): Promise<string[] | null> {
     const phrases: string[] = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(phrases) || phrases.length < 24) return null;
 
-    return phrases.slice(0, 24).map((p: string) => String(p).trim()).filter(Boolean);
-  } catch (e: any) {
-    console.error('[Bingo AI] Generation failed:', e.message);
+    return phrases.slice(0, 24).map((phrase: string) => String(phrase).trim()).filter(Boolean);
+  } catch (error: any) {
+    console.error('[Bingo AI] Generation failed:', error.message);
     return null;
   }
 }
 
-export async function POST() {
-  try {
-    let phrases = await generateWithGemini();
+export async function POST(req: NextRequest) {
+  const auth = requireAdminRequest(req);
+  if (!auth.ok) return auth.response;
 
-    if (!phrases || phrases.length < 24) {
+  try {
+    const generated = await generateWithGemini();
+    const aiGenerated = Boolean(generated && generated.length >= 24);
+    const phrases = aiGenerated
+      ? generated!.slice(0, 24)
+      : shuffleArray(commonBingoPhrases).slice(0, 24);
+
+    if (!aiGenerated) {
       console.log('[Bingo] AI generation failed or insufficient, using shuffled defaults');
-      phrases = shuffleArray(commonBingoPhrases).slice(0, 24);
     }
 
-    // Insert FREE SPACE at center (index 12)
-    phrases.splice(12, 0, 'FREE SPACE');
+    phrases.splice(BINGO_CENTER_INDEX, 0, BINGO_CENTER_PLACEHOLDER);
 
     await updateAppState((state) => {
       state.bingoCards.current_user = {
         phrases,
-        covered: {},
         updatedAt: new Date().toISOString(),
-        generatedBy: 'ai',
+        generatedBy: aiGenerated ? 'ai' : 'defaults',
       };
+      resetPersonalBingoProgress(state);
     });
 
-    return NextResponse.json({ success: true, phrases, aiGenerated: phrases.length === 25 });
+    return NextResponse.json({ success: true, phrases, aiGenerated });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

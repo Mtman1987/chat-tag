@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
+import { recordGameHubChatActivity } from '@/lib/game-hub-state';
 import { makeId, updateAppState, type JsonObject } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
@@ -34,13 +35,14 @@ export async function POST(req: NextRequest) {
     at: new Date().toISOString(),
     channel,
     username,
+    userId: cleanText(body.userId, 80),
     displayName: cleanText(body.displayName || username, 80),
     message,
     color: cleanText(body.color, 32),
     badges: body.badges && typeof body.badges === 'object' ? body.badges : {},
   };
 
-  await updateAppState((state) => {
+  const activity = await updateAppState((state) => {
     state.gameSettings.default ||= {};
     const store = (state.gameSettings.default[STORE_KEY] ||= {}) as Record<string, JsonObject[]>;
     const cutoff = Date.now() - MAX_EVENT_AGE_MS;
@@ -49,7 +51,20 @@ export async function POST(req: NextRequest) {
     store[channel] = current
       .filter((item) => Date.parse(String(item?.at || '')) >= cutoff)
       .slice(-MAX_EVENTS_PER_CHANNEL);
+
+    return recordGameHubChatActivity(state, {
+      channel,
+      userId: body.userId,
+      username,
+      displayName: event.displayName,
+      message,
+    });
   });
 
-  return NextResponse.json({ accepted: true, id: event.id });
+  return NextResponse.json({
+    accepted: true,
+    id: event.id,
+    scoredGameIds: activity.scoredGameIds,
+    pointsAwarded: activity.pointsAwarded,
+  });
 }

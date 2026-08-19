@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GAME_HUB_CATALOG } from '@/lib/game-hub-catalog';
+import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 
 type OverlayProfile = {
   id: string;
@@ -56,13 +56,13 @@ export default function GameOverlayStudioPage() {
     try {
       const response = await fetch('/api/game-hub/overlays', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: `Games Overlay ${profiles.length + 1}`, gameIds: ['chat-tag'], layout: 'auto-grid' }),
+        body: JSON.stringify({ name: `Games Overlay ${profiles.length + 1}`, gameIds: [], layout: 'auto-grid' }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Unable to create overlay.');
       setProfiles((current) => [body.profile, ...current]);
       setSelectedId(body.profile.id);
-      setMessage('Overlay created.');
+      setMessage('Overlay created. Choose any games for this scene.');
     } catch (error: any) { setMessage(error?.message || 'Unable to create overlay.'); }
     finally { setSaving(false); }
   };
@@ -138,7 +138,7 @@ export default function GameOverlayStudioPage() {
         <div className="cosmic-card space-y-4">
           <div className="cosmic-status">Games Hub · Overlay Studio</div>
           <h1 className="cosmic-title">Build overlays like loadouts.</h1>
-          <p className="cosmic-subtitle">Create one overlay with Tag + Emoji Rain, another with four party games, or clone individual game overlays. Each profile keeps a stable OBS URL while you toggle its games.</p>
+          <p className="cosmic-subtitle">Create any mix of peer games, clone it for another scene, or make single-game overlays. Every selected game receives the same layout slot; no game is preselected or privileged.</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void createProfile()} disabled={saving} className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50">New overlay</button>
             {selected && <button type="button" onClick={() => void cloneProfile()} disabled={saving} className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">Clone selected</button>}
@@ -161,14 +161,14 @@ export default function GameOverlayStudioPage() {
             <div className="cosmic-card space-y-4">
               <div className="grid gap-3 md:grid-cols-[1fr_180px]">
                 <label className="grid gap-1 text-xs text-slate-400">Overlay name<input value={selected.name} onChange={(event) => patchLocal({ name: event.target.value })} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white" /></label>
-                <label className="grid gap-1 text-xs text-slate-400">Layout<select value={selected.layout} onChange={(event) => patchLocal({ layout: event.target.value as OverlayProfile['layout'] })} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"><option value="auto-grid">Auto grid</option><option value="stack">Stack</option><option value="focus">Focus first game</option></select></label>
+                <label className="grid gap-1 text-xs text-slate-400">Layout<select value={selected.layout} onChange={(event) => patchLocal({ layout: event.target.value as OverlayProfile['layout'] })} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"><option value="auto-grid">Auto grid</option><option value="stack">Stack</option><option value="focus">Focus first selected</option></select></label>
               </div>
               <label className="flex items-center justify-between gap-4 rounded-xl border border-white/8 bg-white/[0.025] p-3 text-sm text-slate-300"><span><strong className="block text-white">Transparent background</strong><small className="text-slate-500">Best for OBS and Overlay Bay composition.</small></span><input type="checkbox" checked={selected.transparent} onChange={(event) => patchLocal({ transparent: event.target.checked })} className="h-5 w-5" /></label>
               <div><div className="text-xs font-bold uppercase tracking-[.18em] text-slate-500">Stable browser-source URL</div><div className="mt-2 rounded-xl bg-black/50 px-3 py-3 font-mono text-xs text-cyan-100 break-all">{overlayUrl}</div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void navigator.clipboard.writeText(overlayUrl)} className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100">Copy URL</button><button type="button" onClick={() => window.open(overlayUrl, '_blank', 'noopener,noreferrer')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white">Open overlay</button></div></div>
             </div>
 
             <div className="cosmic-card">
-              <div className="flex items-end justify-between gap-3"><div><h2 className="font-headline text-xl text-white">Games in this overlay</h2><p className="mt-1 text-xs text-slate-500">Toggle up to {MAX_GAMES}. Clone this profile when you want a different scene mix.</p></div><strong className="text-sm text-cyan-100">{selected.gameIds.length}/{MAX_GAMES}</strong></div>
+              <div className="flex items-end justify-between gap-3"><div><h2 className="font-headline text-xl text-white">Games in this overlay</h2><p className="mt-1 text-xs text-slate-500">Toggle up to {MAX_GAMES}. All {GAME_HUB_CATALOG.length} games use the same slot contract.</p></div><strong className="text-sm text-cyan-100">{selected.gameIds.length}/{MAX_GAMES}</strong></div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {GAME_HUB_CATALOG.map((game) => { const enabled = selected.gameIds.includes(game.id); return <button key={game.id} type="button" onClick={() => toggleGame(game.id)} className={`rounded-xl border p-3 text-left transition ${enabled ? 'border-cyan-300/35 bg-cyan-300/10' : 'border-white/8 bg-white/[0.025]'}`}><div className="flex items-center justify-between gap-2"><strong className="text-sm text-white">{game.name}</strong><span className={`h-3 w-3 rounded-full ${enabled ? 'bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.7)]' : 'bg-white/10'}`} /></div><p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{game.description}</p></button>; })}
               </div>
@@ -177,7 +177,7 @@ export default function GameOverlayStudioPage() {
 
             <div className="cosmic-card">
               <h2 className="font-headline text-lg text-white">Live preview</h2>
-              <p className="mt-1 text-xs text-slate-500">This is the exact composite URL you can add to OBS or register as a browser source in SPMT Overlay Bay.</p>
+              <p className="mt-1 text-xs text-slate-500">This is the exact composite URL you can add to OBS or register as a Web source in SPMT Overlay Bay.</p>
               <div className="mt-3 aspect-video overflow-hidden rounded-xl border border-white/10 bg-slate-950"><iframe key={`${selected.id}-${selected.updatedAt}`} src={overlayUrl} title={`${selected.name} preview`} className="h-full w-full border-0 bg-transparent" /></div>
             </div>
           </section>

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-catalog';
-import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
+import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-registry';
+import { GameHubSurface } from '@/components/game-hub-surface';
+import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 
 type PublicOverlayProfile = {
   id: string;
@@ -20,15 +21,11 @@ type ProfileResponse = {
   profile: PublicOverlayProfile;
 };
 
-function tagOverlayUserId(ownerUserId: string) {
-  const value = String(ownerUserId || '').trim();
-  return value.startsWith('user_') ? value : `user_${value}`;
-}
-
 export default function GameHubOverlayPage() {
   const params = useParams<{ profileId: string }>();
   const profileId = String(params?.profileId || '');
   const [profile, setProfile] = useState<PublicOverlayProfile | null>(null);
+  const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [error, setError] = useState('');
   const latestId = useRef('');
@@ -52,6 +49,22 @@ export default function GameHubOverlayPage() {
     const timer = window.setInterval(() => void loadProfile(), 15_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [profileId]);
+
+  useEffect(() => {
+    if (!profile?.ownerLogin) return;
+    let cancelled = false;
+    async function loadScope() {
+      try {
+        const response = await fetch(`/api/game-hub/channel?channel=${encodeURIComponent(profile!.ownerLogin)}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json();
+        if (!cancelled) setActiveGameIds(Array.isArray(body.gameIds) ? body.gameIds : []);
+      } catch {}
+    }
+    void loadScope();
+    const timer = window.setInterval(() => void loadScope(), 5_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [profile?.ownerLogin]);
 
   useEffect(() => {
     if (!profile?.ownerLogin) return;
@@ -86,10 +99,12 @@ export default function GameHubOverlayPage() {
 
   const games = useMemo(() => {
     if (!profile) return [];
+    const active = new Set(activeGameIds);
     return profile.gameIds
+      .filter((gameId) => active.has(gameId))
       .map((gameId) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
       .filter((game): game is GameHubGame => Boolean(game));
-  }, [profile]);
+  }, [activeGameIds, profile]);
 
   if (error) return <main className="grid min-h-screen place-items-center bg-transparent p-8 text-center text-sm text-rose-200">{error}</main>;
   if (!profile) return <main className="min-h-screen bg-transparent" />;
@@ -104,18 +119,16 @@ export default function GameHubOverlayPage() {
   return (
     <main className={`min-h-screen w-screen overflow-hidden ${profile.transparent ? 'bg-transparent' : 'bg-slate-950'}`}>
       <div className={`grid h-screen w-screen gap-3 p-3 ${gridClass}`}>
-        {visibleGames.map((game) => {
-          if (game.id === 'chat-tag') {
-            const source = `/overlay/${encodeURIComponent(tagOverlayUserId(profile.ownerUserId))}?cycle=420&hudOn=45&hudOff=120`;
-            return <div key={game.id} className="min-h-0 overflow-hidden rounded-2xl"><iframe src={source} title="Chat Tag game overlay" className="h-full w-full border-0 bg-transparent" /></div>;
-          }
-          if (game.id === 'quackverse') {
-            const query = profile.ownerLogin ? `?tenant=${encodeURIComponent(profile.ownerLogin)}` : '';
-            return <div key={game.id} className="min-h-0 overflow-hidden rounded-2xl"><iframe src={`/quackverse-overlay${query}`} title="Quackverse game overlay" className="h-full w-full border-0 bg-transparent" /></div>;
-          }
-          return <GameHubPrototypeSurface key={game.id} game={game} events={events} channel={profile.ownerLogin || 'chat'} />;
-        })}
-        {!visibleGames.length && <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-slate-950/70 text-sm text-white/50">No games enabled in this overlay.</div>}
+        {visibleGames.map((game) => (
+          <GameHubSurface
+            key={game.id}
+            game={game}
+            events={events}
+            channel={profile.ownerLogin || 'chat'}
+            ownerUserId={profile.ownerUserId}
+          />
+        ))}
+        {!visibleGames.length && <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-slate-950/70 text-sm text-white/50">No games in this profile are currently ACTIVE.</div>}
       </div>
     </main>
   );
