@@ -55,10 +55,14 @@ export async function POST(req: NextRequest) {
         const source = normalizeGameOverlayProfile(store[cloneId]);
         if (!source || source.ownerUserId !== auth.user.id) throw new Error('Overlay to clone was not found.');
         const cloned = cloneGameOverlayProfile(auth.user.id, source, body.name);
+        cloned.ownerLogin = String(auth.user.twitchUsername || source.ownerLogin || '').trim().toLowerCase().replace(/^#/, '');
         store[cloned.id] = cloned;
         return cloned;
       }
-      const created = createGameOverlayProfile(auth.user.id, body);
+      const created = createGameOverlayProfile(auth.user.id, {
+        ...body,
+        ownerLogin: auth.user.twitchUsername,
+      });
       store[created.id] = created;
       return created;
     });
@@ -80,7 +84,10 @@ export async function PATCH(req: NextRequest) {
       const store = profileStore(state);
       const existing = normalizeGameOverlayProfile(store[id]);
       if (!existing || existing.ownerUserId !== auth.user.id) throw new Error('Overlay was not found.');
-      const updated = patchGameOverlayProfile(existing, body);
+      const updated = patchGameOverlayProfile(existing, {
+        ...body,
+        ownerLogin: auth.user.twitchUsername || existing.ownerLogin,
+      });
       store[id] = updated;
       return updated;
     });
