@@ -65,7 +65,7 @@ export default async function GameHubDetailPage({
 
         <div className="flex flex-wrap gap-3">
           {game.nativePath && <Link href={game.nativePath} className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground no-underline">Open {game.shortName}</Link>}
-          <Link href="/overlay/games" className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2.5 text-sm font-bold text-cyan-100 no-underline">Add to an overlay</Link>
+          <Link href="/game-overlays" className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2.5 text-sm font-bold text-cyan-100 no-underline">Add to an overlay</Link>
           <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Back to catalog</Link>
         </div>
       </section>
