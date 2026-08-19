@@ -4,9 +4,15 @@ import type { GameHubGame } from '@/lib/game-hub-registry';
 import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 import { GameHubBingoSurface } from '@/components/game-hub-bingo-surface';
 
+type ScopedGameEvent = GameHubChatEvent & { gameIds?: string[] };
+
 function tagOverlayUserId(ownerUserId: string) {
   const value = String(ownerUserId || '').trim();
   return value.startsWith('user_') ? value : `user_${value}`;
+}
+
+function eventsForGame(events: GameHubChatEvent[], gameId: string) {
+  return events.filter((event) => Array.isArray((event as ScopedGameEvent).gameIds) && (event as ScopedGameEvent).gameIds!.includes(gameId));
 }
 
 export function GameHubSurface({
@@ -31,7 +37,7 @@ export function GameHubSurface({
   } else if (game.id === 'bingo') {
     content = <GameHubBingoSurface channel={channel || 'chat'} />;
   } else {
-    content = <GameHubPrototypeSurface game={game} events={events} channel={channel || 'chat'} />;
+    content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} />;
   }
 
   return (

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
-import { recordGameHubChatActivity } from '@/lib/game-hub-state';
+import { resolveGameHubCommandKey } from '@/lib/game-hub-commands';
+import {
+  getGameHubStore,
+  normalizeGameHubPlayerId,
+  recordGameHubChatActivity,
+} from '@/lib/game-hub-state';
 import { makeId, updateAppState, type JsonObject } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +22,13 @@ function cleanText(value: unknown, max: number): string {
   return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 }
 
+function targetedGameId(message: string): string | null {
+  const match = message.trim().match(/^!?@?spmt(?:\s+|$)(.*)$/i);
+  if (!match) return null;
+  const key = String(match[1] || '').trim().split(/\s+/).filter(Boolean)[0];
+  return resolveGameHubCommandKey(key)?.gameId || null;
+}
+
 export async function POST(req: NextRequest) {
   if (!isBotRequest(req)) {
     return NextResponse.json({ error: 'Bot service authentication required.' }, { status: 401 });
@@ -30,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'channel, username and message are required.' }, { status: 400 });
   }
 
-  const event = {
+  const baseEvent = {
     id: makeId('game_chat'),
     at: new Date().toISOString(),
     channel,
@@ -43,27 +55,38 @@ export async function POST(req: NextRequest) {
   };
 
   const activity = await updateAppState((state) => {
+    const result = recordGameHubChatActivity(state, {
+      channel,
+      userId: body.userId,
+      username,
+      displayName: baseEvent.displayName,
+      message,
+    });
+
+    const playerId = normalizeGameHubPlayerId(body.userId, username);
+    const player = getGameHubStore(state).players[playerId];
+    const participatingGameIds = result.activeGameIds.filter((gameId) => player?.joinedGames?.[gameId]?.active === true);
+    const commandGameId = targetedGameId(message);
+    const gameIds = commandGameId
+      ? (result.activeGameIds.includes(commandGameId) ? [commandGameId] : [])
+      : participatingGameIds;
+
     state.gameSettings.default ||= {};
     const store = (state.gameSettings.default[STORE_KEY] ||= {}) as Record<string, JsonObject[]>;
     const cutoff = Date.now() - MAX_EVENT_AGE_MS;
     const current = Array.isArray(store[channel]) ? store[channel] : [];
-    current.push(event);
+    current.push({ ...baseEvent, gameIds });
     store[channel] = current
       .filter((item) => Date.parse(String(item?.at || '')) >= cutoff)
       .slice(-MAX_EVENTS_PER_CHANNEL);
 
-    return recordGameHubChatActivity(state, {
-      channel,
-      userId: body.userId,
-      username,
-      displayName: event.displayName,
-      message,
-    });
+    return { ...result, participatingGameIds, eventGameIds: gameIds };
   });
 
   return NextResponse.json({
     accepted: true,
-    id: event.id,
+    id: baseEvent.id,
+    eventGameIds: activity.eventGameIds,
     scoredGameIds: activity.scoredGameIds,
     pointsAwarded: activity.pointsAwarded,
   });

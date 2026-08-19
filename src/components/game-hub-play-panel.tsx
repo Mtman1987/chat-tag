@@ -10,8 +10,14 @@ import { QuackverseCardGame } from '@/components/quackverse-card-game';
 import { BingoCard } from '@/components/bingo-card';
 import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 
+type ScopedGameEvent = GameHubChatEvent & { gameIds?: string[] };
+
 function normalizeChannel(value: unknown) {
   return String(value || '').trim().toLowerCase().replace(/^#/, '');
+}
+
+function eventsForGame(events: GameHubChatEvent[], gameId: string) {
+  return events.filter((event) => Array.isArray((event as ScopedGameEvent).gameIds) && (event as ScopedGameEvent).gameIds!.includes(gameId));
 }
 
 export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
@@ -76,7 +82,7 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
     if (game.id === 'quackverse') return <QuackverseCardGame />;
     if (game.id === 'bingo') return <BingoCard />;
     if (!channel) return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center text-sm text-slate-400">Open this page while signed in, or add <code className="mx-1 text-cyan-100">?channel=streamer</code>, to attach the live chat surface.</div>;
-    return <div className="h-[min(62vh,620px)] min-h-80"><GameHubPrototypeSurface game={game} events={events} channel={channel} /></div>;
+    return <div className="h-[min(62vh,620px)] min-h-80"><GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel} /></div>;
   }, [active, channel, commandKey, events, game]);
 
   return (
@@ -84,7 +90,7 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-headline text-xl text-white">Play</h2>
-          <p className="mt-1 text-xs text-slate-500">Every Games Hub title gets the same gameplay slot. The engine behind the slot can evolve independently.</p>
+          <p className="mt-1 text-xs text-slate-500">Every Games Hub title gets the same gameplay slot. Only joined players feed this game while it is ACTIVE.</p>
         </div>
         {channel && <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${active ? 'bg-emerald-300/10 text-emerald-100' : 'bg-white/8 text-slate-400'}`}>{active ? 'ACTIVE' : active === false ? 'STOPPED' : 'CHECKING'} · #{channel}</span>}
       </div>
