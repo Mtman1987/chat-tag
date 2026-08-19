@@ -35,12 +35,21 @@ function knownCommunityChannels(state: any) {
   return channels;
 }
 
+function aggregateBingo(state: any) {
+  const boards = Object.values(state.bingoCards?.personalBoards || {}) as any[];
+  return {
+    players: boards.length,
+    totalClaims: boards.reduce((sum, board) => sum + Object.keys(board?.covered || {}).length, 0),
+    completedCards: boards.filter((board) => Boolean(board?.wonAt)).length,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const state = await readAppState();
     const sessionUser = getSessionUserFromRequest(req);
     const identity = sessionUser ? resolveBingoIdentity(state, sessionUser) : null;
-    return NextResponse.json({ bingo: personalBingoView(state, identity) });
+    return NextResponse.json({ bingo: { ...personalBingoView(state, identity), aggregate: aggregateBingo(state) } });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
