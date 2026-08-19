@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { makeId, readAppState, updateAppState } from '@/lib/volume-store';
-import { getScoringSettings } from '@/lib/scoring';
-import { postOrUpdateChatTagEmbed } from '@/lib/chat-tag-discord';
+import { awardGameHubPoints, joinGameHubGame } from '@/lib/game-hub-state';
 
-async function refreshChatTagEmbed() {
-  try {
-    await postOrUpdateChatTagEmbed();
-  } catch (e: any) { console.error('[Bingo] Chat Tag embed refresh error:', e.message); }
-}
+const BINGO_SQUARE_SCORE = 1;
+const BINGO_WIN_SCORE = 5;
+const BINGO_SQUARE_GAME_POINTS = 1;
+const BINGO_WIN_GAME_POINTS = 5;
 
 export async function GET() {
   try {
@@ -47,12 +45,23 @@ function checkBingo(covered: Record<string, any>, username: string): boolean {
   return false;
 }
 
+function linkedTwitchId(state: any, username: string, suppliedUserId: unknown): string | undefined {
+  const supplied = String(suppliedUserId || '').replace(/^user_/, '').trim();
+  if (/^\d+$/.test(supplied)) return supplied;
+  const login = String(username || '').trim().toLowerCase();
+  if (!login) return undefined;
+  const match = Object.values(state.users || {}).find((candidate: any) =>
+    String(candidate?.twitchUsername || '').trim().toLowerCase() === login
+  ) as any;
+  const id = String(match?.id || '').trim();
+  return /^\d+$/.test(id) ? id : undefined;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { action, squareIndex, userId, username, avatar, streamerChannel, phrases } = await req.json();
 
     if (action === 'claim') {
-      // CRITICAL FIX: Validate squareIndex before processing
       if (!Number.isInteger(squareIndex) || squareIndex < 0 || squareIndex > 24) {
         return NextResponse.json(
           { error: `Invalid square index: ${squareIndex}. Must be between 0 and 24.` },
@@ -60,13 +69,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Validate other required fields
       if (!userId && !username) {
         return NextResponse.json({ error: 'userId or username is required' }, { status: 400 });
       }
 
       const result = await updateAppState((state) => {
-        const scoring = getScoringSettings(state);
         const card = state.bingoCards.current_user || { phrases: [], covered: {} };
 
         if (card.covered?.[squareIndex]) {
@@ -75,37 +82,55 @@ export async function POST(req: NextRequest) {
 
         const covered = { ...(card.covered || {}) };
         covered[squareIndex] = { userId: userId || username, username: username || userId, avatar, streamerChannel };
-        state.bingoCards.current_user = { ...card, covered, updatedAt: new Date().toISOString() };
+        const now = new Date().toISOString();
+        state.bingoCards.current_user = { ...card, covered, updatedAt: now };
 
-        const hasBingo = checkBingo(covered, username || userId);
-        const playerKey = userId && state.tagPlayers?.[userId] ? userId : username;
-        const player = playerKey ? state.tagPlayers?.[playerKey] : null;
-        if (player) {
-          player.bingoPoints = (player.bingoPoints || 0) + scoring.bingoSquarePoints;
-        }
+        const playerName = String(username || userId || '').trim();
+        const hasBingo = checkBingo(covered, playerName);
+        const gameUserId = linkedTwitchId(state, playerName, userId);
+        const joined = joinGameHubGame(state, {
+          userId: gameUserId,
+          username: playerName,
+          displayName: playerName,
+          gameId: 'bingo',
+        });
+        const membership = joined.membership;
+        membership.lastActiveAt = now;
+        membership.score += BINGO_SQUARE_SCORE;
+        awardGameHubPoints(state, joined.player, BINGO_SQUARE_GAME_POINTS, 'Bingo square claimed', {
+          gameId: 'bingo',
+          channel: String(streamerChannel || '').trim().toLowerCase(),
+        });
 
         if (hasBingo) {
-          if (player) {
-            player.bingoPoints = (player.bingoPoints || 0) + scoring.bingoWinPoints;
-            player.bingoWins = (player.bingoWins || 0) + 1;
-          }
+          membership.score += BINGO_WIN_SCORE;
+          membership.wins += 1;
+          membership.plays += 1;
+          awardGameHubPoints(state, joined.player, BINGO_WIN_GAME_POINTS, 'Bingo completed', {
+            gameId: 'bingo',
+            channel: String(streamerChannel || '').trim().toLowerCase(),
+          });
           state.bingoEvents = state.bingoEvents || [];
           state.bingoEvents.push({
             id: makeId('bingo'),
-            userId: userId || username,
-            points: scoring.bingoWinPoints,
+            userId: gameUserId || userId || username,
+            points: BINGO_WIN_SCORE,
             timestamp: Date.now(),
           });
         }
 
-        return { success: true, bingo: hasBingo };
+        return {
+          success: true,
+          bingo: hasBingo,
+          gameScore: membership.score,
+          gamePointsBalance: joined.player.gamePointsBalance,
+        };
       });
 
       if ((result as any).error) {
         return NextResponse.json({ error: (result as any).error }, { status: (result as any).status || 400 });
       }
 
-      refreshChatTagEmbed().catch(() => {});
       return NextResponse.json(result);
     }
 
@@ -118,7 +143,6 @@ export async function POST(req: NextRequest) {
         };
       });
 
-      refreshChatTagEmbed().catch(() => {});
       return NextResponse.json({ success: true });
     }
 
