@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getGameHubGame } from '@/lib/game-hub-catalog';
+import { getGameHubGame } from '@/lib/game-hub-registry';
 import { canonicalJoinCommand } from '@/lib/game-hub-commands';
 import { normalizeGameHubChannel, resolveChannelGameIds } from '@/lib/game-hub-state';
 import { readAppState } from '@/lib/volume-store';
