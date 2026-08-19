@@ -21,7 +21,9 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt chattag status', description: 'Show the current Chat Tag state.' },
   ] },
   { gameId: 'quackverse', key: 'quackverse', aliases: ['quack'], joinDescription: 'Join Quackverse.', commands: [] },
-  { gameId: 'bingo', key: 'bingo', aliases: [], joinDescription: 'Join community Bingo.', commands: [] },
+  { gameId: 'bingo', key: 'bingo', aliases: [], joinDescription: 'Join community Bingo.', commands: [
+    { trigger: 'spmt bingo center your phrase here', description: 'Set your personal center-square phrase for the current Bingo card.' },
+  ] },
   { gameId: 'chaosmode', key: 'chaos', aliases: ['chaosmode'], joinDescription: 'Join Chaos Mode.', commands: [
     { trigger: 'spmt chaos explode', description: 'Trigger an explosion effect.' },
     { trigger: 'spmt chaos glitch', description: 'Trigger a glitch effect.' },
