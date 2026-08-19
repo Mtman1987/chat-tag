@@ -4,7 +4,6 @@ import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
   canonicalCommandSummary,
   canonicalJoinCommand,
-  getCanonicalGameCommandSpec,
   resolveGameHubCommandKey,
 } from '@/lib/game-hub-commands';
 import {
@@ -16,6 +15,7 @@ import {
   resolveChannelGameIds,
   setChannelGameRunning,
 } from '@/lib/game-hub-state';
+import { setPersonalBingoCenter } from '@/lib/bingo-game';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +32,7 @@ function knownAction(gameId: string, args: string[]): boolean {
   const first = args[0].toLowerCase();
   if (first === 'start' || first === 'stop' || first === 'leave') return true;
   if (gameId === 'chat-tag') return /^(tag|pass|score|status)$/.test(first);
+  if (gameId === 'bingo') return first === 'center' && args.length >= 2;
   if (gameId === 'chaosmode') return /^(explode|glitch|portal|shake)$/.test(first) && args.length === 1;
   if (gameId === 'chatwars' || gameId === 'colorwars') return /^(red|blue|green|yellow)$/.test(first) && args.length === 1;
   if (gameId === 'dancingparade') return first === 'dance' && args.length === 1;
@@ -42,19 +43,16 @@ function knownAction(gameId: string, args: string[]): boolean {
   return false;
 }
 
-function compactHelp(state: any, channel: string) {
-  const activeIds = resolveChannelGameIds(state, channel);
-  const games = activeIds.map((id) => getGameHubGame(id)).filter(Boolean);
-  if (!games.length) return 'No Games Hub games are running in this channel.';
-  const summaries = games.map((game) => {
-    const spec = getCanonicalGameCommandSpec(game!.id);
-    return `${game!.shortName}: spmt ${spec?.key || game!.id}`;
-  });
-  return `Active games — ${summaries.join(' · ')}`.slice(0, 380);
-}
-
 function publicOrigin(req: NextRequest) {
   return req.nextUrl.origin.replace(/\/$/, '');
+}
+
+function guideUrl(req: NextRequest, channel: string) {
+  return `${publicOrigin(req)}/games/rules?channel=${encodeURIComponent(channel)}`;
+}
+
+function scoreUrl(req: NextRequest, channel: string, username: string) {
+  return `${publicOrigin(req)}/games/score?channel=${encodeURIComponent(channel)}&player=${encodeURIComponent(username)}`;
 }
 
 function legacyChatTagRewrite(actionArgs: string[]) {
@@ -81,17 +79,21 @@ export async function POST(req: NextRequest) {
   if (command === 'help' || command === 'rules' || command === 'games') {
     const state = await readAppState();
     const activeIds = resolveChannelGameIds(state, channel);
-    const activeGames = activeIds.map((id) => getGameHubGame(id)).filter(Boolean);
-    if (command === 'rules') {
-      const url = `${publicOrigin(req)}/games/rules?channel=${encodeURIComponent(channel)}`;
-      return NextResponse.json({ handled: true, reply: `@${displayName} Rules for the games running in #${channel}: ${url}` });
+    if (!activeIds.length) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} No Games Hub games are ACTIVE in #${channel}.` });
     }
-    if (command === 'games') {
-      const names = activeGames.map((game) => game!.name).join(', ') || 'none';
-      return NextResponse.json({ handled: true, reply: `@${displayName} Games running here: ${names}.` });
+    const url = guideUrl(req, channel);
+    const label = command === 'games' ? 'Active games' : command === 'help' ? 'Games Hub commands' : 'Games Hub rules + commands';
+    return NextResponse.json({ handled: true, reply: `@${displayName} ${label} for #${channel}: ${url}` });
+  }
+
+  if (command === 'score') {
+    const state = await readAppState();
+    const activeIds = resolveChannelGameIds(state, channel);
+    if (!activeIds.length) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} No Games Hub games are ACTIVE in #${channel}.` });
     }
-    const link = `${publicOrigin(req)}/games/help?channel=${encodeURIComponent(channel)}`;
-    return NextResponse.json({ handled: true, reply: `@${displayName} ${compactHelp(state, channel)} · Full commands: ${link}`.slice(0, 480) });
+    return NextResponse.json({ handled: true, reply: `@${displayName} Your ACTIVE-game stats: ${scoreUrl(req, channel, username)}` });
   }
 
   if (command === 'points') {
@@ -106,7 +108,8 @@ export async function POST(req: NextRequest) {
   if (!spec) return NextResponse.json({ handled: false });
   const game = getGameHubGame(spec.gameId);
   if (!game) return NextResponse.json({ handled: false });
-  const actionArgs = parts.slice(1).map((part) => part.toLowerCase());
+  const rawActionArgs = parts.slice(1);
+  const actionArgs = rawActionArgs.map((part) => part.toLowerCase());
   const action = String(actionArgs[0] || '').toLowerCase();
   const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
 
@@ -145,6 +148,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ handled: false, rewriteCommand: legacyChatTagRewrite(actionArgs), gameHubHandled: true });
     }
     return NextResponse.json({ handled: true, reply: `@${displayName} ${left ? `left ${game.name}.` : `was not joined to ${game.name}.`}` });
+  }
+
+  if (game.id === 'bingo' && action === 'center') {
+    const phrase = rawActionArgs.slice(1).join(' ').trim();
+    try {
+      await updateAppState((draft) => {
+        const joined = joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
+        setPersonalBingoCenter(draft, {
+          userId: String(userId || username),
+          username,
+          displayName,
+          avatarUrl: '',
+          playerKey: joined.player.id,
+        }, phrase);
+      });
+      return NextResponse.json({ handled: true, reply: `@${displayName} your personal Bingo center is set to “${phrase.slice(0, 120)}”.` });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Your Bingo center phrase could not be saved.'}` });
+    }
   }
 
   const result = await updateAppState((draft) => joinGameHubGame(draft, {
