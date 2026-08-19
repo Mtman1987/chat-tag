@@ -4,6 +4,7 @@ import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
   canonicalCommandSummary,
   canonicalJoinCommand,
+  getCanonicalGameCommandSpec,
   resolveGameHubCommandKey,
 } from '@/lib/game-hub-commands';
 import {
@@ -15,6 +16,14 @@ import {
   resolveChannelGameIds,
   setChannelGameRunning,
 } from '@/lib/game-hub-state';
+import {
+  allPlayedGameIds,
+  compactGameSnapshot,
+  fitCompactReplyWithLink,
+  gamesPointsStandings,
+  getGamesPointsStanding,
+  getPlayerGameSnapshots,
+} from '@/lib/game-hub-chat-summary';
 import { setPersonalBingoCenter } from '@/lib/bingo-game';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 
@@ -55,6 +64,14 @@ function scoreUrl(req: NextRequest, channel: string, username: string) {
   return `${publicOrigin(req)}/games/score?channel=${encodeURIComponent(channel)}&player=${encodeURIComponent(username)}`;
 }
 
+function leaderUrl(req: NextRequest, username: string) {
+  return `${publicOrigin(req)}/games/leader?player=${encodeURIComponent(username)}`;
+}
+
+function pointsLeaderboardUrl(req: NextRequest) {
+  return `${publicOrigin(req)}/games/leaderboard`;
+}
+
 function legacyChatTagRewrite(actionArgs: string[]) {
   if (!actionArgs.length) return 'spmt join';
   if (actionArgs[0] === 'leave') return 'spmt leave';
@@ -82,9 +99,18 @@ export async function POST(req: NextRequest) {
     if (!activeIds.length) {
       return NextResponse.json({ handled: true, reply: `@${displayName} No Games Hub games are ACTIVE in #${channel}.` });
     }
-    const url = guideUrl(req, channel);
-    const label = command === 'games' ? 'Active games' : command === 'help' ? 'Games Hub commands' : 'Games Hub rules + commands';
-    return NextResponse.json({ handled: true, reply: `@${displayName} ${label} for #${channel}: ${url}` });
+    const segments = activeIds.map((gameId) => {
+      const game = getGameHubGame(gameId);
+      const spec = getCanonicalGameCommandSpec(gameId);
+      return game ? `[${game.shortName}] spmt ${spec?.key || game.id}` : gameId;
+    });
+    const prefix = command === 'games'
+      ? `@${displayName} Active in #${channel}:`
+      : `@${displayName} Games Hub ${command} for #${channel}:`;
+    return NextResponse.json({
+      handled: true,
+      reply: fitCompactReplyWithLink(prefix, segments, guideUrl(req, channel)),
+    });
   }
 
   if (command === 'score') {
@@ -93,15 +119,63 @@ export async function POST(req: NextRequest) {
     if (!activeIds.length) {
       return NextResponse.json({ handled: true, reply: `@${displayName} No Games Hub games are ACTIVE in #${channel}.` });
     }
-    return NextResponse.json({ handled: true, reply: `@${displayName} Your ACTIVE-game stats: ${scoreUrl(req, channel, username)}` });
+    const snapshots = getPlayerGameSnapshots(state, activeIds, { userId, username });
+    return NextResponse.json({
+      handled: true,
+      reply: fitCompactReplyWithLink(
+        `@${displayName} Games Hub scores:`,
+        snapshots.map(compactGameSnapshot),
+        scoreUrl(req, channel, username),
+      ),
+    });
+  }
+
+  if (command === 'leader') {
+    const state = await readAppState();
+    const standing = getGamesPointsStanding(state, userId, username);
+    const playedIds = allPlayedGameIds(state, userId, username);
+    const snapshots = getPlayerGameSnapshots(state, playedIds, { userId, username })
+      .sort((left, right) => right.score - left.score || right.wins - left.wins);
+    const wallet = standing
+      ? `${standing.balance.toLocaleString()} GP [#${standing.rank}] · ${playedIds.length} games`
+      : `0 GP · ${playedIds.length} games`;
+    return NextResponse.json({
+      handled: true,
+      reply: fitCompactReplyWithLink(
+        `@${displayName} Games Hub profile: ${wallet}`,
+        snapshots.map(compactGameSnapshot),
+        leaderUrl(req, username),
+      ),
+    });
   }
 
   if (command === 'points') {
     const state = await readAppState();
-    const playerId = normalizeGameHubPlayerId(userId, username);
-    const player = getGameHubStore(state).players[playerId];
-    const balance = Number(player?.gamePointsBalance || 0);
-    return NextResponse.json({ handled: true, reply: `@${displayName} Games Points: ${balance}. These are spendable Games Hub points and are separate from SPMT XP.` });
+    const standing = getGamesPointsStanding(state, userId, username);
+    if (!standing) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Games Points: 0 · unranked. Games Points are spendable and separate from SPMT XP.` });
+    }
+    return NextResponse.json({
+      handled: true,
+      reply: `@${displayName} Games Points: ${standing.balance.toLocaleString()} · rank #${standing.rank} · earned ${standing.lifetimeEarned.toLocaleString()} · spent ${standing.lifetimeSpent.toLocaleString()}.`,
+    });
+  }
+
+  if (command === 'pleader' || command === 'leaderboard' || command === 'rankings') {
+    const state = await readAppState();
+    const leaders = gamesPointsStandings(state).slice(0, 5);
+    if (!leaders.length) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} No Games Points have been recorded yet.` });
+    }
+    const segments = leaders.map((entry) => `#${entry.rank} ${entry.displayName || entry.username} ${entry.balance.toLocaleString()}`);
+    return NextResponse.json({
+      handled: true,
+      reply: fitCompactReplyWithLink(
+        `@${displayName} Games Points leaders:`,
+        segments,
+        pointsLeaderboardUrl(req),
+      ),
+    });
   }
 
   const spec = resolveGameHubCommandKey(command);
