@@ -130,7 +130,8 @@ test('dynamic help and rules are derived only from ACTIVE channel scope', () => 
   const help = read('src/app/games/help/page.tsx');
   const rules = read('src/app/games/rules/page.tsx');
   const scope = read('src/lib/game-hub-state.ts');
-  assert.match(command, /spmt.*help/i);
+  assert.match(command, /parseSpmt/);
+  assert.match(command, /command === 'help'/);
   assert.match(command, /games\/rules\?channel=/);
   assert.match(command, /games\/help\?channel=/);
   assert.match(help, /resolveChannelGameIds/);
