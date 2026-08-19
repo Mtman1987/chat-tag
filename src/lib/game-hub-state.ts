@@ -1,5 +1,5 @@
 import type { JsonObject } from '@/lib/volume-store';
-import { GAME_HUB_CATALOG, getGameHubGame, normalizeGameHubGameIds } from '@/lib/game-hub-catalog';
+import { GAME_HUB_CATALOG, getGameHubGame, normalizeGameHubGameIds } from '@/lib/game-hub-registry';
 
 export const GAME_SCORE_INTERVAL_MS = 30_000;
 export const GAME_POINTS_INTERVAL_MS = 90_000;
