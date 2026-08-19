@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run layout regression tests
-        run: node --import tsx --test tests/layout-cleanup.test.ts tests/quackverse-npc.test.ts tests/admin-shell-parity.test.ts
+        run: node --import tsx --test tests/layout-cleanup.test.ts tests/quackverse-npc.test.ts tests/admin-shell-parity.test.ts tests/game-hub-contract.test.ts
       - name: Typecheck
         run: npm run typecheck
       - name: Production build

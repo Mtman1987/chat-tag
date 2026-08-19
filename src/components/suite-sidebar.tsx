@@ -4,6 +4,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   Gamepad2,
+  Layers3,
+  LibraryBig,
   MessageCircle,
   MonitorUp,
   PanelLeftClose,
@@ -21,9 +23,11 @@ import { useSession } from '@/contexts/session-context';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Play', icon: Gamepad2 },
+  { href: '/', label: 'Tag', icon: Gamepad2, exact: true },
+  { href: '/games', label: 'Games', icon: LibraryBig },
   { href: '/messages', label: 'Messages', icon: MessageCircle },
-  { href: '/overlay', label: 'Overlay', icon: MonitorUp },
+  { href: '/overlay', label: 'Tag Overlay', icon: MonitorUp, exact: true },
+  { href: '/game-overlays', label: 'Game Overlays', icon: Layers3 },
 ];
 
 export function SuiteSidebar({
@@ -49,14 +53,14 @@ export function SuiteSidebar({
       data-collapsed={collapsed ? 'true' : 'false'}
     >
       <div className={cn('flex h-16 shrink-0 items-center border-b border-white/10 px-3', collapsed ? 'justify-center' : 'justify-between')}>
-        <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="ChatTag home">
+        <Link href="/games" className="flex min-w-0 items-center gap-2.5" aria-label="ChatTag Games Hub">
           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/20">
             <Image src="/brand/chat-tag-icon-192.png" alt="ChatTag" fill priority className="object-contain p-1" />
           </div>
           {!collapsed && (
             <div className="min-w-0">
               <div className="font-headline text-sm font-bold tracking-wide text-white">ChatTag</div>
-              <div className="truncate text-[10px] text-slate-400">Play · Community · Quackverse</div>
+              <div className="truncate text-[10px] text-slate-400">Games Hub · Community Arcade</div>
             </div>
           )}
         </Link>
@@ -75,7 +79,7 @@ export function SuiteSidebar({
 
       <nav className="flex shrink-0 flex-col gap-1 p-2" aria-label="ChatTag suite navigation">
         {navItems.map((item) => {
-          const active = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
             <Link

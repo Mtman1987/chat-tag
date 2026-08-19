@@ -29,6 +29,7 @@ export function RootShell({ children }: RootShellProps) {
   const sidebarHydratedRef = useRef(false);
   const isOverlayView =
     /^\/overlay\/[^/]+$/.test(pathname) ||
+    pathname.startsWith('/overlay/game-hub/') ||
     pathname === '/quackverse-overlay' ||
     pathname.startsWith('/api/');
 
