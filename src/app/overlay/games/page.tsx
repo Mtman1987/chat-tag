@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
+import { GameOverlayBayHandoff } from '@/components/game-overlay-bay-handoff';
 
 type OverlayProfile = {
   id: string;
@@ -164,7 +165,16 @@ export default function GameOverlayStudioPage() {
                 <label className="grid gap-1 text-xs text-slate-400">Layout<select value={selected.layout} onChange={(event) => patchLocal({ layout: event.target.value as OverlayProfile['layout'] })} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"><option value="auto-grid">Auto grid</option><option value="stack">Stack</option><option value="focus">Focus first selected</option></select></label>
               </div>
               <label className="flex items-center justify-between gap-4 rounded-xl border border-white/8 bg-white/[0.025] p-3 text-sm text-slate-300"><span><strong className="block text-white">Transparent background</strong><small className="text-slate-500">Best for OBS and Overlay Bay composition.</small></span><input type="checkbox" checked={selected.transparent} onChange={(event) => patchLocal({ transparent: event.target.checked })} className="h-5 w-5" /></label>
-              <div><div className="text-xs font-bold uppercase tracking-[.18em] text-slate-500">Stable browser-source URL</div><div className="mt-2 rounded-xl bg-black/50 px-3 py-3 font-mono text-xs text-cyan-100 break-all">{overlayUrl}</div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void navigator.clipboard.writeText(overlayUrl)} className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100">Copy URL</button><button type="button" onClick={() => window.open(overlayUrl, '_blank', 'noopener,noreferrer')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white">Open overlay</button></div></div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[.18em] text-slate-500">Stable browser-source URL</div>
+                <div className="mt-2 rounded-xl bg-black/50 px-3 py-3 font-mono text-xs text-cyan-100 break-all">{overlayUrl}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(overlayUrl)} className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100">Copy URL</button>
+                  <button type="button" onClick={() => window.open(overlayUrl, '_blank', 'noopener,noreferrer')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white">Open overlay</button>
+                  <GameOverlayBayHandoff profileId={selected.id} profileName={selected.name} overlayUrl={overlayUrl} />
+                </div>
+                <p className="mt-2 text-[10px] leading-4 text-slate-500">Overlay Bay receives this profile as a normal Web source. SPMT still owns scene position, size, layering, and the final Save.</p>
+              </div>
             </div>
 
             <div className="cosmic-card">
