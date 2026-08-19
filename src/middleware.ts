@@ -16,6 +16,7 @@ const PUBLIC_PREFIXES = [
   '/api/health',
   '/api/overlay/',
   '/overlay',
+  '/games',
   '/quackverse',
   '/quackverse-guide',
   '/quackverse-overlay',
@@ -192,7 +193,17 @@ export async function middleware(request: NextRequest) {
 
   const isPublicTagRead = request.method === 'GET' && pathname === '/api/tag';
   const isPublicLiveMembersRead = request.method === 'GET' && pathname === '/api/discord/live-members';
-  if (pathname === '/' || isPublicTagRead || isPublicLiveMembersRead || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) || isStatic(pathname)) {
+  const isPublicGameScopeRead = request.method === 'GET' && pathname === '/api/game-hub/channel';
+  const isPublicBingoStateRead = request.method === 'GET' && pathname === '/api/bingo/state';
+  if (
+    pathname === '/'
+    || isPublicTagRead
+    || isPublicLiveMembersRead
+    || isPublicGameScopeRead
+    || isPublicBingoStateRead
+    || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))
+    || isStatic(pathname)
+  ) {
     return NextResponse.next();
   }
 
