@@ -152,6 +152,20 @@ test('Bingo uses shared game score and Games Points instead of Chat Tag scoring/
   assert.doesNotMatch(bingo, /player\.bingoPoints/);
 });
 
+test('Bingo revival uses the same Play slot and restores the old route safely', () => {
+  const detail = read('src/app/games/[gameId]/page.tsx');
+  const play = read('src/components/game-hub-play-panel.tsx');
+  const legacy = read('src/app/bingo/page.tsx');
+  assert.match(detail, /GameHubPlayPanel/);
+  assert.match(play, /BingoCard/);
+  assert.match(play, /ChatTagGame/);
+  assert.match(play, /QuackverseCardGame/);
+  assert.match(play, /GameHubPrototypeSurface/);
+  assert.match(play, /is STOPPED/);
+  assert.match(play, /spmt \{commandKey\} start/);
+  assert.match(legacy, /redirect\('\/games\/bingo'\)/);
+});
+
 test('all game detail pages and composite slots use peer templates', () => {
   const detail = read('src/app/games/[gameId]/page.tsx');
   const overlay = read('src/app/overlay/game-hub/[profileId]/page.tsx');
@@ -161,6 +175,7 @@ test('all game detail pages and composite slots use peer templates', () => {
   assert.match(detail, /Players/);
   assert.match(detail, /Streamer commands/);
   assert.match(detail, /GameHubControlPanel/);
+  assert.match(detail, /GameHubPlayPanel/);
   assert.doesNotMatch(detail, /nativePath/);
   assert.match(overlay, /GameHubSurface/);
   assert.doesNotMatch(overlay, /game\.id === 'chat-tag'/);
