@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getGameHubGame } from '@/lib/game-hub-catalog';
+import { getGameHubGame } from '@/lib/game-hub-registry';
 import { getCanonicalGameCommandSpec } from '@/lib/game-hub-commands';
 import { getGameHubStore, resolveChannelGameIds } from '@/lib/game-hub-state';
 import { readAppState } from '@/lib/volume-store';
