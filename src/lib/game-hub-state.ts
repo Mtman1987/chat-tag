@@ -292,6 +292,6 @@ export function getGameHubGameStats(state: any, gameId: string) {
   return { game, leaderboard, players: playerList };
 }
 
-export function gameCommandKeys() {
-  return GAME_HUB_CATALOG.map((game) => game.commandKey);
+export function gameCatalogIds() {
+  return GAME_HUB_CATALOG.map((game) => game.id);
 }
