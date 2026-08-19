@@ -3,6 +3,8 @@ import {
   type GameHubGame,
 } from '@/lib/game-hub-catalog';
 
+export type { GameHubGame } from '@/lib/game-hub-catalog';
+
 export const BINGO_GAME: GameHubGame = {
   id: 'bingo',
   name: 'Bingo',
