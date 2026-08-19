@@ -1,7 +1,8 @@
 'use client';
 
-import type { GameHubGame } from '@/lib/game-hub-catalog';
+import type { GameHubGame } from '@/lib/game-hub-registry';
 import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
+import { GameHubBingoSurface } from '@/components/game-hub-bingo-surface';
 
 function tagOverlayUserId(ownerUserId: string) {
   const value = String(ownerUserId || '').trim();
@@ -27,6 +28,8 @@ export function GameHubSurface({
   } else if (game.id === 'quackverse') {
     const query = channel ? `?tenant=${encodeURIComponent(channel)}` : '';
     content = <iframe src={`/quackverse-overlay${query}`} title={`${game.name} overlay`} className="h-full w-full border-0 bg-transparent" />;
+  } else if (game.id === 'bingo') {
+    content = <GameHubBingoSurface channel={channel || 'chat'} />;
   } else {
     content = <GameHubPrototypeSurface game={game} events={events} channel={channel || 'chat'} />;
   }
