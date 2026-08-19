@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
-import { getGameHubGame } from '@/lib/game-hub-catalog';
+import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
   canonicalCommandSummary,
   canonicalJoinCommand,
@@ -31,6 +31,7 @@ function knownAction(gameId: string, args: string[]): boolean {
   if (!args.length) return true;
   const first = args[0].toLowerCase();
   if (first === 'start' || first === 'stop' || first === 'leave') return true;
+  if (gameId === 'chat-tag') return /^(tag|pass|score|status)$/.test(first);
   if (gameId === 'chaosmode') return /^(explode|glitch|portal|shake)$/.test(first) && args.length === 1;
   if (gameId === 'chatwars' || gameId === 'colorwars') return /^(red|blue|green|yellow)$/.test(first) && args.length === 1;
   if (gameId === 'dancingparade') return first === 'dance' && args.length === 1;
@@ -54,6 +55,12 @@ function compactHelp(state: any, channel: string) {
 
 function publicOrigin(req: NextRequest) {
   return req.nextUrl.origin.replace(/\/$/, '');
+}
+
+function legacyChatTagRewrite(actionArgs: string[]) {
+  if (!actionArgs.length) return 'spmt join';
+  if (actionArgs[0] === 'leave') return 'spmt leave';
+  return `spmt ${actionArgs.join(' ')}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -99,7 +106,7 @@ export async function POST(req: NextRequest) {
   if (!spec) return NextResponse.json({ handled: false });
   const game = getGameHubGame(spec.gameId);
   if (!game) return NextResponse.json({ handled: false });
-  const actionArgs = parts.slice(1);
+  const actionArgs = parts.slice(1).map((part) => part.toLowerCase());
   const action = String(actionArgs[0] || '').toLowerCase();
   const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
 
@@ -113,7 +120,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({
       handled: true,
-      reply: `${game.name} is now ${action === 'start' ? 'RUNNING' : 'STOPPED'} in #${channel}.`,
+      reply: `${game.name} is now ${action === 'start' ? 'ACTIVE' : 'STOPPED'} in #${channel}.`,
       activeGameIds: activeIds,
     });
   }
@@ -121,7 +128,7 @@ export async function POST(req: NextRequest) {
   const state = await readAppState();
   const activeGameIds = resolveChannelGameIds(state, channel);
   if (!activeGameIds.includes(game.id)) {
-    return NextResponse.json({ handled: true, reply: `@${displayName} ${game.name} is not running in #${channel}.` });
+    return NextResponse.json({ handled: true, reply: `@${displayName} ${game.name} is not ACTIVE in #${channel}.` });
   }
 
   if (!knownAction(game.id, actionArgs)) {
@@ -134,6 +141,9 @@ export async function POST(req: NextRequest) {
   if (action === 'leave') {
     const playerId = normalizeGameHubPlayerId(userId, username);
     const left = await updateAppState((draft) => leaveGameHubGame(draft, playerId, game.id));
+    if (game.id === 'chat-tag') {
+      return NextResponse.json({ handled: false, rewriteCommand: legacyChatTagRewrite(actionArgs), gameHubHandled: true });
+    }
     return NextResponse.json({ handled: true, reply: `@${displayName} ${left ? `left ${game.name}.` : `was not joined to ${game.name}.`}` });
   }
 
@@ -143,6 +153,14 @@ export async function POST(req: NextRequest) {
     displayName,
     gameId: game.id,
   }));
+
+  if (game.id === 'chat-tag') {
+    return NextResponse.json({
+      handled: false,
+      rewriteCommand: legacyChatTagRewrite(actionArgs),
+      gameHubHandled: true,
+    });
+  }
 
   if (!actionArgs.length) {
     return NextResponse.json({
