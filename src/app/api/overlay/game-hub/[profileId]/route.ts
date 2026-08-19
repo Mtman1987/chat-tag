@@ -37,11 +37,14 @@ export async function GET(
       id: profile.id,
       name: profile.name,
       ownerUserId: profile.ownerUserId,
+      ownerLogin: profile.ownerLogin,
       gameIds: profile.gameIds,
       layout: profile.layout,
       transparent: profile.transparent,
       updatedAt: profile.updatedAt,
     },
     games,
+  }, {
+    headers: { 'Cache-Control': 'no-store' },
   });
 }
