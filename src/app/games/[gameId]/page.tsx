@@ -5,6 +5,7 @@ import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-h
 import { getGameHubGameStats } from '@/lib/game-hub-state';
 import { readAppState } from '@/lib/volume-store';
 import { GameHubControlPanel } from '@/components/game-hub-control-panel';
+import { GameHubPlayPanel } from '@/components/game-hub-play-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,8 @@ export default async function GameHubDetailPage({
           <h1 className="mt-3 font-headline text-3xl font-bold text-white md:text-4xl">{game.name}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{game.description}</p>
         </div>
+
+        <GameHubPlayPanel game={game} />
 
         <section className="rounded-2xl border border-white/10 bg-black/25 p-5">
           <h2 className="font-headline text-xl text-white">Rules</h2>
