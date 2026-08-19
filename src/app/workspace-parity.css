@@ -9,6 +9,23 @@
   background-attachment: fixed !important;
 }
 
+/* OBS/browser-source routes must stay transparent even when the shared
+   workspace controller has already applied a workspace theme to :root. This
+   rule intentionally outranks the themed body background above. */
+:root[data-workspace-theme] body.overlay-route,
+body.overlay-route {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+:root[data-workspace-theme] body.overlay-route > div,
+body.overlay-route > div {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
 :root[data-workspace-theme] .cosmic-shell {
   background: transparent !important;
 }
