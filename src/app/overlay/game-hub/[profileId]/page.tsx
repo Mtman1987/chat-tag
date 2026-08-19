@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-catalog';
-import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
+import { GameHubSurface } from '@/components/game-hub-surface';
+import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 
 type PublicOverlayProfile = {
   id: string;
@@ -19,11 +20,6 @@ type PublicOverlayProfile = {
 type ProfileResponse = {
   profile: PublicOverlayProfile;
 };
-
-function tagOverlayUserId(ownerUserId: string) {
-  const value = String(ownerUserId || '').trim();
-  return value.startsWith('user_') ? value : `user_${value}`;
-}
 
 export default function GameHubOverlayPage() {
   const params = useParams<{ profileId: string }>();
@@ -123,17 +119,15 @@ export default function GameHubOverlayPage() {
   return (
     <main className={`min-h-screen w-screen overflow-hidden ${profile.transparent ? 'bg-transparent' : 'bg-slate-950'}`}>
       <div className={`grid h-screen w-screen gap-3 p-3 ${gridClass}`}>
-        {visibleGames.map((game) => {
-          if (game.id === 'chat-tag') {
-            const source = `/overlay/${encodeURIComponent(tagOverlayUserId(profile.ownerUserId))}?cycle=420&hudOn=45&hudOff=120`;
-            return <div key={game.id} className="min-h-0 overflow-hidden rounded-2xl"><iframe src={source} title="Chat Tag game overlay" className="h-full w-full border-0 bg-transparent" /></div>;
-          }
-          if (game.id === 'quackverse') {
-            const query = profile.ownerLogin ? `?tenant=${encodeURIComponent(profile.ownerLogin)}` : '';
-            return <div key={game.id} className="min-h-0 overflow-hidden rounded-2xl"><iframe src={`/quackverse-overlay${query}`} title="Quackverse game overlay" className="h-full w-full border-0 bg-transparent" /></div>;
-          }
-          return <GameHubPrototypeSurface key={game.id} game={game} events={events} channel={profile.ownerLogin || 'chat'} />;
-        })}
+        {visibleGames.map((game) => (
+          <GameHubSurface
+            key={game.id}
+            game={game}
+            events={events}
+            channel={profile.ownerLogin || 'chat'}
+            ownerUserId={profile.ownerUserId}
+          />
+        ))}
         {!visibleGames.length && <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-slate-950/70 text-sm text-white/50">No games in this profile are currently ACTIVE.</div>}
       </div>
     </main>
