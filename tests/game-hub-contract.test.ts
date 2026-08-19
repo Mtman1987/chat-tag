@@ -18,6 +18,11 @@ import {
   createGameOverlayProfile,
   patchGameOverlayProfile,
 } from '../src/lib/game-hub-overlays';
+import {
+  fitCompactReplyWithLink,
+  gamesPointsStandings,
+  getPlayerGameSnapshots,
+} from '../src/lib/game-hub-chat-summary';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -94,6 +99,7 @@ test('bot image patches resolved chat, canonical Games Hub commands and Chat Tag
   assert.match(patcher, /resolvedChannel/);
   assert.match(patcher, /api\/game-hub\/chat/);
   assert.match(patcher, /api\/game-hub\/command/);
+  assert.match(patcher, /gamesHubCommand\?\.handled/);
   assert.match(patcher, /rewriteCommand/);
   assert.match(patcher, /let args = normalizedMsg/);
   assert.match(patcher, /fire-and-forget/i);
@@ -127,26 +133,119 @@ test('leaving a game preserves leaderboard history while stopping participation'
   assert.match(state, /filter\(\(player\) => player\.active\)/);
 });
 
-test('rules, help, games and score stay link-first and ACTIVE-scope only', () => {
+test('compact replies preserve useful text before a link and stay under Twitch limits', () => {
+  const link = 'https://example.test/games/rules?channel=space';
+  const reply = fitCompactReplyWithLink(
+    '@viewer Games Hub scores:',
+    Array.from({ length: 20 }, (_, index) => `[Game ${index + 1}] [${index + 1}th] ${1000 - index} score · 4 wins · 12 plays`),
+    link,
+  );
+  assert.ok(reply.length <= 480);
+  assert.match(reply, /Games Hub scores:/);
+  assert.match(reply, /\[Game 1\]/);
+  assert.ok(reply.endsWith(link));
+  assert.match(reply, /\+\d+ more/);
+});
+
+test('score snapshots expose real Chat Tag and personal Bingo counters', () => {
+  const state: any = {
+    gameSettings: {
+      default: {
+        gameHub: {
+          channels: {},
+          ledger: [],
+          players: {
+            'twitch:1': {
+              id: 'twitch:1',
+              username: 'alice',
+              displayName: 'Alice',
+              gamePointsBalance: 25,
+              lifetimeEarned: 30,
+              lifetimeSpent: 5,
+              joinedGames: {
+                'chat-tag': { joinedAt: '2026-01-01T00:00:00.000Z', active: true, score: 0, wins: 0, plays: 1 },
+                bingo: { joinedAt: '2026-01-01T00:00:00.000Z', active: true, score: 12, wins: 2, plays: 1 },
+              },
+            },
+            'twitch:2': {
+              id: 'twitch:2',
+              username: 'bob',
+              displayName: 'Bob',
+              gamePointsBalance: 40,
+              lifetimeEarned: 40,
+              lifetimeSpent: 0,
+              joinedGames: {
+                'chat-tag': { joinedAt: '2026-01-01T00:00:00.000Z', active: true, score: 0, wins: 0, plays: 1 },
+                bingo: { joinedAt: '2026-01-01T00:00:00.000Z', active: true, score: 14, wins: 3, plays: 1 },
+              },
+            },
+          },
+        },
+      },
+    },
+    tagPlayers: {
+      user_1: { id: 'user_1', twitchUsername: 'alice', passCount: 3 },
+      user_2: { id: 'user_2', twitchUsername: 'bob', passCount: 0 },
+    },
+    tagHistory: [
+      { taggerId: 'user_1', taggedId: 'user_2' },
+      { taggerId: 'user_1', taggedId: 'user_2' },
+      { taggerId: 'user_2', taggedId: 'user_1' },
+    ],
+    bingoCards: {
+      personalBoards: {
+        'twitch:1': { centerPhrase: 'Chat says hydrate', covered: { 0: {}, 1: {}, 2: {}, 3: {}, 12: {} } },
+      },
+    },
+  };
+
+  const snapshots = getPlayerGameSnapshots(state, ['chat-tag', 'bingo'], { userId: '1', username: 'alice' });
+  assert.equal(snapshots.length, 2);
+  assert.match(snapshots[0].summary, /2 tags/);
+  assert.match(snapshots[0].summary, /1 tagged/);
+  assert.match(snapshots[0].summary, /3 passes/);
+  assert.match(snapshots[1].summary, /2 bingos/);
+  assert.match(snapshots[1].summary, /5\/25/);
+  assert.match(snapshots[1].summary, /20 left/);
+  assert.equal(gamesPointsStandings(state)[0].username, 'bob');
+});
+
+test('rules and score stay ACTIVE-scoped while leader mirrors StreamWeaver-style all-game profile semantics', () => {
   const command = read('src/app/api/game-hub/command/route.ts');
   const help = read('src/app/games/help/page.tsx');
   const rules = read('src/app/games/rules/page.tsx');
   const score = read('src/app/games/score/page.tsx');
+  const leader = read('src/app/games/leader/page.tsx');
+  const pointsLeaderboard = read('src/app/games/leaderboard/page.tsx');
+  const summary = read('src/lib/game-hub-chat-summary.ts');
   const scope = read('src/lib/game-hub-state.ts');
+
   assert.match(command, /command === 'help'/);
   assert.match(command, /command === 'score'/);
-  assert.match(command, /guideUrl\(req, channel\)/);
+  assert.match(command, /command === 'leader'/);
+  assert.match(command, /command === 'pleader'/);
+  assert.match(command, /fitCompactReplyWithLink/);
+  assert.match(command, /Games Hub scores:/);
+  assert.match(command, /Games Hub profile:/);
+  assert.match(command, /Games Points leaders:/);
   assert.match(command, /games\/score\?channel=/);
-  assert.doesNotMatch(command, /games\/help\?channel=/);
+  assert.match(command, /games\/leader\?player=/);
+  assert.match(command, /games\/leaderboard/);
+  assert.match(command, /resolveChannelGameIds\(state, channel\)/);
   assert.match(help, /redirect\(channel \? `\/games\/rules\?channel=/);
   assert.match(rules, /resolveChannelGameIds/);
-  assert.match(rules, /canonicalPlayerCommands/);
-  assert.match(rules, /canonicalStreamerCommands/);
-  assert.match(rules, /Rules \+ commands/);
+  assert.match(rules, /spmt leader/);
+  assert.match(rules, /spmt pleader/);
   assert.match(score, /resolveChannelGameIds/);
-  assert.match(score, /gamePointsBalance/);
-  assert.match(score, /joinedGames/);
+  assert.match(score, /getPlayerGameSnapshots/);
   assert.match(score, /Historical scores in stopped games remain stored/);
+  assert.match(leader, /All 20 games/);
+  assert.match(leader, /spmt leader/);
+  assert.match(pointsLeaderboard, /Games Points leaderboard/);
+  assert.match(pointsLeaderboard, /spmt pleader/);
+  assert.match(summary, /chatTagSnapshot/);
+  assert.match(summary, /bingoSummary/);
+  assert.match(summary, /TWITCH_REPLY_LIMIT = 480/);
   assert.match(scope, /stoppedGameIds/);
   assert.match(scope, /resolveChannelGameIds/);
 });
