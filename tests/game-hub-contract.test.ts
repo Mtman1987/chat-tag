@@ -50,6 +50,8 @@ test('every Games Hub chat command uses the spmt namespace', () => {
   const chatTag = canonicalPlayerCommands(getGameHubGame('chat-tag')!);
   assert.ok(chatTag.some((command) => command.trigger === 'spmt chattag'));
   assert.ok(chatTag.some((command) => command.trigger === 'spmt chattag tag @user'));
+  const bingo = canonicalPlayerCommands(getGameHubGame('bingo')!);
+  assert.ok(bingo.some((command) => command.trigger.startsWith('spmt bingo center ')));
 });
 
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {
@@ -125,22 +127,31 @@ test('leaving a game preserves leaderboard history while stopping participation'
   assert.match(state, /filter\(\(player\) => player\.active\)/);
 });
 
-test('dynamic help and rules are derived only from ACTIVE channel scope', () => {
+test('rules, help, games and score stay link-first and ACTIVE-scope only', () => {
   const command = read('src/app/api/game-hub/command/route.ts');
   const help = read('src/app/games/help/page.tsx');
   const rules = read('src/app/games/rules/page.tsx');
+  const score = read('src/app/games/score/page.tsx');
   const scope = read('src/lib/game-hub-state.ts');
-  assert.match(command, /parseSpmt/);
   assert.match(command, /command === 'help'/);
-  assert.match(command, /games\/rules\?channel=/);
-  assert.match(command, /games\/help\?channel=/);
-  assert.match(help, /resolveChannelGameIds/);
+  assert.match(command, /command === 'score'/);
+  assert.match(command, /guideUrl\(req, channel\)/);
+  assert.match(command, /games\/score\?channel=/);
+  assert.doesNotMatch(command, /games\/help\?channel=/);
+  assert.match(help, /redirect\(channel \? `\/games\/rules\?channel=/);
   assert.match(rules, /resolveChannelGameIds/);
+  assert.match(rules, /canonicalPlayerCommands/);
+  assert.match(rules, /canonicalStreamerCommands/);
+  assert.match(rules, /Rules \+ commands/);
+  assert.match(score, /resolveChannelGameIds/);
+  assert.match(score, /gamePointsBalance/);
+  assert.match(score, /joinedGames/);
+  assert.match(score, /Historical scores in stopped games remain stored/);
   assert.match(scope, /stoppedGameIds/);
   assert.match(scope, /resolveChannelGameIds/);
 });
 
-test('read-only game scope, Bingo board, and rules pages stay public for OBS and chat links', () => {
+test('read-only game scope, Bingo board, and guide pages stay public for OBS and chat links', () => {
   const middleware = read('src/middleware.ts');
   assert.match(middleware, /'\/games'/);
   assert.match(middleware, /isPublicGameScopeRead/);
@@ -161,16 +172,19 @@ test('activity bell removes Bingo notifications and replaces them with Games Hub
   assert.match(activity, /recentPlayers/);
 });
 
-test('Bingo uses canonical identity, personal center rules, and shared Games Points', () => {
+test('Bingo uses canonical identity, personal boards, personal center rules, and shared Games Points', () => {
   const bingo = read('src/app/api/bingo/state/route.ts');
   const card = read('src/components/bingo-card.tsx');
   const model = read('src/lib/bingo-game.ts');
   const generate = read('src/app/api/bingo/generate/route.ts');
+  const command = read('src/app/api/game-hub/command/route.ts');
   assert.match(bingo, /getSessionUserFromRequest/);
   assert.match(bingo, /requireAdminRequest/);
   assert.match(bingo, /alreadyClaimedInStream/);
+  assert.match(bingo, /getPersonalBingoBoard/);
   assert.match(bingo, /BINGO_CENTER_INDEX/);
   assert.match(bingo, /setPersonalBingoCenter/);
+  assert.match(bingo, /newlyWon/);
   assert.match(bingo, /joinGameHubGame/);
   assert.match(bingo, /awardGameHubPoints/);
   assert.match(bingo, /gameId: 'bingo'/);
@@ -178,12 +192,16 @@ test('Bingo uses canonical identity, personal center rules, and shared Games Poi
   assert.doesNotMatch(bingo, /getScoringSettings/);
   assert.doesNotMatch(bingo, /player\.bingoPoints/);
   assert.match(model, /BINGO_CENTER_PLACEHOLDER/);
-  assert.match(model, /getPersonalBingoBoard/);
+  assert.match(model, /personalBoards/);
+  assert.match(model, /hasBingo/);
+  assert.doesNotMatch(model, /FREE SPACE/);
   assert.match(card, /centerNeedsPhrase/);
   assert.match(card, /handleSetCenterPhrase/);
   assert.match(card, /isFreeSpace=\{false\}/);
+  assert.match(card, /Your personal center square/);
   assert.match(card, /user\?\.isAdmin/);
-  assert.match(generate, /requireAdminRequest/);
+  assert.match(generate, /resetPersonalBingoProgress/);
+  assert.match(command, /game\.id === 'bingo' && action === 'center'/);
 });
 
 test('Bingo revival uses the same Play slot and restores the old route safely', () => {
