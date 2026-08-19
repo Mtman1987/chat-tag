@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRequest } from '@/lib/auth';
 import { updateAppState } from '@/lib/volume-store';
 import { commonBingoPhrases } from '@/lib/bingo-data';
+import { BINGO_CENTER_INDEX, BINGO_CENTER_PLACEHOLDER, resetPersonalBingoProgress } from '@/lib/bingo-game';
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -68,15 +69,15 @@ export async function POST(req: NextRequest) {
       console.log('[Bingo] AI generation failed or insufficient, using shuffled defaults');
     }
 
-    phrases.splice(12, 0, 'FREE SPACE');
+    phrases.splice(BINGO_CENTER_INDEX, 0, BINGO_CENTER_PLACEHOLDER);
 
     await updateAppState((state) => {
       state.bingoCards.current_user = {
         phrases,
-        covered: {},
         updatedAt: new Date().toISOString(),
         generatedBy: aiGenerated ? 'ai' : 'defaults',
       };
+      resetPersonalBingoProgress(state);
     });
 
     return NextResponse.json({ success: true, phrases, aiGenerated });
