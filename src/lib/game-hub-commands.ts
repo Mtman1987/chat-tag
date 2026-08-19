@@ -14,20 +14,21 @@ export type CanonicalGameCommandSpec = {
 };
 
 const SPECS: CanonicalGameCommandSpec[] = [
-  { gameId: 'chat-tag', key: 'chattag', aliases: ['taggame'], joinDescription: 'Open Chat Tag. Existing Chat Tag membership remains available through spmt join during compatibility rollout.', commands: [
-    { trigger: 'spmt tag @user', description: 'Tag another Chat Tag player when eligible.' },
-    { trigger: 'spmt pass @user', description: 'Use an earned Chat Tag pass.' },
-    { trigger: 'spmt score', description: 'Show your Chat Tag score.' },
-    { trigger: 'spmt status', description: 'Show the current Chat Tag state.' },
+  { gameId: 'chat-tag', key: 'chattag', aliases: ['taggame'], joinDescription: 'Join Chat Tag.', commands: [
+    { trigger: 'spmt chattag tag @user', description: 'Tag another Chat Tag player when eligible.' },
+    { trigger: 'spmt chattag pass @user', description: 'Use an earned Chat Tag pass.' },
+    { trigger: 'spmt chattag score', description: 'Show your Chat Tag score.' },
+    { trigger: 'spmt chattag status', description: 'Show the current Chat Tag state.' },
   ] },
-  { gameId: 'quackverse', key: 'quackverse', aliases: ['quack'], joinDescription: 'Join Quackverse from its existing room-scoped game surface.', commands: [] },
+  { gameId: 'quackverse', key: 'quackverse', aliases: ['quack'], joinDescription: 'Join Quackverse.', commands: [] },
+  { gameId: 'bingo', key: 'bingo', aliases: [], joinDescription: 'Join community Bingo.', commands: [] },
   { gameId: 'chaosmode', key: 'chaos', aliases: ['chaosmode'], joinDescription: 'Join Chaos Mode.', commands: [
     { trigger: 'spmt chaos explode', description: 'Trigger an explosion effect.' },
     { trigger: 'spmt chaos glitch', description: 'Trigger a glitch effect.' },
     { trigger: 'spmt chaos portal', description: 'Trigger a portal effect.' },
     { trigger: 'spmt chaos shake', description: 'Shake the scene.' },
   ] },
-  { gameId: 'chatgarden', key: 'garden', aliases: ['chatgarden'], joinDescription: 'Join Chat Garden; your normal chat can grow plants while the game is running.', commands: [] },
+  { gameId: 'chatgarden', key: 'garden', aliases: ['chatgarden'], joinDescription: 'Join Chat Garden; normal chat can grow plants while it is running.', commands: [] },
   { gameId: 'chatwars', key: 'chatwars', aliases: ['wars'], joinDescription: 'Join Chat Wars.', commands: [
     { trigger: 'spmt chatwars red', description: 'Join or fight for the red team.' },
     { trigger: 'spmt chatwars blue', description: 'Join or fight for the blue team.' },
@@ -35,16 +36,15 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt chatwars yellow', description: 'Join or fight for the yellow team.' },
   ] },
   { gameId: 'chickenroyale', key: 'chicken', aliases: ['chickenroyale', 'royale'], joinDescription: 'Enter Chicken Royale.', commands: [] },
-  { gameId: 'colorsymphony', key: 'symphony', aliases: ['colorsymphony'], joinDescription: 'Join Color Symphony; color words in your normal chat become notes.', commands: [] },
+  { gameId: 'colorsymphony', key: 'symphony', aliases: ['colorsymphony'], joinDescription: 'Join Color Symphony; color words in normal chat become notes.', commands: [] },
   { gameId: 'colorwars', key: 'colorwars', aliases: ['colors'], joinDescription: 'Join Color Wars.', commands: [
-    { trigger: 'spmt colorwars red', description: 'Paint/fight for red.' },
-    { trigger: 'spmt colorwars blue', description: 'Paint/fight for blue.' },
-    { trigger: 'spmt colorwars green', description: 'Paint/fight for green.' },
-    { trigger: 'spmt colorwars yellow', description: 'Paint/fight for yellow.' },
+    { trigger: 'spmt colorwars red', description: 'Paint or fight for red.' },
+    { trigger: 'spmt colorwars blue', description: 'Paint or fight for blue.' },
+    { trigger: 'spmt colorwars green', description: 'Paint or fight for green.' },
+    { trigger: 'spmt colorwars yellow', description: 'Paint or fight for yellow.' },
   ] },
   { gameId: 'dancingparade', key: 'parade', aliases: ['dancingparade'], joinDescription: 'Join the Dancing Parade.', commands: [
     { trigger: 'spmt parade dance', description: 'Trigger your dancer animation.' },
-    { trigger: 'spmt parade leave', description: 'Leave the parade.' },
   ] },
   { gameId: 'emojirain', key: 'rain', aliases: ['emojirain'], joinDescription: 'Join Emoji Rain; emojis in normal chat become falling objects.', commands: [] },
   { gameId: 'emojitower', key: 'tower', aliases: ['emojitower'], joinDescription: 'Join Emoji Tower.', commands: [
