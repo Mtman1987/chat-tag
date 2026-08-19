@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-catalog';
+import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-registry';
 import { GameHubSurface } from '@/components/game-hub-surface';
 import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 
