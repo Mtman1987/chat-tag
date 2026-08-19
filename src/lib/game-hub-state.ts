@@ -9,6 +9,7 @@ export type GameHubMembership = {
   joinedAt: string;
   lastActiveAt?: string;
   lastScoreAt?: string;
+  active: boolean;
   score: number;
   wins: number;
   plays: number;
@@ -120,6 +121,7 @@ function normalizeMembership(value: any): GameHubMembership {
     joinedAt: String(value?.joinedAt || new Date().toISOString()),
     lastActiveAt: value?.lastActiveAt ? String(value.lastActiveAt) : undefined,
     lastScoreAt: value?.lastScoreAt ? String(value.lastScoreAt) : undefined,
+    active: value?.active !== false,
     score: Math.max(0, Number(value?.score || 0)),
     wins: Math.max(0, Number(value?.wins || 0)),
     plays: Math.max(0, Number(value?.plays || 0)),
@@ -162,23 +164,29 @@ export function joinGameHubGame(
   const game = getGameHubGame(input.gameId);
   if (!game) throw new Error('Unknown game.');
   const player = getOrCreateGameHubPlayer(state, input);
-  const alreadyJoined = Boolean(player.joinedGames[game.id]);
-  if (!alreadyJoined) {
+  const existing = player.joinedGames[game.id];
+  const alreadyJoined = Boolean(existing?.active);
+  if (!existing) {
     player.joinedGames[game.id] = {
       joinedAt: new Date().toISOString(),
+      active: true,
       score: 0,
       wins: 0,
-      plays: 0,
+      plays: 1,
     };
+  } else if (!existing.active) {
+    existing.active = true;
+    existing.plays += 1;
   }
   return { player, membership: player.joinedGames[game.id], alreadyJoined };
 }
 
 export function leaveGameHubGame(state: any, playerId: string, gameId: string): boolean {
   const store = getGameHubStore(state);
-  const player = store.players[playerId];
-  if (!player?.joinedGames?.[gameId]) return false;
-  delete player.joinedGames[gameId];
+  const membership = store.players[playerId]?.joinedGames?.[gameId];
+  if (!membership?.active) return false;
+  membership.active = false;
+  membership.lastActiveAt = new Date().toISOString();
   return true;
 }
 
@@ -247,7 +255,7 @@ export function recordGameHubChatActivity(
 
   for (const gameId of activeGameIds) {
     const membership = player.joinedGames[gameId];
-    if (!membership) continue;
+    if (!membership?.active) continue;
     membership.lastActiveAt = nowIso;
     const lastScoreAt = Date.parse(String(membership.lastScoreAt || 0));
     if (!Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS) {
@@ -286,7 +294,8 @@ export function getGameHubGameStats(state: any, gameId: string) {
   const leaderboard = [...players]
     .sort((a, b) => b.score - a.score || b.wins - a.wins || a.joinedAt.localeCompare(b.joinedAt))
     .slice(0, 50);
-  const playerList = [...players]
+  const playerList = players
+    .filter((player) => player.active)
     .sort((a, b) => (b.lastActiveAt || '').localeCompare(a.lastActiveAt || '') || a.displayName.localeCompare(b.displayName))
     .slice(0, 100);
   return { game, leaderboard, players: playerList };
