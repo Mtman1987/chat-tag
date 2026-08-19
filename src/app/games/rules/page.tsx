@@ -24,7 +24,7 @@ export default async function ActiveGameRulesPage({
         <div>
           <div className="cosmic-status">Games Hub · Live guide</div>
           <h1 className="mt-3 font-headline text-3xl font-bold text-white">{channel ? `Rules + commands for #${channel}` : 'Active game guide'}</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">One page generated from the games currently scoped ACTIVE for this Twitch channel. Stopped games and their commands are intentionally omitted so chat only needs to share this single link.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">One page generated from the games currently scoped ACTIVE for this Twitch channel. Stopped games and their commands are intentionally omitted. Chat replies also include a compact fallback before this link in case Twitch suppresses links from an unmodded bot.</p>
         </div>
 
         <section className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
@@ -33,8 +33,16 @@ export default async function ActiveGameRulesPage({
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt rules</code>
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt help</code>
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt score</code>
+            <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt leader</code>
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt points</code>
+            <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt pleader</code>
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt games</code>
+          </div>
+          <div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
+            <p><strong className="text-white">score</strong> — your stats for games ACTIVE in this stream.</p>
+            <p><strong className="text-white">leader</strong> — your all-games Games Hub profile.</p>
+            <p><strong className="text-white">points</strong> — your spendable Games Points balance and rank.</p>
+            <p><strong className="text-white">pleader</strong> — Games Points leaderboard.</p>
           </div>
         </section>
 
