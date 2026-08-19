@@ -18,6 +18,7 @@ export type BingoIdentity = {
 export type PersonalBingoBoard = {
   centerPhrase: string;
   covered: Record<string, JsonObject>;
+  wonAt?: string;
   updatedAt?: string;
 };
 
@@ -69,12 +70,13 @@ export function getPersonalBingoBoard(state: AppState, playerKey: string, create
   if (!board) return null;
   board.centerPhrase = String(board.centerPhrase || '').trim().slice(0, 120);
   board.covered = board.covered && typeof board.covered === 'object' ? board.covered : {};
+  if (board.wonAt) board.wonAt = String(board.wonAt);
   return board;
 }
 
 export function personalBingoView(state: AppState, identity: BingoIdentity | null) {
   const phrases = bingoTemplatePhrases(state);
-  if (!identity) return { phrases, covered: {}, centerPhrase: '', centerPhraseSet: false };
+  if (!identity) return { phrases, covered: {}, centerPhrase: '', centerPhraseSet: false, wonAt: null };
   const board = getPersonalBingoBoard(state, identity.playerKey, false);
   const centerPhrase = String(board?.centerPhrase || '').trim();
   phrases[BINGO_CENTER_INDEX] = centerPhrase || BINGO_CENTER_PLACEHOLDER;
@@ -83,6 +85,7 @@ export function personalBingoView(state: AppState, identity: BingoIdentity | nul
     covered: board?.covered || {},
     centerPhrase,
     centerPhraseSet: Boolean(centerPhrase),
+    wonAt: board?.wonAt || null,
   };
 }
 
@@ -103,6 +106,7 @@ export function resetPersonalBingoProgress(state: AppState) {
   const now = new Date().toISOString();
   for (const board of Object.values(boards)) {
     board.covered = {};
+    delete board.wonAt;
     board.updatedAt = now;
   }
 }
