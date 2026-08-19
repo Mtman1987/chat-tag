@@ -1,5 +1,5 @@
 import { makeId, type JsonObject } from '@/lib/volume-store';
-import { normalizeGameHubGameIds } from '@/lib/game-hub-catalog';
+import { normalizeGameHubGameIds } from '@/lib/game-hub-registry';
 
 export type GameOverlayLayout = 'auto-grid' | 'stack' | 'focus';
 
@@ -48,7 +48,7 @@ export function createGameOverlayProfile(ownerUserId: string, input: JsonObject 
     ownerUserId,
     ownerLogin: normalizeLogin(input.ownerLogin),
     name: String(input.name || 'Games Overlay').trim().slice(0, 80) || 'Games Overlay',
-    gameIds: gameIds.length ? gameIds : ['chat-tag'],
+    gameIds,
     layout: normalizeLayout(input.layout),
     transparent: input.transparent !== false,
     createdAt: now,
