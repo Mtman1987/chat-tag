@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserFromRequest } from '@/lib/auth';
-import { getGameHubStore, getOrCreateGameHubPlayer, spendGameHubPoints } from '@/lib/game-hub-state';
+import {
+  getGameHubStore,
+  getOrCreateGameHubPlayer,
+  normalizeGameHubPlayerId,
+  spendGameHubPoints,
+} from '@/lib/game-hub-state';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
@@ -18,8 +23,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'SPMT authentication required.' }, { status: 401 });
   const state = await readAppState();
   const store = getGameHubStore(state);
-  const player = Object.values(store.players).find((candidate) => candidate.username === String(user.twitchUsername || '').toLowerCase());
-  return NextResponse.json({ wallet: wallet(player) });
+  const playerId = normalizeGameHubPlayerId(user.id, user.twitchUsername);
+  return NextResponse.json({ wallet: wallet(store.players[playerId]) });
 }
 
 export async function POST(req: NextRequest) {
@@ -35,6 +40,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await updateAppState((state) => {
       const player = getOrCreateGameHubPlayer(state, {
+        userId: user.id,
         username: user.twitchUsername,
         displayName: user.twitchUsername,
       });
