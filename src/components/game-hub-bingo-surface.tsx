@@ -2,18 +2,20 @@
 
 import { useEffect, useState } from 'react';
 
-type CoveredSquare = {
-  username?: string;
-  streamerChannel?: string;
-};
-
 type BingoState = {
   phrases: string[];
-  covered: Record<string, CoveredSquare>;
+  aggregate: {
+    players: number;
+    totalClaims: number;
+    completedCards: number;
+  };
 };
 
 export function GameHubBingoSurface({ channel }: { channel: string }) {
-  const [bingo, setBingo] = useState<BingoState>({ phrases: [], covered: {} });
+  const [bingo, setBingo] = useState<BingoState>({
+    phrases: [],
+    aggregate: { players: 0, totalClaims: 0, completedCards: 0 },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +27,11 @@ export function GameHubBingoSurface({ channel }: { channel: string }) {
         if (!cancelled && body?.bingo) {
           setBingo({
             phrases: Array.isArray(body.bingo.phrases) ? body.bingo.phrases.slice(0, 25) : [],
-            covered: body.bingo.covered && typeof body.bingo.covered === 'object' ? body.bingo.covered : {},
+            aggregate: {
+              players: Number(body.bingo.aggregate?.players || 0),
+              totalClaims: Number(body.bingo.aggregate?.totalClaims || 0),
+              completedCards: Number(body.bingo.aggregate?.completedCards || 0),
+            },
           });
         }
       } catch {}
@@ -36,10 +42,9 @@ export function GameHubBingoSurface({ channel }: { channel: string }) {
   }, []);
 
   const cells = Array.from({ length: 25 }, (_, index) => ({
-    phrase: bingo.phrases[index] || (index === 12 ? 'FREE SPACE' : 'Waiting for card…'),
-    covered: bingo.covered[String(index)] || bingo.covered[index as any],
+    phrase: bingo.phrases[index] || (index === 12 ? 'PERSONAL CENTER' : 'Waiting for card…'),
+    personal: index === 12,
   }));
-  const claimed = cells.filter((cell) => Boolean(cell.covered)).length;
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950/70 p-4 text-white shadow-2xl backdrop-blur">
@@ -47,11 +52,14 @@ export function GameHubBingoSurface({ channel }: { channel: string }) {
         <div><div className="text-[9px] uppercase tracking-[.18em] text-cyan-200/60">Games Hub</div><h2 className="font-bold">Bingo</h2></div>
         <span className="rounded-full bg-emerald-300/10 px-2 py-1 text-[9px] font-bold text-emerald-100">ACTIVE · #{channel}</span>
       </header>
-      <div className="mb-2 flex items-center justify-between text-[10px] text-white/50"><span>Shared community card</span><span>{claimed}/25 claimed</span></div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/50">
+        <span>24 shared phrases · personal center</span>
+        <span>{bingo.aggregate.players} players · {bingo.aggregate.totalClaims} claims · {bingo.aggregate.completedCards} bingos</span>
+      </div>
       <div className="grid min-h-0 flex-1 grid-cols-5 gap-1">
         {cells.map((cell, index) => (
-          <div key={index} className={`grid min-h-0 place-items-center overflow-hidden rounded-md border p-1 text-center text-[clamp(7px,1.1vw,11px)] leading-tight ${cell.covered ? 'border-cyan-200/30 bg-cyan-300/15 text-cyan-50' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>
-            <span className="line-clamp-3">{cell.covered ? `✓ ${cell.covered.username || cell.phrase}` : cell.phrase}</span>
+          <div key={index} className={`grid min-h-0 place-items-center overflow-hidden rounded-md border p-1 text-center text-[clamp(7px,1.1vw,11px)] leading-tight ${cell.personal ? 'border-violet-200/30 bg-violet-300/15 text-violet-50' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>
+            <span className="line-clamp-3">{cell.personal ? '★ PERSONAL CENTER' : cell.phrase}</span>
           </div>
         ))}
       </div>
