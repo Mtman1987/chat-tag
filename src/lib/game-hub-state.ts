@@ -4,6 +4,7 @@ import { GAME_HUB_CATALOG, getGameHubGame, normalizeGameHubGameIds } from '@/lib
 export const GAME_SCORE_INTERVAL_MS = 30_000;
 export const GAME_POINTS_INTERVAL_MS = 90_000;
 const LEDGER_LIMIT = 500;
+const MECHANIC_SCORED_GAMES = new Set(['pixelbattle']);
 
 export type GameHubMembership = {
   joinedAt: string;
@@ -257,6 +258,7 @@ export function recordGameHubChatActivity(
     const membership = player.joinedGames[gameId];
     if (!membership?.active) continue;
     membership.lastActiveAt = nowIso;
+    if (MECHANIC_SCORED_GAMES.has(gameId)) continue;
     const lastScoreAt = Date.parse(String(membership.lastScoreAt || 0));
     if (!Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS) {
       membership.score += 1;
