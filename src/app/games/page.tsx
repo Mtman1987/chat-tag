@@ -26,7 +26,7 @@ export default function GamesHubPage() {
             <span className="rounded-full border border-violet-300/20 bg-violet-300/10 px-3 py-1.5">1 shared chat event bus</span>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/overlay/games" className="rounded-full bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent)))] px-5 py-2.5 text-sm font-bold text-slate-950 no-underline">
+            <Link href="/game-overlays" className="rounded-full bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent)))] px-5 py-2.5 text-sm font-bold text-slate-950 no-underline">
               Build game overlays
             </Link>
             <Link href="/" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-100 no-underline">
