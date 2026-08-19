@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState } from '@/lib/volume-store';
+import { getGameHubGame } from '@/lib/game-hub-registry';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,11 @@ const MAX_READ_EVENTS = 100;
 
 function normalizeChannel(value: unknown): string {
   return String(value || '').trim().toLowerCase().replace(/^#/, '').slice(0, 80);
+}
+
+function publicGameIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || '').trim().toLowerCase()).filter((gameId) => Boolean(getGameHubGame(gameId))))].slice(0, 20);
 }
 
 export async function GET(req: NextRequest) {
@@ -31,6 +37,7 @@ export async function GET(req: NextRequest) {
       username: String(item?.username || ''),
       displayName: String(item?.displayName || item?.username || ''),
       message: String(item?.message || ''),
+      gameIds: publicGameIds(item?.gameIds),
       color: String(item?.color || ''),
       badges: item?.badges && typeof item.badges === 'object' ? item.badges : {},
     }));
