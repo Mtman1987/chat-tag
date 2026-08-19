@@ -28,7 +28,7 @@ export function RootShell({ children }: RootShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarHydratedRef = useRef(false);
   const isOverlayView =
-    /^\/overlay\/[^/]+$/.test(pathname) ||
+    pathname.startsWith('/overlay/') ||
     pathname === '/quackverse-overlay' ||
     pathname.startsWith('/api/');
 
