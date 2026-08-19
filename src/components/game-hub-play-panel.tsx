@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
+import { getCanonicalGameCommandSpec } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
 import { ChatTagGame } from '@/components/chat-tag-game';
 import { QuackverseCardGame } from '@/components/quackverse-card-game';
@@ -17,6 +18,7 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
   const params = useSearchParams();
   const { user } = useSession();
   const channel = normalizeChannel(params.get('channel') || user?.twitchUsername || '');
+  const commandKey = getCanonicalGameCommandSpec(game)?.key || game.id;
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [active, setActive] = useState<boolean | null>(null);
   const latestId = useRef('');
@@ -68,14 +70,14 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
 
   const runtime = useMemo(() => {
     if (channel && active === false) {
-      return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center"><div><div className="text-sm font-bold text-slate-200">{game.name} is STOPPED in #{channel}</div><p className="mt-2 text-xs text-slate-500">Start it from this page or with <code className="text-cyan-100">spmt {game.id} start</code> before gameplay is accepted.</p></div></div>;
+      return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center"><div><div className="text-sm font-bold text-slate-200">{game.name} is STOPPED in #{channel}</div><p className="mt-2 text-xs text-slate-500">Start it from this page or with <code className="text-cyan-100">spmt {commandKey} start</code> before gameplay is accepted.</p></div></div>;
     }
     if (game.id === 'chat-tag') return <ChatTagGame />;
     if (game.id === 'quackverse') return <QuackverseCardGame />;
     if (game.id === 'bingo') return <BingoCard />;
     if (!channel) return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center text-sm text-slate-400">Open this page while signed in, or add <code className="mx-1 text-cyan-100">?channel=streamer</code>, to attach the live chat surface.</div>;
     return <div className="h-[min(62vh,620px)] min-h-80"><GameHubPrototypeSurface game={game} events={events} channel={channel} /></div>;
-  }, [active, channel, events, game]);
+  }, [active, channel, commandKey, events, game]);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/25 p-5">
