@@ -120,6 +120,7 @@ function chatTagSnapshot(state: any, hubPlayer: any, username: unknown) {
   return {
     rank: rankIndex >= 0 ? rankIndex + 1 : null,
     score,
+    active: player?.isActive !== false,
     summary: `${score.toLocaleString()} pts · ${tags} tags · ${tagged} tagged · ${passes} pass${passes === 1 ? '' : 'es'}`,
   };
 }
@@ -142,17 +143,19 @@ export function getPlayerGameSnapshots(
     const game = getGameHubGame(gameId);
     if (!game) return null;
     const membership = hubPlayer?.joinedGames?.[gameId];
-    const joined = Boolean(membership);
-    const active = Boolean(membership?.active);
+    let joined = Boolean(membership);
+    let active = Boolean(membership?.active);
     let rank = hubPlayer && membership ? membershipRank(state, gameId, hubPlayer.id) : null;
     let score = number(membership?.score);
     let summary = joined
       ? `${score.toLocaleString()} score · ${number(membership?.wins)} wins · ${number(membership?.plays)} plays`
       : 'not joined';
 
-    if (gameId === 'chat-tag' && hubPlayer) {
+    if (gameId === 'chat-tag') {
       const tag = chatTagSnapshot(state, hubPlayer, input.username);
       if (tag) {
+        joined = true;
+        active = membership ? Boolean(membership.active) : tag.active;
         rank = tag.rank;
         score = tag.score;
         summary = tag.summary;
@@ -205,7 +208,11 @@ export function getGamesPointsStanding(state: any, userId: unknown, username: un
 
 export function allPlayedGameIds(state: any, userId: unknown, username: unknown): string[] {
   const player = resolveHubPlayer(state, userId, username);
-  return player ? Object.keys(player.joinedGames || {}).filter((gameId) => Boolean(getGameHubGame(gameId))) : [];
+  const ids = new Set(
+    player ? Object.keys(player.joinedGames || {}).filter((gameId) => Boolean(getGameHubGame(gameId))) : [],
+  );
+  if (findTagPlayer(state, player, username)) ids.add('chat-tag');
+  return [...ids];
 }
 
 export function fitCompactReplyWithLink(prefix: string, segments: string[], link: string, limit = TWITCH_REPLY_LIMIT): string {
