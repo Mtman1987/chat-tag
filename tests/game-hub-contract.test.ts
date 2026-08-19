@@ -161,21 +161,27 @@ test('activity bell removes Bingo notifications and replaces them with Games Hub
   assert.match(activity, /recentPlayers/);
 });
 
-test('Bingo uses canonical identity, free-space rules, and shared Games Points', () => {
+test('Bingo uses canonical identity, personal center rules, and shared Games Points', () => {
   const bingo = read('src/app/api/bingo/state/route.ts');
   const card = read('src/components/bingo-card.tsx');
+  const model = read('src/lib/bingo-game.ts');
   const generate = read('src/app/api/bingo/generate/route.ts');
   assert.match(bingo, /getSessionUserFromRequest/);
   assert.match(bingo, /requireAdminRequest/);
   assert.match(bingo, /alreadyClaimedInStream/);
-  assert.match(bingo, /FREE_SPACE_INDEX/);
+  assert.match(bingo, /BINGO_CENTER_INDEX/);
+  assert.match(bingo, /setPersonalBingoCenter/);
   assert.match(bingo, /joinGameHubGame/);
   assert.match(bingo, /awardGameHubPoints/);
   assert.match(bingo, /gameId: 'bingo'/);
   assert.doesNotMatch(bingo, /postOrUpdateChatTagEmbed/);
   assert.doesNotMatch(bingo, /getScoringSettings/);
   assert.doesNotMatch(bingo, /player\.bingoPoints/);
-  assert.match(card, /disabled=\{isCovered \|\| isFreeSpace\}/);
+  assert.match(model, /BINGO_CENTER_PLACEHOLDER/);
+  assert.match(model, /getPersonalBingoBoard/);
+  assert.match(card, /centerNeedsPhrase/);
+  assert.match(card, /handleSetCenterPhrase/);
+  assert.match(card, /isFreeSpace=\{false\}/);
   assert.match(card, /user\?\.isAdmin/);
   assert.match(generate, /requireAdminRequest/);
 });
