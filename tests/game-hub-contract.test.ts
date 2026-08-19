@@ -116,6 +116,15 @@ test('game event transport is bounded and Games Points are a separate wallet', (
   assert.doesNotMatch(points, /spmt\/xp|communityPoints/i);
 });
 
+test('leaving a game preserves leaderboard history while stopping participation', () => {
+  const state = read('src/lib/game-hub-state.ts');
+  assert.match(state, /active: boolean/);
+  assert.match(state, /membership\.active = false/);
+  assert.doesNotMatch(state, /delete player\.joinedGames\[gameId\]/);
+  assert.match(state, /if \(!membership\?\.active\) continue/);
+  assert.match(state, /filter\(\(player\) => player\.active\)/);
+});
+
 test('dynamic help and rules are derived only from ACTIVE channel scope', () => {
   const command = read('src/app/api/game-hub/command/route.ts');
   const help = read('src/app/games/help/page.tsx');
@@ -130,6 +139,15 @@ test('dynamic help and rules are derived only from ACTIVE channel scope', () => 
   assert.match(scope, /resolveChannelGameIds/);
 });
 
+test('read-only game scope, Bingo board, and rules pages stay public for OBS and chat links', () => {
+  const middleware = read('src/middleware.ts');
+  assert.match(middleware, /'\/games'/);
+  assert.match(middleware, /isPublicGameScopeRead/);
+  assert.match(middleware, /pathname === '\/api\/game-hub\/channel'/);
+  assert.match(middleware, /isPublicBingoStateRead/);
+  assert.match(middleware, /pathname === '\/api\/bingo\/state'/);
+});
+
 test('activity bell removes Bingo notifications and replaces them with Games Hub scope/activity', () => {
   const feed = read('src/components/activity-feed.tsx');
   const activity = read('src/app/api/game-hub/activity/route.ts');
@@ -142,14 +160,23 @@ test('activity bell removes Bingo notifications and replaces them with Games Hub
   assert.match(activity, /recentPlayers/);
 });
 
-test('Bingo uses shared game score and Games Points instead of Chat Tag scoring/notifications', () => {
+test('Bingo uses canonical identity, free-space rules, and shared Games Points', () => {
   const bingo = read('src/app/api/bingo/state/route.ts');
+  const card = read('src/components/bingo-card.tsx');
+  const generate = read('src/app/api/bingo/generate/route.ts');
+  assert.match(bingo, /getSessionUserFromRequest/);
+  assert.match(bingo, /requireAdminRequest/);
+  assert.match(bingo, /alreadyClaimedInStream/);
+  assert.match(bingo, /FREE_SPACE_INDEX/);
   assert.match(bingo, /joinGameHubGame/);
   assert.match(bingo, /awardGameHubPoints/);
   assert.match(bingo, /gameId: 'bingo'/);
   assert.doesNotMatch(bingo, /postOrUpdateChatTagEmbed/);
   assert.doesNotMatch(bingo, /getScoringSettings/);
   assert.doesNotMatch(bingo, /player\.bingoPoints/);
+  assert.match(card, /disabled=\{isCovered \|\| isFreeSpace\}/);
+  assert.match(card, /user\?\.isAdmin/);
+  assert.match(generate, /requireAdminRequest/);
 });
 
 test('Bingo revival uses the same Play slot and restores the old route safely', () => {
