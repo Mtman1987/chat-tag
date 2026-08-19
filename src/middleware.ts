@@ -7,6 +7,7 @@ const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').r
 const SPMT_COOKIE = 'chat_tag_spmt_session';
 const SPMT_REFRESH_COOKIE = 'chat_tag_spmt_refresh';
 const SPMT_REQUEST_TIMEOUT_MS = 5000;
+const STREAMWEAVER_BLACKLIST_SCOPE = 'chat-tag:blacklist:read';
 
 const PUBLIC_PREFIXES = [
   '/about',
@@ -43,6 +44,29 @@ function hasValidBotSecret(request: NextRequest): boolean {
   } catch {
     return false;
   }
+}
+
+function bearerToken(request: NextRequest): string {
+  return String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+}
+
+async function hasStreamWeaverBlacklistServiceAccess(request: NextRequest): Promise<boolean> {
+  if (request.method !== 'GET' || request.nextUrl.pathname !== '/api/bot/blacklist') return false;
+  const token = bearerToken(request);
+  if (!token) return false;
+
+  const response = await fetch(`${SPMT_BASE_URL}/api/oauth/serviceinfo`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    cache: 'no-store',
+    signal: requestSignal(),
+  }).catch(() => null);
+  if (!response?.ok) return false;
+
+  const service = await response.json().catch(() => null) as any;
+  const scopes = Array.isArray(service?.scopes) ? service.scopes.map(String) : [];
+  return service?.token_use === 'client_credentials'
+    && String(service?.client_id || '') === 'streamweaver'
+    && scopes.includes(STREAMWEAVER_BLACKLIST_SCOPE);
 }
 
 function debugEnabled(scope: string) {
@@ -172,14 +196,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Service-to-service calls must prove possession of the shared secret in a
-  // request header. Secrets in query strings leak through URLs, logs, history,
-  // analytics and referrers, so they are intentionally not accepted here.
+  if (await hasStreamWeaverBlacklistServiceAccess(request)) {
+    return NextResponse.next();
+  }
+
+  // Legacy service authentication remains accepted for existing callers while
+  // bot-to-bot integrations migrate to scoped SPMT client-credentials tokens.
   if (hasValidBotSecret(request)) {
     return NextResponse.next();
   }
 
-  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+  let accessToken = request.cookies.get(SPMT_COOKIE)?.value || bearerToken(request) || '';
   let identity = await fetchSpmtIdentity(accessToken);
   let refreshed: Awaited<ReturnType<typeof refreshSpmtSession>> = null;
   if (!identity) {
