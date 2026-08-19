@@ -61,7 +61,7 @@ export function BingoCard() {
 
   const fetchState = useCallback(async () => {
     try {
-      const res = await fetch('/api/bingo/state', { cache: 'no-store' });
+      const res = await fetch('/api/bingo/me', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.bingo && Array.isArray(data.bingo.phrases) && data.bingo.phrases.length > 0) {
@@ -73,7 +73,7 @@ export function BingoCard() {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch bingo state', error);
+      console.error('Failed to fetch personal bingo state', error);
       setPhrases((current) => {
         if (current.length > 0) return current;
         const shuffled = shuffleArray(commonBingoPhrases).slice(0, 24);
@@ -100,7 +100,7 @@ export function BingoCard() {
         intervalRef.current = null;
       }
     };
-  }, [fetchState, phrases.length]);
+  }, [fetchState, phrases.length, user?.twitchUsername]);
 
   const handleCellClick = async (index: number, streamer: LiveStreamer) => {
     if (covered[index]) return;
