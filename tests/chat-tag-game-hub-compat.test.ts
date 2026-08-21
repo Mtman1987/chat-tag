@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +31,53 @@ test('namespaced Chat Tag commands bypass per-channel ACTIVE gating', () => {
     'Chat Tag compatibility must run before per-channel Games Hub ACTIVE gating');
   assert.match(route, /rewriteCommand: legacyChatTagRewrite\(actionArgs\)/);
   assert.match(route, /globalChatTag: true/);
+});
+
+test('deployed bot build keeps proven Chat Tag commands ahead of Games Hub routing', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-tag-game-hub-patch-'));
+  const tempScripts = path.join(tempRoot, 'scripts');
+  fs.mkdirSync(tempScripts, { recursive: true });
+  fs.copyFileSync(path.join(root, 'bot.js'), path.join(tempRoot, 'bot.js'));
+  fs.copyFileSync(
+    path.join(root, 'scripts/patch-game-hub-bot.mjs'),
+    path.join(tempScripts, 'patch-game-hub-bot.mjs'),
+  );
+
+  try {
+    execFileSync(process.execPath, [path.join(tempScripts, 'patch-game-hub-bot.mjs')], {
+      cwd: tempRoot,
+      stdio: 'pipe',
+    });
+    const patchedBot = fs.readFileSync(path.join(tempRoot, 'bot.js'), 'utf8');
+
+    assert.match(patchedBot, /const legacyChatTagCommands = new Set\(/);
+    assert.match(patchedBot, /if \(!legacyChatTagCommands\.has\(cmd\)\)/);
+    assert.match(patchedBot, /const chatTagNamespace = cmd === 'chattag' \|\| cmd === 'taggame'/);
+    assert.match(patchedBot, /Chat Tag is always active globally; no channel start is required/);
+    assert.match(patchedBot, /CHAT_TAG_API_TIMEOUT_MS/);
+
+    const legacyGuard = patchedBot.indexOf('if (!legacyChatTagCommands.has(cmd))');
+    const hubCall = patchedBot.indexOf("apiCall('/api/game-hub/command'");
+    const scoreHandler = patchedBot.indexOf("cmd === 'score'");
+    const liveHandler = patchedBot.indexOf("cmd === 'live'");
+    assert.ok(legacyGuard >= 0 && hubCall > legacyGuard, 'Games Hub API call must be inside the legacy-command guard');
+    assert.ok(scoreHandler >= 0 && liveHandler >= 0, 'score/live must remain present in the deployed bot source');
+
+    execFileSync(process.execPath, ['--check', path.join(tempRoot, 'bot.js')], {
+      cwd: tempRoot,
+      stdio: 'pipe',
+    });
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('bot Fly health reports process liveness without hiding Twitch readiness', () => {
+  const patch = read('scripts/patch-game-hub-bot.mjs');
+  assert.match(patch, /ready: isIrcConnected/);
+  assert.match(patch, /ok: true/);
+  assert.match(patch, /res\.writeHead\(200, \{ 'Content-Type': 'application\/json' \}\)/);
+  assert.doesNotMatch(patch, /healthReplacement[\s\S]*res\.writeHead\(isIrcConnected \? 200 : 503/);
 });
 
 test('legacy Tag players remain scoreable without a Games Hub membership migration', () => {
