@@ -21,6 +21,20 @@ type ProfileResponse = {
   profile: PublicOverlayProfile;
 };
 
+type RuntimeAction = {
+  id: string;
+  at: string;
+  channel: string;
+  gameId: string;
+  username: string;
+  displayName: string;
+  message: string;
+};
+
+function isSpmtCommand(message: string) {
+  return /^!?@?spmt(?:\s|$)/i.test(String(message || '').trim());
+}
+
 export default function GameHubOverlayPage() {
   const params = useParams<{ profileId: string }>();
   const profileId = String(params?.profileId || '');
@@ -28,7 +42,8 @@ export default function GameHubOverlayPage() {
   const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [error, setError] = useState('');
-  const latestId = useRef('');
+  const latestChatId = useRef('');
+  const latestRuntimeId = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -69,33 +84,61 @@ export default function GameHubOverlayPage() {
   useEffect(() => {
     if (!profile?.ownerLogin) return;
     let cancelled = false;
-    latestId.current = '';
+    latestChatId.current = '';
+    latestRuntimeId.current = '';
     setEvents([]);
 
-    async function poll() {
+    function mergeEvents(incoming: GameHubChatEvent[]) {
+      if (!incoming.length || cancelled) return;
+      setEvents((current) => {
+        const merged = new Map(current.map((event) => [event.id, event]));
+        for (const event of incoming) merged.set(event.id, event);
+        return [...merged.values()].sort((a, b) => a.at.localeCompare(b.at)).slice(-250);
+      });
+    }
+
+    async function pollChat() {
       const query = new URLSearchParams({ channel: profile!.ownerLogin });
-      if (latestId.current) query.set('after', latestId.current);
+      if (latestChatId.current) query.set('after', latestChatId.current);
       try {
         const response = await fetch(`/api/overlay/game-hub/events?${query.toString()}`, { cache: 'no-store' });
         if (!response.ok) return;
         const body = await response.json();
-        const incoming = Array.isArray(body.events) ? body.events as GameHubChatEvent[] : [];
-        if (!incoming.length || cancelled) return;
-        latestId.current = String(body.latestId || incoming.at(-1)?.id || latestId.current);
-        setEvents((current) => {
-          const merged = new Map(current.map((event) => [event.id, event]));
-          for (const event of incoming) merged.set(event.id, event);
-          return [...merged.values()].sort((a, b) => a.at.localeCompare(b.at)).slice(-250);
-        });
-      } catch {
-        // Overlay polling is intentionally quiet. The next tick retries.
-      }
+        const raw = Array.isArray(body.events) ? body.events as GameHubChatEvent[] : [];
+        if (raw.length) latestChatId.current = String(body.latestId || raw.at(-1)?.id || latestChatId.current);
+        mergeEvents(raw.filter((event) => !isSpmtCommand(event.message)));
+      } catch {}
     }
 
-    void poll();
-    const timer = window.setInterval(() => void poll(), 1000);
+    async function pollRuntime() {
+      const query = new URLSearchParams({ channel: profile!.ownerLogin, games: profile!.gameIds.join(',') });
+      if (latestRuntimeId.current) query.set('after', latestRuntimeId.current);
+      try {
+        const response = await fetch(`/api/overlay/game-hub/runtime?${query.toString()}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json();
+        const actions = Array.isArray(body.actions) ? body.actions as RuntimeAction[] : [];
+        if (actions.length) latestRuntimeId.current = String(body.latestId || actions.at(-1)?.id || latestRuntimeId.current);
+        mergeEvents(actions.map((action) => ({
+          id: action.id,
+          at: action.at,
+          channel: action.channel,
+          username: action.username,
+          displayName: action.displayName,
+          message: action.message,
+          gameIds: [action.gameId],
+        }) as GameHubChatEvent));
+      } catch {}
+    }
+
+    void pollChat();
+    void pollRuntime();
+    const timer = window.setInterval(() => {
+      void pollChat();
+      void pollRuntime();
+    }, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [profile?.ownerLogin]);
+  }, [profile?.ownerLogin, profile?.gameIds]);
 
   const games = useMemo(() => {
     if (!profile) return [];
