@@ -10,6 +10,14 @@ import { getPlayerGameSnapshots } from '../src/lib/game-hub-chat-summary';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
+function extractSender(source: string): string {
+  const start = source.indexOf('async function sendChatWithSharedFallback');
+  assert.ok(start >= 0, 'sendChatWithSharedFallback must exist');
+  const nextFunction = source.indexOf('\nasync function ', start + 1);
+  assert.ok(nextFunction > start, 'could not isolate sendChatWithSharedFallback');
+  return source.slice(start, nextFunction);
+}
+
 test('legacy Chat Tag root commands bypass Games Hub interception', () => {
   const route = read('src/app/api/game-hub/command/route.ts');
   assert.match(route, /LEGACY_CHAT_TAG_ROOT_COMMANDS = new Set\(\['help', 'rules', 'score'\]\)/);
@@ -33,10 +41,11 @@ test('namespaced Chat Tag commands bypass per-channel ACTIVE gating', () => {
   assert.match(route, /globalChatTag: true/);
 });
 
-test('deployed bot build keeps proven Chat Tag commands ahead of Games Hub routing', () => {
+test('deployed bot build keeps proven Chat Tag commands and sender routing intact', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-tag-game-hub-patch-'));
   const tempScripts = path.join(tempRoot, 'scripts');
   fs.mkdirSync(tempScripts, { recursive: true });
+  const originalBot = read('bot.js');
   fs.copyFileSync(path.join(root, 'bot.js'), path.join(tempRoot, 'bot.js'));
   fs.copyFileSync(
     path.join(root, 'scripts/patch-game-hub-bot.mjs'),
@@ -63,6 +72,21 @@ test('deployed bot build keeps proven Chat Tag commands ahead of Games Hub routi
     assert.ok(legacyGuard >= 0 && hubCall > legacyGuard, 'Games Hub API call must be inside the legacy-command guard');
     assert.ok(scoreHandler >= 0 && liveHandler >= 0, 'score/live must remain present in the deployed bot source');
 
+    // Critical production invariant: the build patch must not alter the proven
+    // normal-vs-shared Twitch sender at all.
+    assert.equal(extractSender(patchedBot), extractSender(originalBot));
+    const sender = extractSender(patchedBot);
+    assert.match(sender, /const inSharedChat = Boolean\(member\?\.isSharedChat\)/);
+    assert.match(sender, /sendMessageViaAPI\(normalized, message, true\)/);
+    assert.match(sender, /await client\.say\(`#\$\{normalized\}`, message\)/);
+
+    // IRC disconnects must make Fly health fail again, and Twitch NOTICE events
+    // must be visible for auth/moderation/chat-mode rejection diagnosis.
+    assert.match(patchedBot, /ok: isIrcConnected/);
+    assert.match(patchedBot, /res\.writeHead\(isIrcConnected \? 200 : 503/);
+    assert.match(patchedBot, /client\.on\('notice'/);
+    assert.match(patchedBot, /Twitch NOTICE channel=/);
+
     execFileSync(process.execPath, ['--check', path.join(tempRoot, 'bot.js')], {
       cwd: tempRoot,
       stdio: 'pipe',
@@ -72,12 +96,12 @@ test('deployed bot build keeps proven Chat Tag commands ahead of Games Hub routi
   }
 });
 
-test('bot Fly health reports process liveness without hiding Twitch readiness', () => {
+test('bot Fly health follows Twitch IRC readiness', () => {
   const patch = read('scripts/patch-game-hub-bot.mjs');
-  assert.match(patch, /ready: isIrcConnected/);
-  assert.match(patch, /ok: true/);
-  assert.match(patch, /res\.writeHead\(200, \{ 'Content-Type': 'application\/json' \}\)/);
-  assert.doesNotMatch(patch, /healthReplacement[\s\S]*res\.writeHead\(isIrcConnected \? 200 : 503/);
+  assert.match(patch, /IRC-aware bot health contract is missing/);
+  assert.match(patch, /res\.writeHead\(isIrcConnected \? 200 : 503/);
+  assert.doesNotMatch(patch, /const healthReplacement/);
+  assert.doesNotMatch(patch, /ok: true,\\n        ready: isIrcConnected/);
 });
 
 test('legacy Tag players remain scoreable without a Games Hub membership migration', () => {
