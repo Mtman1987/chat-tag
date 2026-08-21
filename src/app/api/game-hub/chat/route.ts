@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
 import { resolveGameHubCommandKey } from '@/lib/game-hub-commands';
+import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
 import {
   getGameHubStore,
   normalizeGameHubPlayerId,
@@ -22,11 +23,17 @@ function cleanText(value: unknown, max: number): string {
   return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 }
 
-function targetedGameId(message: string): string | null {
+function targetedGame(message: string): { gameId: string; action: string; args: string[] } | null {
   const match = message.trim().match(/^!?@?spmt(?:\s+|$)(.*)$/i);
   if (!match) return null;
-  const key = String(match[1] || '').trim().split(/\s+/).filter(Boolean)[0];
-  return resolveGameHubCommandKey(key)?.gameId || null;
+  const parts = String(match[1] || '').trim().split(/\s+/).filter(Boolean);
+  const spec = resolveGameHubCommandKey(parts[0]);
+  if (!spec) return null;
+  return {
+    gameId: spec.gameId,
+    action: String(parts[1] || 'join').toLowerCase(),
+    args: parts.slice(2),
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -66,10 +73,25 @@ export async function POST(req: NextRequest) {
     const playerId = normalizeGameHubPlayerId(body.userId, username);
     const player = getGameHubStore(state).players[playerId];
     const participatingGameIds = result.activeGameIds.filter((gameId) => player?.joinedGames?.[gameId]?.active === true);
-    const commandGameId = targetedGameId(message);
-    const gameIds = commandGameId
-      ? (result.activeGameIds.includes(commandGameId) ? [commandGameId] : [])
+    const command = targetedGame(message);
+    const gameIds = command
+      ? (result.activeGameIds.includes(command.gameId) ? [command.gameId] : [])
       : participatingGameIds;
+
+    let runtimeActionId: string | null = null;
+    if (command && gameIds.length) {
+      const runtimeAction = recordGameHubRuntimeAction(state, {
+        channel,
+        gameId: command.gameId,
+        actorId: body.userId,
+        username,
+        displayName: baseEvent.displayName,
+        action: command.action,
+        args: command.args,
+        message,
+      });
+      runtimeActionId = runtimeAction.id;
+    }
 
     state.gameSettings.default ||= {};
     const store = (state.gameSettings.default[STORE_KEY] ||= {}) as Record<string, JsonObject[]>;
@@ -80,12 +102,13 @@ export async function POST(req: NextRequest) {
       .filter((item) => Date.parse(String(item?.at || '')) >= cutoff)
       .slice(-MAX_EVENTS_PER_CHANNEL);
 
-    return { ...result, participatingGameIds, eventGameIds: gameIds };
+    return { ...result, participatingGameIds, eventGameIds: gameIds, runtimeActionId };
   });
 
   return NextResponse.json({
     accepted: true,
     id: baseEvent.id,
+    runtimeActionId: activity.runtimeActionId,
     eventGameIds: activity.eventGameIds,
     scoredGameIds: activity.scoredGameIds,
     pointsAwarded: activity.pointsAwarded,
