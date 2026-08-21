@@ -29,6 +29,8 @@ import { readAppState, updateAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
+const LEGACY_CHAT_TAG_ROOT_COMMANDS = new Set(['help', 'rules', 'score']);
+
 function parseSpmt(message: unknown): string[] {
   const raw = String(message || '').trim();
   const match = raw.match(/^!?@?spmt(?:\s+|$)(.*)$/i);
@@ -93,6 +95,14 @@ export async function POST(req: NextRequest) {
   if (!channel || !username) return NextResponse.json({ handled: false });
 
   const command = parts[0].toLowerCase();
+
+  // Chat Tag predates Games Hub and is a persistent ecosystem-wide game. Keep
+  // its original root commands backward compatible so existing players never
+  // need to rejoin or relearn commands just because Games Hub is installed.
+  if (LEGACY_CHAT_TAG_ROOT_COMMANDS.has(command)) {
+    return NextResponse.json({ handled: false, legacyChatTag: true });
+  }
+
   if (command === 'help' || command === 'rules' || command === 'games') {
     const state = await readAppState();
     const activeIds = resolveChannelGameIds(state, channel);
@@ -186,6 +196,37 @@ export async function POST(req: NextRequest) {
   const actionArgs = rawActionArgs.map((part) => part.toLowerCase());
   const action = String(actionArgs[0] || '').toLowerCase();
   const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
+
+  // Chat Tag is global and persistent, not a per-channel Games Hub session.
+  // Namespaced Chat Tag commands are compatibility aliases for the legacy
+  // parser and must never be blocked by a channel ACTIVE/STOPPED setting.
+  if (game.id === 'chat-tag' && action !== 'start' && action !== 'stop') {
+    if (!knownAction(game.id, actionArgs)) {
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} ${game.name}: ${canonicalCommandSummary(game)}`.slice(0, 480),
+      });
+    }
+
+    if (action === 'leave') {
+      const playerId = normalizeGameHubPlayerId(userId, username);
+      await updateAppState((draft) => leaveGameHubGame(draft, playerId, game.id));
+    } else if (!actionArgs.length) {
+      await updateAppState((draft) => joinGameHubGame(draft, {
+        userId,
+        username,
+        displayName,
+        gameId: game.id,
+      }));
+    }
+
+    return NextResponse.json({
+      handled: false,
+      rewriteCommand: legacyChatTagRewrite(actionArgs),
+      gameHubHandled: true,
+      globalChatTag: true,
+    });
+  }
 
   if (action === 'start' || action === 'stop') {
     if (!canControl) {
