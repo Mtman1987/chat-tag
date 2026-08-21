@@ -61,17 +61,24 @@ if (!source.includes(apiTimeoutMarker)) {
   source = source.replace(apiTimeoutTarget, apiTimeoutReplacement);
 }
 
-// Fly health is process liveness, not Twitch IRC readiness. A Twitch reconnect
-// should remain visible in the payload but must not make Fly eject the healthy
-// Node process from routing and amplify a transient IRC disconnect.
-const healthMarker = 'ready: isIrcConnected';
-const healthTarget = `      const payload = {\n        ok: isIrcConnected,\n        botUser: username,\n        connected: isIrcConnected,\n        joinedChannels: client.getChannels().length,\n        uptimeSec: Math.floor(process.uptime())\n      };\n      res.writeHead(isIrcConnected ? 200 : 503, { 'Content-Type': 'application/json' });`;
-const healthReplacement = `      const payload = {\n        ok: true,\n        ready: isIrcConnected,\n        botUser: username,\n        connected: isIrcConnected,\n        joinedChannels: client.getChannels().length,\n        uptimeSec: Math.floor(process.uptime())\n      };\n      res.writeHead(200, { 'Content-Type': 'application/json' });`;
-if (!source.includes(healthMarker)) {
-  if (!source.includes(healthTarget)) {
-    throw new Error('Bot liveness health patch target was not found.');
+// Keep the original health contract: the bot is healthy only while Twitch IRC
+// is connected. Fly checks /health every 30s, so a disconnected bot must remain
+// visible as unhealthy instead of being reported as a healthy but silent process.
+const healthContract = "res.writeHead(isIrcConnected ? 200 : 503, { 'Content-Type': 'application/json' });";
+if (!source.includes(healthContract)) {
+  throw new Error('IRC-aware bot health contract is missing. Refusing to mask a disconnected bot as healthy.');
+}
+
+// Surface Twitch IRC NOTICE messages without changing send routing. This exposes
+// auth, moderation, verification and chat-mode rejections that tmi.js receives.
+const noticeMarker = "client.on('notice'";
+const noticeTarget = `  client.on('connected', () => {\n    isIrcConnected = true;\n  });\n\n  // Catch unhandled errors to prevent crashes`;
+const noticeReplacement = `  client.on('connected', () => {\n    isIrcConnected = true;\n  });\n\n  client.on('notice', (channel, msgId, message) => {\n    const target = String(channel || '').replace(/^#/, '') || 'unknown';\n    console.warn(\`[Bot] Twitch NOTICE channel=\${target} msg-id=\${msgId || 'unknown'}: \${message || ''}\`);\n  });\n\n  // Catch unhandled errors to prevent crashes`;
+if (!source.includes(noticeMarker)) {
+  if (!source.includes(noticeTarget)) {
+    throw new Error('Twitch NOTICE diagnostic patch target was not found.');
   }
-  source = source.replace(healthTarget, healthReplacement);
+  source = source.replace(noticeTarget, noticeReplacement);
 }
 
 if (
@@ -85,12 +92,12 @@ if (
   !source.includes("const chatTagNamespace = cmd === 'chattag' || cmd === 'taggame'") ||
   !source.includes('if (!legacyChatTagCommands.has(cmd))') ||
   !source.includes(apiTimeoutMarker) ||
-  !source.includes(healthMarker) ||
-  !source.includes("res.writeHead(200, { 'Content-Type': 'application/json' })") ||
+  !source.includes(healthContract) ||
+  !source.includes(noticeMarker) ||
   !source.includes('channel: channelName')
 ) {
   throw new Error('Games Hub bot patch contract is incomplete.');
 }
 
 if (source !== original) fs.writeFileSync(file, source, 'utf8');
-console.log('Games Hub bot chat-event + legacy-safe command + liveness patch applied.');
+console.log('Games Hub bot chat-event + legacy-safe command + IRC-health diagnostics patch applied.');
