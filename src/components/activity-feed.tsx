@@ -111,7 +111,7 @@ export function ActivityFeed() {
               ))}
             </div>
           </DropdownMenuItem>
-        )) : <DropdownMenuItem disabled>No Games Hub scopes are active.</DropdownMenuItem>}
+        )) : <DropdownMenuItem disabled>No Nebula Arcade scopes are active.</DropdownMenuItem>}
 
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="flex items-center gap-2">
@@ -130,7 +130,7 @@ export function ActivityFeed() {
               {' · '}{formatTimestamp(entry.lastActiveAt)}
             </p>
           </DropdownMenuItem>
-        )) : <DropdownMenuItem disabled>No Games Hub player activity yet.</DropdownMenuItem>}
+        )) : <DropdownMenuItem disabled>No Nebula Arcade player activity yet.</DropdownMenuItem>}
 
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="flex items-center gap-2">

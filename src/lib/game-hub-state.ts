@@ -231,7 +231,7 @@ export function spendGameHubPoints(
     at: new Date().toISOString(),
     playerId: player.id,
     amount: -amount,
-    reason: String(reason || 'Games Hub purchase').slice(0, 160),
+    reason: String(reason || 'Nebula Arcade purchase').slice(0, 160),
   });
   return player;
 }
@@ -256,9 +256,9 @@ export function recordGameHubChatActivity(
   for (const gameId of activeGameIds) {
     const membership = player.joinedGames[gameId];
     if (!membership?.active) continue;
-    membership.lastActiveAt = nowIso;
     const lastScoreAt = Date.parse(String(membership.lastScoreAt || 0));
     if (!Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS) {
+      membership.lastActiveAt = nowIso;
       membership.score += 1;
       membership.lastScoreAt = nowIso;
       scoredGameIds.push(gameId);
@@ -271,7 +271,7 @@ export function recordGameHubChatActivity(
     if (!Number.isFinite(lastPointsAt) || now - lastPointsAt >= GAME_POINTS_INTERVAL_MS) {
       pointsAwarded = 1;
       player.lastPointsAwardAt = nowIso;
-      awardGameHubPoints(state, player, 1, 'Active Games Hub participation', { channel });
+      awardGameHubPoints(state, player, 1, 'Active Nebula Arcade participation', { channel });
     }
   }
 

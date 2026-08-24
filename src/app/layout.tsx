@@ -23,8 +23,8 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: 'Chat Tag',
-  description: 'Game system and community tools for Twitch streams.',
+  title: 'Nebula Arcade',
+  description: 'The Space Mountain community arcade for Twitch streams.',
   manifest: '/manifest.json',
   icons: {
     icon: '/brand/chat-tag-icon-192.png',

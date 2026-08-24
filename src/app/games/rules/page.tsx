@@ -22,13 +22,13 @@ export default async function ActiveGameRulesPage({
     <main className="cosmic-page max-w-6xl" data-workspace-main>
       <section className="cosmic-card space-y-5">
         <div>
-          <div className="cosmic-status">Games Hub · Live guide</div>
+          <div className="cosmic-status">Nebula Arcade · Live guide</div>
           <h1 className="mt-3 font-headline text-3xl font-bold text-white">{channel ? `Rules + commands for #${channel}` : 'Active game guide'}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">One page generated from the games currently scoped ACTIVE for this Twitch channel. Stopped games and their commands are intentionally omitted. Chat replies also include a compact fallback before this link in case Twitch suppresses links from an unmodded bot.</p>
         </div>
 
         <section className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
-          <h2 className="font-headline text-lg text-white">Games Hub commands</h2>
+          <h2 className="font-headline text-lg text-white">Nebula Arcade commands</h2>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt rules</code>
             <code className="rounded-full bg-black/30 px-3 py-1.5 text-cyan-100">spmt help</code>
@@ -40,7 +40,7 @@ export default async function ActiveGameRulesPage({
           </div>
           <div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
             <p><strong className="text-white">score</strong> — your stats for games ACTIVE in this stream.</p>
-            <p><strong className="text-white">leader</strong> — your all-games Games Hub profile.</p>
+            <p><strong className="text-white">leader</strong> — your all-games Nebula Arcade profile.</p>
             <p><strong className="text-white">points</strong> — your spendable Games Points balance and rank.</p>
             <p><strong className="text-white">pleader</strong> — Games Points leaderboard.</p>
           </div>
@@ -86,7 +86,7 @@ export default async function ActiveGameRulesPage({
             </article>
           );
         }) : (
-          <div className="rounded-2xl border border-white/10 bg-black/25 p-6 text-sm text-slate-400">{channel ? `No Games Hub games are currently ACTIVE for #${channel}.` : 'Add ?channel=streamer to this URL.'}</div>
+          <div className="rounded-2xl border border-white/10 bg-black/25 p-6 text-sm text-slate-400">{channel ? `No Nebula Arcade games are currently ACTIVE for #${channel}.` : 'Add ?channel=streamer to this URL.'}</div>
         )}
       </section>
     </main>

@@ -34,9 +34,9 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl" data-workspace-topbar>
       <div className="mx-auto flex w-full max-w-[1500px] items-center gap-3 px-3 py-2 sm:px-5 md:px-6">
-        <Link href="/" className="flex min-w-0 shrink-0 items-center gap-2.5 md:hidden" aria-label="ChatTag home">
+        <Link href="/" className="flex min-w-0 shrink-0 items-center gap-2.5 md:hidden" aria-label="Nebula Arcade home">
           <div className="relative h-10 w-24 overflow-hidden rounded-lg border border-white/10 bg-slate-950/70 shadow-[0_8px_24px_rgba(34,211,238,0.14)] sm:h-11 sm:w-28">
-            <Image src="/brand/chat-tag-logo.png" alt="ChatTag" fill priority className="object-contain p-1" />
+            <Image src="/brand/chat-tag-logo.png" alt="Nebula Arcade" fill priority className="object-contain p-1" />
           </div>
         </Link>
 
@@ -45,7 +45,7 @@ export function Header() {
           <h1 className="truncate font-headline text-base font-bold tracking-wide text-white">{sectionTitle}</h1>
         </div>
 
-        <nav className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:hidden" data-workspace-tabs aria-label="ChatTag navigation">
+        <nav className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:hidden" data-workspace-tabs aria-label="Nebula Arcade navigation">
           {primaryNavItems.map((item) => {
             const active = item.href === '/' ? pathname === '/' : pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;

@@ -1,7 +1,7 @@
 import { makeId, type JsonObject } from '@/lib/volume-store';
-import { normalizeGameHubGameIds } from '@/lib/game-hub-registry';
+import { GAME_HUB_CATALOG, normalizeGameHubGameIds } from '@/lib/game-hub-registry';
 
-export type GameOverlayLayout = 'auto-grid' | 'stack' | 'focus';
+export type GameOverlayLayout = 'rotation' | 'auto-grid' | 'stack' | 'focus';
 
 export type GameOverlayProfile = {
   id: string;
@@ -16,7 +16,7 @@ export type GameOverlayProfile = {
 };
 
 function normalizeLayout(value: unknown): GameOverlayLayout {
-  return value === 'stack' || value === 'focus' ? value : 'auto-grid';
+  return value === 'stack' || value === 'focus' || value === 'auto-grid' ? value : 'rotation';
 }
 
 function normalizeLogin(value: unknown): string {
@@ -31,7 +31,7 @@ export function normalizeGameOverlayProfile(value: JsonObject): GameOverlayProfi
     id,
     ownerUserId,
     ownerLogin: normalizeLogin(value?.ownerLogin),
-    name: String(value?.name || 'Games Overlay').trim().slice(0, 80) || 'Games Overlay',
+    name: String(value?.name || 'Nebula Arcade Overlay').trim().slice(0, 80) || 'Nebula Arcade Overlay',
     gameIds: normalizeGameHubGameIds(value?.gameIds),
     layout: normalizeLayout(value?.layout),
     transparent: value?.transparent !== false,
@@ -42,12 +42,14 @@ export function normalizeGameOverlayProfile(value: JsonObject): GameOverlayProfi
 
 export function createGameOverlayProfile(ownerUserId: string, input: JsonObject = {}): GameOverlayProfile {
   const now = new Date().toISOString();
-  const gameIds = normalizeGameHubGameIds(input.gameIds);
+  const gameIds = input.gameIds == null
+    ? GAME_HUB_CATALOG.map((game) => game.id)
+    : normalizeGameHubGameIds(input.gameIds);
   return {
     id: makeId('games_overlay'),
     ownerUserId,
     ownerLogin: normalizeLogin(input.ownerLogin),
-    name: String(input.name || 'Games Overlay').trim().slice(0, 80) || 'Games Overlay',
+    name: String(input.name || 'Nebula Arcade Overlay').trim().slice(0, 80) || 'Nebula Arcade Overlay',
     gameIds,
     layout: normalizeLayout(input.layout),
     transparent: input.transparent !== false,

@@ -30,7 +30,7 @@ export default async function GameHubDetailPage({
     <main className="cosmic-page max-w-6xl" data-workspace-main>
       <section className="cosmic-card space-y-5">
         <div>
-          <div className="cosmic-status">Games Hub · {game.category}</div>
+          <div className="cosmic-status">Nebula Arcade · {game.category}</div>
           <h1 className="mt-3 font-headline text-3xl font-bold text-white md:text-4xl">{game.name}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{game.description}</p>
         </div>
@@ -40,7 +40,7 @@ export default async function GameHubDetailPage({
         <section className="rounded-2xl border border-white/10 bg-black/25 p-5">
           <h2 className="font-headline text-xl text-white">Rules</h2>
           <p className="mt-2 text-sm leading-7 text-slate-300">{game.howToPlay}</p>
-          <p className="mt-3 text-xs leading-5 text-slate-500">Game score belongs to this game’s leaderboard. Games Points are a separate spendable Games Hub wallet and are not SPMT XP.</p>
+          <p className="mt-3 text-xs leading-5 text-slate-500">Game score belongs to this game’s leaderboard. Games Points are a separate spendable Nebula Arcade wallet and are not SPMT XP.</p>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">

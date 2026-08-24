@@ -249,5 +249,5 @@ export function GameHubPrototypeSurface({ game, events, channel }: { game: GameH
     return <div className="grid min-h-36 place-items-center text-sm text-white/45">Live chat runtime connected.</div>;
   }, [channel, game.id, passive, recent]);
 
-  return <section className="h-full min-h-0 overflow-hidden rounded-2xl border border-white/15 bg-slate-950/70 p-4 text-white shadow-2xl backdrop-blur"><header className="mb-3 flex items-center justify-between gap-2"><div><div className="text-[9px] uppercase tracking-[.18em] text-cyan-200/60">Games Hub</div><h2 className="font-bold">{game.name}</h2></div><span className="rounded-full bg-emerald-300/10 px-2 py-1 text-[9px] font-bold text-emerald-100">ACTIVE · #{channel}</span></header>{content}</section>;
+  return <section className="h-full min-h-0 overflow-hidden p-4 text-white">{content}</section>;
 }

@@ -31,9 +31,9 @@ export default async function GamesHubLeaderProfilePage({
     <main className="cosmic-page max-w-6xl" data-workspace-main>
       <section className="cosmic-card space-y-6">
         <div>
-          <div className="cosmic-status">Games Hub · Player profile</div>
+          <div className="cosmic-status">Nebula Arcade · Player profile</div>
           <h1 className="mt-3 font-headline text-3xl font-bold text-white">
-            {standing?.displayName || playerLogin || 'Games Hub player'}
+            {standing?.displayName || playerLogin || 'Nebula Arcade player'}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">
             This is the all-games profile behind <code className="text-cyan-100">spmt leader</code>. Unlike <code className="text-cyan-100">spmt score</code>, it is not limited to one streamer’s ACTIVE scope.
@@ -87,7 +87,7 @@ export default async function GamesHubLeaderProfilePage({
 
         <div className="flex flex-wrap gap-3">
           <Link href="/games/leaderboard" className="rounded-full border border-violet-300/20 bg-violet-300/10 px-5 py-2.5 text-sm font-bold text-violet-100 no-underline">Games Points leaderboard</Link>
-          <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Games Hub</Link>
+          <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Nebula Arcade</Link>
         </div>
       </section>
     </main>

@@ -27,7 +27,7 @@ test('header exposes the guarded Admin surface only from server-backed session a
   assert.match(text, /isAdminRoute/);
 });
 
-test('desktop ChatTag navigation exposes a visible owner Admin channel and fills the sidebar with the live community', () => {
+test('desktop Nebula navigation exposes a visible owner Admin channel and fills the sidebar with the live community', () => {
   const sidebar = source('src/components/suite-sidebar.tsx');
   const shell = source('src/components/root-shell.tsx');
   assert.match(sidebar, /data-workspace-sidebar/);
@@ -35,7 +35,7 @@ test('desktop ChatTag navigation exposes a visible owner Admin channel and fills
   assert.match(sidebar, /PanelLeftOpen/);
   assert.match(sidebar, /href: '\/'/);
   assert.match(sidebar, /href: '\/messages'/);
-  assert.match(sidebar, /href: '\/overlay'/);
+  assert.match(sidebar, /href: '\/game-overlays'/);
   assert.match(sidebar, /liveStreamers/);
   assert.match(sidebar, /Live community/);
   assert.match(sidebar, /user\?\.isAdmin/);

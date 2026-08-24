@@ -12,7 +12,7 @@ type PublicOverlayProfile = {
   ownerUserId: string;
   ownerLogin: string;
   gameIds: string[];
-  layout: 'auto-grid' | 'stack' | 'focus';
+  layout: 'rotation' | 'auto-grid' | 'stack' | 'focus';
   transparent: boolean;
   updatedAt: string;
 };
@@ -42,8 +42,11 @@ export default function GameHubOverlayPage() {
   const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [error, setError] = useState('');
+  const [rotationIndex, setRotationIndex] = useState(0);
   const latestChatId = useRef('');
   const latestRuntimeId = useRef('');
+  const ownerLogin = profile?.ownerLogin || '';
+  const profileGamesKey = profile?.gameIds.join(',') || '';
 
   useEffect(() => {
     let cancelled = false;
@@ -66,11 +69,11 @@ export default function GameHubOverlayPage() {
   }, [profileId]);
 
   useEffect(() => {
-    if (!profile?.ownerLogin) return;
+    if (!ownerLogin) return;
     let cancelled = false;
     async function loadScope() {
       try {
-        const response = await fetch(`/api/game-hub/channel?channel=${encodeURIComponent(profile!.ownerLogin)}`, { cache: 'no-store' });
+        const response = await fetch(`/api/game-hub/channel?channel=${encodeURIComponent(ownerLogin)}`, { cache: 'no-store' });
         if (!response.ok) return;
         const body = await response.json();
         if (!cancelled) setActiveGameIds(Array.isArray(body.gameIds) ? body.gameIds : []);
@@ -79,10 +82,10 @@ export default function GameHubOverlayPage() {
     void loadScope();
     const timer = window.setInterval(() => void loadScope(), 5_000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [profile?.ownerLogin]);
+  }, [ownerLogin]);
 
   useEffect(() => {
-    if (!profile?.ownerLogin) return;
+    if (!ownerLogin) return;
     let cancelled = false;
     latestChatId.current = '';
     latestRuntimeId.current = '';
@@ -98,7 +101,7 @@ export default function GameHubOverlayPage() {
     }
 
     async function pollChat() {
-      const query = new URLSearchParams({ channel: profile!.ownerLogin });
+      const query = new URLSearchParams({ channel: ownerLogin });
       if (latestChatId.current) query.set('after', latestChatId.current);
       try {
         const response = await fetch(`/api/overlay/game-hub/events?${query.toString()}`, { cache: 'no-store' });
@@ -111,7 +114,7 @@ export default function GameHubOverlayPage() {
     }
 
     async function pollRuntime() {
-      const query = new URLSearchParams({ channel: profile!.ownerLogin, games: profile!.gameIds.join(',') });
+      const query = new URLSearchParams({ channel: ownerLogin, games: profileGamesKey });
       if (latestRuntimeId.current) query.set('after', latestRuntimeId.current);
       try {
         const response = await fetch(`/api/overlay/game-hub/runtime?${query.toString()}`, { cache: 'no-store' });
@@ -138,7 +141,7 @@ export default function GameHubOverlayPage() {
       void pollRuntime();
     }, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [profile?.ownerLogin, profile?.gameIds]);
+  }, [ownerLogin, profileGamesKey]);
 
   const games = useMemo(() => {
     if (!profile) return [];
@@ -149,15 +152,27 @@ export default function GameHubOverlayPage() {
       .filter((game): game is GameHubGame => Boolean(game));
   }, [activeGameIds, profile]);
 
+  useEffect(() => {
+    if (profile?.layout !== 'rotation' || games.length < 2) return;
+    const timer = window.setInterval(() => setRotationIndex((current) => (current + 1) % games.length), 30_000);
+    return () => window.clearInterval(timer);
+  }, [games.length, profile?.layout]);
+
+  useEffect(() => {
+    if (rotationIndex >= games.length) setRotationIndex(0);
+  }, [games.length, rotationIndex]);
+
   if (error) return <main className="grid min-h-screen place-items-center bg-transparent p-8 text-center text-sm text-rose-200">{error}</main>;
   if (!profile) return <main className="min-h-screen bg-transparent" />;
 
   const gridClass = profile.layout === 'stack'
     ? 'grid-cols-1 auto-rows-[minmax(260px,1fr)]'
-    : profile.layout === 'focus'
+    : profile.layout === 'focus' || profile.layout === 'rotation'
       ? 'grid-cols-1 grid-rows-1'
       : 'grid-cols-[repeat(auto-fit,minmax(min(430px,100%),1fr))] auto-rows-[minmax(300px,1fr)]';
-  const visibleGames = profile.layout === 'focus' ? games.slice(0, 1) : games;
+  const visibleGames = profile.layout === 'rotation'
+    ? (games.length ? [games[rotationIndex % games.length]] : [])
+    : profile.layout === 'focus' ? games.slice(0, 1) : games;
 
   return (
     <main className={`min-h-screen w-screen overflow-hidden ${profile.transparent ? 'bg-transparent' : 'bg-slate-950'}`}>

@@ -7,13 +7,13 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
-test('chat events carry only ACTIVE joined game scope', () => {
+test('chat events carry ACTIVE joined and passive chat-reactive game scope', () => {
   const ingest = read('src/app/api/game-hub/chat/route.ts');
   assert.match(ingest, /participatingGameIds/);
-  assert.match(ingest, /player\?\.joinedGames\?\.\[gameId\]\?\.active === true/);
-  assert.match(ingest, /targetedGameId/);
-  assert.match(ingest, /result\.activeGameIds\.includes\(commandGameId\)/);
-  assert.match(ingest, /gameIds/);
+  assert.match(ingest, /snapshotPlayer\?\.joinedGames\?\.\[gameId\]\?\.active === true/);
+  assert.match(ingest, /passiveGameIds/);
+  assert.match(ingest, /runtime === 'chat-reactive'/);
+  assert.match(ingest, /appendNebulaChatEvent/);
 });
 
 test('public overlay events preserve only validated game ids', () => {
@@ -31,5 +31,5 @@ test('OBS and in-app prototype surfaces filter the shared stream by game id', ()
     assert.match(source, /gameIds/);
     assert.match(source, /\.includes\(gameId\)/);
   }
-  assert.match(play, /Only joined players feed this game while it is ACTIVE/);
+  assert.match(play, /NebulaGameFrame/);
 });

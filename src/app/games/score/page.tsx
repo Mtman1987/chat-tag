@@ -26,7 +26,7 @@ export default async function GamesHubScorePage({
     <main className="cosmic-page max-w-5xl" data-workspace-main>
       <section className="cosmic-card space-y-5">
         <div>
-          <div className="cosmic-status">Games Hub · Active stats</div>
+          <div className="cosmic-status">Nebula Arcade · Active stats</div>
           <h1 className="mt-3 font-headline text-3xl font-bold text-white">
             {playerLogin ? `${standing?.displayName || playerLogin} in #${channel || 'channel'}` : 'Player stats'}
           </h1>
@@ -71,13 +71,13 @@ export default async function GamesHubScorePage({
                 <strong className="text-lg text-cyan-100">{row.rank ? ordinal(row.rank) : '—'}</strong>
               </div>
             </article>
-          )) : <div className="rounded-2xl border border-white/10 bg-black/25 p-6 text-sm text-slate-400">No Games Hub games are currently ACTIVE for this channel.</div>}
+          )) : <div className="rounded-2xl border border-white/10 bg-black/25 p-6 text-sm text-slate-400">No Nebula Arcade games are currently ACTIVE for this channel.</div>}
         </section>
 
         <div className="flex flex-wrap gap-3">
           {channel && <Link href={`/games/rules?channel=${encodeURIComponent(channel)}`} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2.5 text-sm font-bold text-cyan-100 no-underline">Rules + commands</Link>}
           {playerLogin && <Link href={`/games/leader?player=${encodeURIComponent(playerLogin)}`} className="rounded-full border border-violet-300/20 bg-violet-300/10 px-5 py-2.5 text-sm font-bold text-violet-100 no-underline">All game stats</Link>}
-          <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Games Hub</Link>
+          <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Nebula Arcade</Link>
         </div>
       </section>
     </main>

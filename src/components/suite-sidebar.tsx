@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   Gamepad2,
-  Layers3,
   LibraryBig,
   MessageCircle,
   MonitorUp,
@@ -23,11 +22,10 @@ import { useSession } from '@/contexts/session-context';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Tag', icon: Gamepad2, exact: true },
-  { href: '/games', label: 'Games', icon: LibraryBig },
+  { href: '/', label: 'Arcade', icon: Gamepad2, exact: true },
+  { href: '/games', label: 'All Games', icon: LibraryBig },
   { href: '/messages', label: 'Messages', icon: MessageCircle },
-  { href: '/overlay', label: 'Tag Overlay', icon: MonitorUp, exact: true },
-  { href: '/game-overlays', label: 'Game Overlays', icon: Layers3 },
+  { href: '/game-overlays', label: 'Games Overlay', icon: MonitorUp },
 ];
 
 export function SuiteSidebar({
@@ -53,14 +51,14 @@ export function SuiteSidebar({
       data-collapsed={collapsed ? 'true' : 'false'}
     >
       <div className={cn('flex h-16 shrink-0 items-center border-b border-white/10 px-3', collapsed ? 'justify-center' : 'justify-between')}>
-        <Link href="/games" className="flex min-w-0 items-center gap-2.5" aria-label="ChatTag Games Hub">
+        <Link href="/games" className="flex min-w-0 items-center gap-2.5" aria-label="Nebula Arcade">
           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/20">
-            <Image src="/brand/chat-tag-icon-192.png" alt="ChatTag" fill priority className="object-contain p-1" />
+            <Image src="/brand/chat-tag-icon-192.png" alt="Nebula Arcade" fill priority className="object-contain p-1" />
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <div className="font-headline text-sm font-bold tracking-wide text-white">ChatTag</div>
-              <div className="truncate text-[10px] text-slate-400">Games Hub · Community Arcade</div>
+              <div className="font-headline text-sm font-bold tracking-wide text-white">Nebula Arcade</div>
+              <div className="truncate text-[10px] text-slate-400">Space Mountain · Community Games</div>
             </div>
           )}
         </Link>
@@ -77,7 +75,7 @@ export function SuiteSidebar({
         </Button>
       )}
 
-      <nav className="flex shrink-0 flex-col gap-1 p-2" aria-label="ChatTag suite navigation">
+      <nav className="flex shrink-0 flex-col gap-1 p-2" aria-label="Nebula Arcade navigation">
         {navItems.map((item) => {
           const active = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;

@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
-import { resolveGameHubCommandKey } from '@/lib/game-hub-commands';
-import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
+import { getGameHubGame } from '@/lib/game-hub-registry';
+import { appendNebulaChatEvent } from '@/lib/game-hub-event-bus';
 import {
+  GAME_SCORE_INTERVAL_MS,
   getGameHubStore,
   normalizeGameHubPlayerId,
   recordGameHubChatActivity,
   resolveChannelGameIds,
 } from '@/lib/game-hub-state';
-import { makeId, readAppState, updateAppState, type JsonObject } from '@/lib/volume-store';
+import { readAppState, updateAppStateIfChanged, type JsonObject } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
-
-const STORE_KEY = 'gameHubChatEvents';
-const MAX_EVENTS_PER_CHANNEL = 250;
-const MAX_EVENT_AGE_MS = 10 * 60 * 1000;
 
 function normalizeChannel(value: unknown): string {
   return String(value || '').trim().toLowerCase().replace(/^#/, '').slice(0, 80);
@@ -22,19 +19,6 @@ function normalizeChannel(value: unknown): string {
 
 function cleanText(value: unknown, max: number): string {
   return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
-}
-
-function targetedGame(message: string): { gameId: string; action: string; args: string[] } | null {
-  const match = message.trim().match(/^!?@?spmt(?:\s+|$)(.*)$/i);
-  if (!match) return null;
-  const parts = String(match[1] || '').trim().split(/\s+/).filter(Boolean);
-  const spec = resolveGameHubCommandKey(parts[0]);
-  if (!spec) return null;
-  return {
-    gameId: spec.gameId,
-    action: String(parts[1] || 'join').toLowerCase(),
-    args: parts.slice(2),
-  };
 }
 
 export async function POST(req: NextRequest) {
@@ -67,9 +51,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const baseEvent = {
-    id: makeId('game_chat'),
-    at: new Date().toISOString(),
+  const playerId = normalizeGameHubPlayerId(body.userId, username);
+  const snapshotPlayer = getGameHubStore(snapshot).players[playerId];
+  const participatingGameIds = activeGameIds.filter((gameId) => snapshotPlayer?.joinedGames?.[gameId]?.active === true);
+  const passiveGameIds = activeGameIds.filter((gameId) => getGameHubGame(gameId)?.runtime === 'chat-reactive');
+  const eventGameIds = [...new Set([...participatingGameIds, ...passiveGameIds])];
+  const baseEvent = eventGameIds.length ? appendNebulaChatEvent({
     channel,
     username,
     userId: cleanText(body.userId, 80),
@@ -77,56 +64,34 @@ export async function POST(req: NextRequest) {
     message,
     color: cleanText(body.color, 32),
     badges: body.badges && typeof body.badges === 'object' ? body.badges : {},
-  };
+    gameIds: eventGameIds,
+  }) : null;
 
-  const activity = await updateAppState((state) => {
-    const result = recordGameHubChatActivity(state, {
-      channel,
-      userId: body.userId,
-      username,
-      displayName: baseEvent.displayName,
-      message,
-    });
-
-    const playerId = normalizeGameHubPlayerId(body.userId, username);
-    const player = getGameHubStore(state).players[playerId];
-    const participatingGameIds = result.activeGameIds.filter((gameId) => player?.joinedGames?.[gameId]?.active === true);
-    const command = targetedGame(message);
-    const gameIds = command
-      ? (result.activeGameIds.includes(command.gameId) ? [command.gameId] : [])
-      : participatingGameIds;
-
-    let runtimeActionId: string | null = null;
-    if (command && gameIds.length) {
-      const runtimeAction = recordGameHubRuntimeAction(state, {
+  const now = Date.now();
+  const scoreWriteDue = participatingGameIds.some((gameId) => {
+    const lastScoreAt = Date.parse(String(snapshotPlayer?.joinedGames?.[gameId]?.lastScoreAt || 0));
+    return !Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS;
+  });
+  const activity = scoreWriteDue
+    ? await updateAppStateIfChanged((state) => {
+      const result = recordGameHubChatActivity(state, {
         channel,
-        gameId: command.gameId,
-        actorId: body.userId,
+        userId: body.userId,
         username,
-        displayName: baseEvent.displayName,
-        action: command.action,
-        args: command.args,
+        displayName: cleanText(body.displayName || username, 80),
         message,
       });
-      runtimeActionId = runtimeAction.id;
-    }
-
-    state.gameSettings.default ||= {};
-    const store = (state.gameSettings.default[STORE_KEY] ||= {}) as Record<string, JsonObject[]>;
-    const cutoff = Date.now() - MAX_EVENT_AGE_MS;
-    const current = Array.isArray(store[channel]) ? store[channel] : [];
-    current.push({ ...baseEvent, gameIds });
-    store[channel] = current
-      .filter((item) => Date.parse(String(item?.at || '')) >= cutoff)
-      .slice(-MAX_EVENTS_PER_CHANNEL);
-
-    return { ...result, participatingGameIds, eventGameIds: gameIds, runtimeActionId };
-  });
+      return {
+        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0,
+        result: { ...result, participatingGameIds, eventGameIds },
+      };
+    })
+    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0 };
 
   return NextResponse.json({
     accepted: true,
-    id: baseEvent.id,
-    runtimeActionId: activity.runtimeActionId,
+    id: baseEvent?.id || null,
+    runtimeActionId: null,
     eventGameIds: activity.eventGameIds,
     scoredGameIds: activity.scoredGameIds,
     pointsAwarded: activity.pointsAwarded,
