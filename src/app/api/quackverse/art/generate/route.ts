@@ -142,14 +142,11 @@ function referenceImagesFor(card: any, origin: string): string[] {
   return [...new Set([...sameAffinity, ...sameFamily, ...broadReferences])].slice(0, 3);
 }
 
-async function callStreamWeaverImage(prompt: string, body: any, referenceImages: string[], fallbackTenantId: string) {
-  const tenantId = String(body.tenantId || body.streamweaverTenantId || fallbackTenantId || '').trim();
-  if (!tenantId) throw new Error('StreamWeaver tenant context is unavailable.');
-
+async function callStreamWeaverImage(prompt: string, body: any, referenceImages: string[]) {
   const requestBody: Record<string, unknown> = {
     prompt,
     scope: 'public',
-    tenantId,
+    tenantId: body.tenantId || body.streamweaverTenantId || undefined,
     resolution: body.resolution || '1024x1024',
     numImages: 1,
     model: body.model || undefined,
@@ -249,7 +246,7 @@ export async function POST(req: NextRequest) {
       const references = referenceImagesFor(card, req.nextUrl.origin);
       const prompt = buildPrompt(card, variant, family);
       const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
-      const generated = await callStreamWeaverImage(prompt, body, references, auth.user.id);
+      const generated = await callStreamWeaverImage(prompt, body, references);
       const image = await fetchGeneratedImage(generated.imageUrl);
       const asset = await persistGeneratedArt(card.id, variant, image.bytes, image.mimeType, generated.provider);
       results.push({
@@ -279,28 +276,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const anySuccess = results.some((result) => result.success);
-  const note = variant === 'hover'
-    ? 'The current image route returns still images. True GIF/video hover generation remains a later animation step.'
-    : 'Static Quackverse art is generated one image per card through StreamWeaver using the permanent visual canon plus matching-affinity finished art references.';
-
-  if (!anySuccess && results.length > 0) {
-    const firstError = results.map((result: any) => String(result?.error || '').trim()).find(Boolean) || 'Quackverse image generation failed.';
-    return NextResponse.json({
-      success: false,
-      variant,
-      count: results.length,
-      results,
-      error: firstError,
-      note,
-    }, { status: 502 });
-  }
-
   return NextResponse.json({
-    success: anySuccess,
+    success: results.some((result) => result.success),
     variant,
     count: results.length,
     results,
-    note,
+    note: variant === 'hover'
+      ? 'The current image route returns still images. True GIF/video hover generation remains a later animation step.'
+      : 'Static Quackverse art is generated one image per card through StreamWeaver using the permanent visual canon plus matching-affinity finished art references.',
   });
 }
