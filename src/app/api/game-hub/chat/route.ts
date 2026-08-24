@@ -6,8 +6,9 @@ import {
   getGameHubStore,
   normalizeGameHubPlayerId,
   recordGameHubChatActivity,
+  resolveChannelGameIds,
 } from '@/lib/game-hub-state';
-import { makeId, updateAppState, type JsonObject } from '@/lib/volume-store';
+import { makeId, readAppState, updateAppState, type JsonObject } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,23 @@ export async function POST(req: NextRequest) {
   const message = cleanText(body.message, 500);
   if (!channel || !username || !message) {
     return NextResponse.json({ error: 'channel, username and message are required.' }, { status: 400 });
+  }
+
+  // Avoid rewriting the entire volume-backed state for ordinary chat when the
+  // channel has no running Games Hub game. Chat Tag activity is persisted by
+  // its own route; this endpoint only needs to retain traffic for active games.
+  const snapshot = await readAppState();
+  const activeGameIds = resolveChannelGameIds(snapshot, channel);
+  if (!activeGameIds.length) {
+    return NextResponse.json({
+      accepted: true,
+      skipped: true,
+      reason: 'no-active-games',
+      runtimeActionId: null,
+      eventGameIds: [],
+      scoredGameIds: [],
+      pointsAwarded: 0,
+    });
   }
 
   const baseEvent = {

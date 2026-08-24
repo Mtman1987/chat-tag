@@ -35,6 +35,31 @@ const PAGINATION_STATE_MAX_USERS = Number.parseInt(process.env.PAGINATION_STATE_
 const playerPageByUser = new Map();
 const livePageByUser = new Map();
 const lastListCommandByUser = new Map();
+const CHAT_ACTIVITY_THROTTLE_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.CHAT_ACTIVITY_THROTTLE_MS || '15000', 10) || 15_000,
+);
+const CHAT_ACTIVITY_TRACKER_LIMIT = Math.max(
+  500,
+  Number.parseInt(process.env.CHAT_ACTIVITY_TRACKER_LIMIT || '5000', 10) || 5_000,
+);
+const chatActivitySentAt = new Map();
+
+function shouldForwardChatActivity(userId, channel) {
+  const key = `${String(userId || '').trim()}:${String(channel || '').trim().toLowerCase()}`;
+  if (!key || key === ':') return false;
+  const now = Date.now();
+  const lastSentAt = chatActivitySentAt.get(key) || 0;
+  if (now - lastSentAt < CHAT_ACTIVITY_THROTTLE_MS) return false;
+  chatActivitySentAt.delete(key);
+  chatActivitySentAt.set(key, now);
+  while (chatActivitySentAt.size > CHAT_ACTIVITY_TRACKER_LIMIT) {
+    const oldestKey = chatActivitySentAt.keys().next().value;
+    if (oldestKey === undefined) break;
+    chatActivitySentAt.delete(oldestKey);
+  }
+  return true;
+}
 
 function getExpiringState(map, key, fallback) {
   const entry = map.get(key);
@@ -1818,16 +1843,34 @@ console.log = (...args) => {
       const activityChannel = (resolvedChannel !== senderLogin) ? resolvedChannel : undefined;
       // Forward chat to DSH for leaderboard points
       forwardToDSH({ type: 'chat', twitchLogin: senderLogin, twitchId: tags['user-id'], username: tags['display-name'] || senderLogin, channel: resolvedChannel });
-      apiCall('/api/tag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'chat-activity', 
-          userId: senderUserId, 
-          twitchUsername: senderLogin,
-          channel: activityChannel
-        })
-      }).catch(() => {}); // fire and forget
+      // Chat Tag and Games Hub only need a recent-presence heartbeat. Sending
+      // both volume-backed API writes for every IRC message saturated the web
+      // process and made even health/read endpoints miss the bot's timeout.
+      if (shouldForwardChatActivity(senderUserId, resolvedChannel)) {
+        apiCall('/api/game-hub/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel: resolvedChannel,
+            userId: tags['user-id'] || '',
+            username: senderLogin,
+            displayName: tags['display-name'] || senderLogin,
+            message,
+            color: tags.color || '',
+            badges: tags.badges || {},
+          }),
+        }).catch(() => {});
+        apiCall('/api/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'chat-activity',
+            userId: senderUserId,
+            twitchUsername: senderLogin,
+            channel: activityChannel
+          })
+        }).catch(() => {}); // fire and forget
+      }
     }
     
     const rawMessage = message.trim();
@@ -2959,4 +3002,3 @@ console.log = (...args) => {
     }
   });
 })();
-

@@ -11,7 +11,10 @@ type SharedSessionResponse = {
 async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
   for (let i = 0; i <= retries; i++) {
     try {
-      return await fetch(url, options);
+      const configuredTimeout = Number.parseInt(process.env.TWITCH_API_TIMEOUT_MS || '8000', 10);
+      const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 8_000;
+      const signal = options.signal || AbortSignal.timeout(timeoutMs);
+      return await fetch(url, { ...options, signal });
     } catch (err) {
       if (i === retries) throw err;
       await new Promise((resolve) => setTimeout(resolve, 500 * (i + 1)));
