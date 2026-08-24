@@ -161,13 +161,24 @@ export function QuackverseArtManager() {
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) {
-          throw new Error(data?.error || `Generation failed (${response.status})`);
+          const detailedError = Array.isArray(data?.results)
+            ? data.results.map((item: any) => String(item?.error || '').trim()).find(Boolean)
+            : '';
+          throw new Error(detailedError || data?.error || `Generation failed (${response.status})`);
         }
         const successCount = Array.isArray(data?.results)
           ? data.results.filter((item: any) => item?.success).length
           : 0;
+        const failedItems = Array.isArray(data?.results)
+          ? data.results.filter((item: any) => !item?.success)
+          : [];
         const failedCount = Math.max(0, Number(data?.count || 0) - successCount);
-        setGenerationMessage(`Generated ${successCount} ${variant} asset${successCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed` : ''}.`);
+        const firstFailure = failedItems.map((item: any) => String(item?.error || '').trim()).find(Boolean);
+        setGenerationMessage(
+          `Generated ${successCount} ${variant} asset${successCount === 1 ? '' : 's'}`
+          + (failedCount ? `, ${failedCount} failed${firstFailure ? `: ${firstFailure}` : ''}` : '')
+          + '.',
+        );
         await refresh();
       } catch (error: any) {
         setGenerationMessage(error?.message || 'Generation failed');
@@ -249,7 +260,7 @@ export function QuackverseArtManager() {
 
             <div data-quackverse-art-actions className="relative z-20 space-y-4 rounded-lg border border-white/10 bg-black/20 p-3 pointer-events-auto">
               <div className="space-y-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3">
-                <div className="text-sm font-semibold text-white">Generate with StreamWeaver SeaArt</div>
+                <div className="text-sm font-semibold text-white">Generate with StreamWeaver image provider</div>
                 <div className="relative z-30 grid gap-2 pointer-events-auto">
                   <Button
                     type="button"
