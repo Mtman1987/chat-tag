@@ -52,3 +52,32 @@ test('Twitch requests have a bounded upstream timeout', () => {
   assert.match(source, /TWITCH_API_TIMEOUT_MS \|\| '8000'/);
   assert.match(source, /AbortSignal\.timeout\(timeoutMs\)/);
 });
+
+test('volume state is cached and persisted as compact JSON', () => {
+  const store = read('src/lib/volume-store.ts');
+  assert.match(store, /let cachedState: AppState \| null = null/);
+  assert.match(store, /if \(cachedState\) return cachedState/);
+  assert.match(store, /const state = structuredClone\(await readState\(\)\)/);
+  assert.match(store, /const payload = JSON\.stringify\(state\);/);
+  assert.match(store, /export async function updateAppStateIfChanged/);
+});
+
+test('no-op chat and announcement heartbeats skip full-state writes', () => {
+  const tagRoute = read('src/app/api/tag/route.ts');
+  const announcementRoute = read('src/app/api/bot/live-announcement/route.ts');
+
+  assert.match(tagRoute, /if \(!player\) return \{ changed: false, result: false \}/);
+  assert.match(tagRoute, /updateAppStateIfChanged/);
+  assert.match(announcementRoute, /previousKey === streamKey/);
+  assert.match(announcementRoute, /return \{ changed: false, result: false \}/);
+});
+
+test('health response exposes state-store pressure diagnostics without reading the volume', () => {
+  const health = read('src/app/api/health/route.ts');
+  const store = read('src/lib/volume-store.ts');
+
+  assert.match(health, /volumeStore: getVolumeStoreDiagnostics\(\)/);
+  assert.match(store, /queuedUpdates/);
+  assert.match(store, /lastWriteMs/);
+  assert.match(store, /stateFileBytes/);
+});

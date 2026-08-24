@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getVolumeStoreDiagnostics } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export async function GET() {
       serviceCredentials: missingSecretNames.length
         ? { status: 'unavailable', missingSecretNames }
         : { status: 'configured' },
+      volumeStore: getVolumeStoreDiagnostics(),
     },
   }, { status: missingSecretNames.length ? 503 : 200 });
 }

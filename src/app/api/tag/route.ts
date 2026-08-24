@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest, requireAdminRequest } from '@/lib/auth';
-import { isTimedImmune, makeId, readAppState, toMillis, updateAppState } from '@/lib/volume-store';
+import { isTimedImmune, makeId, readAppState, toMillis, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { MAX_PASSES, getPassSpendDenial } from '@/lib/pass-policy';
@@ -268,9 +268,11 @@ function isPlayerImmune(state: any, player: TagPlayer | undefined, taggerId: str
 
 export async function GET() {
   try {
-    const state = await readAppState();
+    let state = await readAppState();
     const historyChanged = Object.values(state.tagPlayers || {})
-      .map((player: any) => inferPlayerHistory(state, player))
+      // readAppState returns the shared immutable snapshot. Probe history on a
+      // clone so a GET can never mutate that cache outside the write lock.
+      .map((player: any) => inferPlayerHistory(state, structuredClone(player)))
       .some(Boolean);
     if (historyChanged) {
       await updateAppState((current) => {
@@ -278,6 +280,7 @@ export async function GET() {
           inferPlayerHistory(current, player);
         }
       });
+      state = await readAppState();
     }
     const blacklisted = new Set(
       (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => normalizeUsername(channel))
@@ -384,12 +387,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'chat-activity') {
-      await updateAppState((state) => {
+      const recorded = await updateAppStateIfChanged((state) => {
         // Migrate manual_ player to real user_ ID on first chat
         if (twitchUsername) migrateManualPlayer(state, userId, twitchUsername);
 
         const player = state.tagPlayers[userId];
-        if (!player) return;
+        // Most people speaking in a monitored Twitch channel are not Chat Tag
+        // players. Do not rewrite the entire volume for those no-op heartbeats.
+        if (!player) return { changed: false, result: false };
         
         player.lastChatAt = Date.now();
         markPlayerPlayed(player, player.lastChatAt);
@@ -399,8 +404,9 @@ export async function POST(req: NextRequest) {
           player.sleepingImmunity = false;
           player.offlineImmunity = false;
         }
+        return { changed: true, result: true };
       });
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, recorded });
     }
 
     if (action === 'grant-pass') {
