@@ -97,6 +97,18 @@ const STATE_FILE_TMP = path.join(DATA_DIR, 'app-state.json.tmp');
 
 let bootstrapPromise: Promise<void> | null = null;
 let lock: Promise<void> = Promise.resolve();
+let cachedState: AppState | null = null;
+let cachedStatePromise: Promise<AppState> | null = null;
+let queuedUpdates = 0;
+let stateFileBytes = 0;
+let lastLoadMs = 0;
+let lastWriteMs = 0;
+let lastWriteAt: string | null = null;
+
+export type AppStateUpdate<T> = {
+  changed: boolean;
+  result: T;
+};
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -243,14 +255,21 @@ async function ensureBootstrapped() {
   await bootstrapPromise;
 }
 
-async function readState(): Promise<AppState> {
+async function loadState(): Promise<AppState> {
   await ensureBootstrapped();
   let lastError: unknown;
+  const startedAt = Date.now();
 
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const raw = await fs.readFile(STATE_FILE, 'utf8');
-      return ensureDefaults(JSON.parse(raw));
+      const state = ensureDefaults(JSON.parse(raw));
+      stateFileBytes = Buffer.byteLength(raw);
+      lastLoadMs = Date.now() - startedAt;
+      if (lastLoadMs >= 250) {
+        console.warn(`[StateStore] Initial volume load took ${lastLoadMs}ms (${stateFileBytes} bytes)`);
+      }
+      return state;
     } catch (error: any) {
       lastError = error;
       const isParseFailure =
@@ -270,9 +289,27 @@ async function readState(): Promise<AppState> {
   throw lastError instanceof Error ? lastError : new Error('Failed to read app state.');
 }
 
+async function readState(): Promise<AppState> {
+  if (cachedState) return cachedState;
+  if (!cachedStatePromise) {
+    cachedStatePromise = loadState()
+      .then((state) => {
+        cachedState = state;
+        return state;
+      })
+      .finally(() => {
+        cachedStatePromise = null;
+      });
+  }
+  return cachedStatePromise;
+}
+
 async function writeState(state: AppState): Promise<void> {
   await ensureBootstrapped();
-  const payload = JSON.stringify(state, null, 2);
+  const startedAt = Date.now();
+  // The state file is an internal persistence format. Compact JSON materially
+  // reduces volume I/O without changing the data returned by any API.
+  const payload = JSON.stringify(state);
   await fs.writeFile(STATE_FILE_TMP, payload, 'utf8');
   try {
     await fs.rename(STATE_FILE_TMP, STATE_FILE);
@@ -283,9 +320,16 @@ async function writeState(state: AppState): Promise<void> {
     await fs.rm(STATE_FILE, { force: true });
     await fs.rename(STATE_FILE_TMP, STATE_FILE);
   }
+  stateFileBytes = Buffer.byteLength(payload);
+  lastWriteMs = Date.now() - startedAt;
+  lastWriteAt = nowIso();
+  if (lastWriteMs >= 250) {
+    console.warn(`[StateStore] Volume write took ${lastWriteMs}ms (${stateFileBytes} bytes)`);
+  }
 }
 
 async function withLock<T>(work: () => Promise<T>): Promise<T> {
+  queuedUpdates += 1;
   let release: () => void = () => {};
   const current = new Promise<void>((resolve) => {
     release = resolve;
@@ -297,6 +341,7 @@ async function withLock<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } finally {
+    queuedUpdates = Math.max(0, queuedUpdates - 1);
     release();
   }
 }
@@ -307,11 +352,40 @@ export async function readAppState(): Promise<AppState> {
 
 export async function updateAppState<T>(mutator: (state: AppState) => T | Promise<T>): Promise<T> {
   return withLock(async () => {
-    const state = await readState();
+    // Copy-on-write keeps readers on the last complete snapshot while an
+    // update is being prepared and persisted.
+    const state = structuredClone(await readState());
     const result = await mutator(state);
     await writeState(state);
+    cachedState = state;
     return result;
   });
+}
+
+export async function updateAppStateIfChanged<T>(
+  mutator: (state: AppState) => AppStateUpdate<T> | Promise<AppStateUpdate<T>>,
+): Promise<T> {
+  return withLock(async () => {
+    const current = await readState();
+    const state = structuredClone(current);
+    const outcome = await mutator(state);
+    if (outcome.changed) {
+      await writeState(state);
+      cachedState = state;
+    }
+    return outcome.result;
+  });
+}
+
+export function getVolumeStoreDiagnostics() {
+  return {
+    cached: cachedState !== null,
+    stateFileBytes,
+    lastLoadMs,
+    lastWriteMs,
+    lastWriteAt,
+    queuedUpdates,
+  };
 }
 
 export function makeId(prefix: string): string {

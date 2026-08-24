@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateAppState } from '@/lib/volume-store';
+import { updateAppStateIfChanged } from '@/lib/volume-store';
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
 
     const streamKey = String(streamStartedAt || '').trim() || todayUtc();
 
-    const shouldAnnounce = await updateAppState((state) => {
+    const shouldAnnounce = await updateAppStateIfChanged((state) => {
       const map = state.botRuntime.firstLiveAnnouncementByChannel || {};
       const previousKey = map[normalized];
 
       if (previousKey === streamKey) {
-        return false;
+        return { changed: false, result: false };
       }
 
       // Legacy entries used YYYY-MM-DD. Treat a same-day legacy entry as already
@@ -33,12 +33,12 @@ export async function POST(req: NextRequest) {
       ) {
         map[normalized] = streamKey;
         state.botRuntime.firstLiveAnnouncementByChannel = map;
-        return false;
+        return { changed: true, result: false };
       }
 
       map[normalized] = streamKey;
       state.botRuntime.firstLiveAnnouncementByChannel = map;
-      return true;
+      return { changed: true, result: true };
     });
 
     return NextResponse.json({ shouldAnnounce, channel: normalized, streamKey });
