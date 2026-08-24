@@ -53,7 +53,7 @@ if (!source.includes('const legacyChatTagCommands = new Set(')) {
 // awaiting an HTTP request indefinitely.
 const apiTimeoutMarker = 'CHAT_TAG_API_TIMEOUT_MS';
 const apiTimeoutTarget = "    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });";
-const apiTimeoutReplacement = `    const timeoutMs = Number.parseInt(process.env.CHAT_TAG_API_TIMEOUT_MS || '4000', 10);\n    const signal = options.signal || AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 4000);\n    const res = await fetch(\`${'${API_BASE}'}${'${endpoint}'}\`, { ...options, headers, signal });`;
+const apiTimeoutReplacement = `    const defaultTimeoutMs = Number.parseInt(process.env.CHAT_TAG_API_TIMEOUT_MS || '10000', 10);\n    const slowTimeoutMs = Number.parseInt(process.env.CHAT_TAG_SLOW_API_TIMEOUT_MS || '45000', 10);\n    const requestedTimeoutMs = endpoint === '/api/discord/live-members' ? slowTimeoutMs : defaultTimeoutMs;\n    const fallbackTimeoutMs = endpoint === '/api/discord/live-members' ? 45000 : 10000;\n    const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0 ? requestedTimeoutMs : fallbackTimeoutMs;\n    const signal = options.signal || AbortSignal.timeout(timeoutMs);\n    const res = await fetch(\`${'${API_BASE}'}${'${endpoint}'}\`, { ...options, headers, signal });`;
 if (!source.includes(apiTimeoutMarker)) {
   if (!source.includes(apiTimeoutTarget)) {
     throw new Error('Chat Tag API timeout patch target was not found.');
