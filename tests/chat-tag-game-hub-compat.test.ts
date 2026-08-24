@@ -60,12 +60,14 @@ test('deployed bot build keeps proven Chat Tag commands and sender routing intac
     const patchedBot = fs.readFileSync(path.join(tempRoot, 'bot.js'), 'utf8');
 
     assert.match(patchedBot, /const legacyChatTagCommands = new Set\(/);
-    assert.match(patchedBot, /if \(!legacyChatTagCommands\.has\(cmd\)\)/);
+    assert.match(patchedBot, /sharedNebulaCommands\.has\(cmd\)/);
+    assert.match(patchedBot, /pendingGameChoices/);
+    assert.match(patchedBot, /pendingChoiceNumber/);
     assert.match(patchedBot, /const chatTagNamespace = cmd === 'chattag' \|\| cmd === 'taggame'/);
     assert.match(patchedBot, /Chat Tag is always active globally; no channel start is required/);
     assert.match(patchedBot, /CHAT_TAG_API_TIMEOUT_MS/);
 
-    const legacyGuard = patchedBot.indexOf('if (!legacyChatTagCommands.has(cmd))');
+    const legacyGuard = patchedBot.indexOf('if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd))');
     const hubCall = patchedBot.indexOf("apiCall('/api/game-hub/command'");
     const scoreHandler = patchedBot.indexOf("cmd === 'score'");
     const liveHandler = patchedBot.indexOf("cmd === 'live'");

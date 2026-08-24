@@ -12,10 +12,10 @@ export default async function GamesPointsLeaderboardPage() {
     <main className="cosmic-page max-w-5xl" data-workspace-main>
       <section className="cosmic-card space-y-5">
         <div>
-          <div className="cosmic-status">Games Hub · Games Points</div>
+          <div className="cosmic-status">Nebula Arcade · Games Points</div>
           <h1 className="mt-3 font-headline text-3xl font-bold text-white">Games Points leaderboard</h1>
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            Games Points are the Games Hub’s spendable currency and stay separate from SPMT XP. This is the full view behind <code className="text-cyan-100">spmt pleader</code>.
+            Games Points are Nebula Arcade’s spendable currency and stay separate from SPMT XP. This is the full view behind <code className="text-cyan-100">spmt pleader</code>.
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export default async function GamesPointsLeaderboardPage() {
           )}
         </div>
 
-        <Link href="/games" className="inline-block rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Games Hub</Link>
+        <Link href="/games" className="inline-block rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Nebula Arcade</Link>
       </section>
     </main>
   );

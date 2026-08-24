@@ -1,7 +1,7 @@
 {
-  "name": "Chat Tag",
-  "short_name": "Chat Tag",
-  "description": "Game system and community tools for Twitch streams.",
+  "name": "Nebula Arcade",
+  "short_name": "Nebula",
+  "description": "The Space Mountain community arcade for Twitch streams.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

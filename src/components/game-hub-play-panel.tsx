@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
-import { getCanonicalGameCommandSpec } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
 import { ChatTagGame } from '@/components/chat-tag-game';
 import { QuackverseCardGame } from '@/components/quackverse-card-game';
 import { BingoCard } from '@/components/bingo-card';
 import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
+import { NebulaGameFrame } from '@/components/nebula-game-frame';
 
 type ScopedGameEvent = GameHubChatEvent & { gameIds?: string[] };
 type RuntimeAction = {
@@ -37,7 +37,6 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
   const params = useSearchParams();
   const { user } = useSession();
   const channel = normalizeChannel(params.get('channel') || user?.twitchUsername || '');
-  const commandKey = getCanonicalGameCommandSpec(game)?.key || game.id;
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [active, setActive] = useState<boolean | null>(null);
   const latestChatId = useRef('');
@@ -120,21 +119,22 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
 
   const runtime = useMemo(() => {
     if (channel && active === false) {
-      return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center"><div><div className="text-sm font-bold text-slate-200">{game.name} is STOPPED in #{channel}</div><p className="mt-2 text-xs text-slate-500">Start it from this page or with <code className="text-cyan-100">spmt {commandKey} start</code> before gameplay is accepted.</p></div></div>;
+      return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center"><div><div className="text-sm font-bold text-slate-200">{game.name} is STOPPED in #{channel}</div><p className="mt-2 text-xs text-slate-500">Start it from this page or type <code className="text-cyan-100">spmt start</code> and choose the game.</p></div></div>;
     }
     if (game.id === 'chat-tag') return <ChatTagGame />;
     if (game.id === 'quackverse') return <QuackverseCardGame />;
     if (game.id === 'bingo') return <BingoCard />;
     if (!channel) return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center text-sm text-slate-400">Open this page while signed in, or add <code className="mx-1 text-cyan-100">?channel=streamer</code>, to attach the live chat surface.</div>;
+    if (game.sourcePrototype) return <div className="h-[min(62vh,620px)] min-h-80"><NebulaGameFrame game={game} events={eventsForGame(events, game.id)} /></div>;
     return <div className="h-[min(62vh,620px)] min-h-80"><GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel} /></div>;
-  }, [active, channel, commandKey, events, game]);
+  }, [active, channel, events, game]);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-black/25 p-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-headline text-xl text-white">Play</h2>
-          <p className="mt-1 text-xs text-slate-500">Every Games Hub title gets the same gameplay slot. Joined players feed durable game actions while it is ACTIVE.</p>
+          <p className="mt-1 text-xs text-slate-500">Every Nebula Arcade title gets the same gameplay slot. Joined players feed durable game actions while it is ACTIVE.</p>
         </div>
         {channel && <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${active ? 'bg-emerald-300/10 text-emerald-100' : 'bg-white/8 text-slate-400'}`}>{active ? 'ACTIVE' : active === false ? 'STOPPED' : 'CHECKING'} · #{channel}</span>}
       </div>

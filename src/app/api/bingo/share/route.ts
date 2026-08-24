@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
     if (format === 'txt' || format === 'text') {
       const lines: string[] = [];
-      lines.push('Space Mountain Games Hub - Bingo');
+      lines.push('Nebula Arcade - Bingo');
       lines.push(`Generated: ${boardData.timestamp}`);
       lines.push('');
       lines.push('Shared board: 24 outer phrases + one personal center phrase per player.');

@@ -42,11 +42,13 @@ test('runtime actions persist by channel and game and survive unrelated reads', 
   assert.equal(after[0].gameId, 'pixelbattle');
 });
 
-test('bot ingest records targeted commands in durable runtime state', () => {
+test('command routing records targeted commands while ordinary chat stays off the volume', () => {
   const ingest = read('src/app/api/game-hub/chat/route.ts');
-  assert.match(ingest, /recordGameHubRuntimeAction/);
-  assert.match(ingest, /runtimeActionId/);
-  assert.match(ingest, /targetedGame/);
+  const command = read('src/app/api/game-hub/command/route.ts');
+  assert.match(command, /recordGameHubRuntimeAction/);
+  assert.match(ingest, /runtimeActionId: null/);
+  assert.doesNotMatch(ingest, /targetedGame/);
+  assert.match(ingest, /appendNebulaChatEvent/);
 });
 
 test('OBS and in-app play surfaces consume durable runtime actions and keep passive chat separate', () => {

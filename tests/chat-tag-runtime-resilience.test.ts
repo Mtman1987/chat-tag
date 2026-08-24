@@ -24,10 +24,13 @@ test('Games Hub chat skips the volume write when no game is running', () => {
   const route = read('src/app/api/game-hub/chat/route.ts');
   const activeGameRead = route.indexOf('resolveChannelGameIds(snapshot, channel)');
   const noGameReturn = route.indexOf("reason: 'no-active-games'");
-  const write = route.indexOf('const activity = await updateAppState');
+  const write = route.indexOf('await updateAppStateIfChanged');
 
   assert.ok(activeGameRead >= 0 && noGameReturn > activeGameRead, 'the active-game preflight must exist');
   assert.ok(write > noGameReturn, 'the no-game response must return before the volume write');
+  assert.match(route, /scoreWriteDue/);
+  assert.match(route, /scoreWriteDue\s*\?\s*await updateAppStateIfChanged/);
+  assert.match(route, /appendNebulaChatEvent/);
 });
 
 test('live-member Twitch calls run outside the shared volume update lock', () => {

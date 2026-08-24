@@ -11,7 +11,7 @@ type BingoState = {
   };
 };
 
-export function GameHubBingoSurface({ channel }: { channel: string }) {
+export function GameHubBingoSurface() {
   const [bingo, setBingo] = useState<BingoState>({
     phrases: [],
     aggregate: { players: 0, totalClaims: 0, completedCards: 0 },
@@ -47,11 +47,7 @@ export function GameHubBingoSurface({ channel }: { channel: string }) {
   }));
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950/70 p-4 text-white shadow-2xl backdrop-blur">
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <div><div className="text-[9px] uppercase tracking-[.18em] text-cyan-200/60">Games Hub</div><h2 className="font-bold">Bingo</h2></div>
-        <span className="rounded-full bg-emerald-300/10 px-2 py-1 text-[9px] font-bold text-emerald-100">ACTIVE · #{channel}</span>
-      </header>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden p-4 text-white">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/50">
         <span>24 shared phrases · personal center</span>
         <span>{bingo.aggregate.players} players · {bingo.aggregate.totalClaims} claims · {bingo.aggregate.completedCards} bingos</span>

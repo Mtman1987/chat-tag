@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readAppState } from '@/lib/volume-store';
 import { getGameHubGame } from '@/lib/game-hub-registry';
+import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
 
 export const dynamic = 'force-dynamic';
 
-const MAX_EVENT_AGE_MS = 10 * 60 * 1000;
 const MAX_READ_EVENTS = 100;
 
 function normalizeChannel(value: unknown): string {
@@ -21,15 +20,7 @@ export async function GET(req: NextRequest) {
   if (!channel) return NextResponse.json({ error: 'channel is required.' }, { status: 400 });
 
   const after = String(req.nextUrl.searchParams.get('after') || '').trim();
-  const state = await readAppState();
-  const store = (state.gameSettings.default?.gameHubChatEvents || {}) as Record<string, any[]>;
-  const cutoff = Date.now() - MAX_EVENT_AGE_MS;
-  const current = (Array.isArray(store[channel]) ? store[channel] : [])
-    .filter((item) => Date.parse(String(item?.at || '')) >= cutoff);
-
-  const afterIndex = after ? current.findIndex((item) => String(item?.id || '') === after) : -1;
-  const events = (afterIndex >= 0 ? current.slice(afterIndex + 1) : current.slice(-MAX_READ_EVENTS))
-    .slice(-MAX_READ_EVENTS)
+  const events = getNebulaChatEvents(channel, after, MAX_READ_EVENTS)
     .map((item) => ({
       id: String(item?.id || ''),
       at: String(item?.at || ''),

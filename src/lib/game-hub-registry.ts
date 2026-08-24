@@ -31,7 +31,7 @@ export function getGameHubGame(gameId: string | null | undefined): GameHubGame |
   return GAME_BY_ID.get(String(gameId || '').trim().toLowerCase()) || null;
 }
 
-export function normalizeGameHubGameIds(input: unknown, max = 8): string[] {
+export function normalizeGameHubGameIds(input: unknown, max = 20): string[] {
   const values = Array.isArray(input) ? input : [];
   const seen = new Set<string>();
   const output: string[] = [];

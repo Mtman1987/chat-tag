@@ -15,7 +15,7 @@ export function GameOverlayBayHandoff({ profileId, profileName, overlayUrl }: Pr
     target.searchParams.set('mode', 'full');
     target.searchParams.set('app', 'chat-tag');
     target.searchParams.set('sourceUrl', overlayUrl);
-    target.searchParams.set('sourceTitle', profileName || 'Games Hub Overlay');
+    target.searchParams.set('sourceTitle', profileName || 'Nebula Arcade Overlay');
     target.searchParams.set('sourceKey', `chat-tag:games-overlay:${profileId}`);
     window.open(target.toString(), '_blank', 'noopener,noreferrer');
   };

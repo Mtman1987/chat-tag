@@ -12,6 +12,7 @@ import {
   GAME_HUB_COMMAND_SPECS,
   canonicalPlayerCommands,
   canonicalStreamerCommands,
+  resolveDirectGameCommand,
 } from '../src/lib/game-hub-commands';
 import {
   cloneGameOverlayProfile,
@@ -41,6 +42,21 @@ test('Games Hub catalogs 20 peer games including Bingo and all 17 recovered game
   ]) assert.ok(getGameHubGame(expected), `missing ${expected}`);
 });
 
+test('all recovered Library games ship as embedded Nebula pages with parent event support', () => {
+  const directory = path.join(root, 'public/nebula-arcade/games');
+  const files = fs.readdirSync(directory).filter((file) => file.endsWith('.html')).sort();
+  assert.equal(files.length, 17);
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(directory, file), 'utf8');
+    assert.match(source, /window\.parent/);
+    assert.match(source, /embedded/);
+  }
+  const home = read('src/components/nebula-arcade-showcase.tsx');
+  assert.match(home, /ROTATION_MS/);
+  assert.match(home, /NebulaGameFrame/);
+  assert.match(home, /demo/);
+});
+
 test('every Games Hub chat command uses the spmt namespace', () => {
   assert.equal(GAME_HUB_COMMAND_SPECS.length, 20);
   for (const game of GAME_HUB_CATALOG) {
@@ -53,10 +69,31 @@ test('every Games Hub chat command uses the spmt namespace', () => {
     }
   }
   const chatTag = canonicalPlayerCommands(getGameHubGame('chat-tag')!);
-  assert.ok(chatTag.some((command) => command.trigger === 'spmt chattag'));
-  assert.ok(chatTag.some((command) => command.trigger === 'spmt chattag tag @user'));
+  assert.ok(chatTag.some((command) => command.trigger === 'spmt join'));
+  assert.ok(chatTag.some((command) => command.trigger === 'spmt tag @user'));
   const bingo = canonicalPlayerCommands(getGameHubGame('bingo')!);
-  assert.ok(bingo.some((command) => command.trigger.startsWith('spmt bingo center ')));
+  assert.ok(bingo.some((command) => command.trigger === 'spmt claim 12'));
+});
+
+test('direct commands preserve Chat Tag, choose conflicts, and broadcast compatible colors', () => {
+  const joined = resolveDirectGameCommand(['join'], ['chatgarden']);
+  assert.equal(joined.mode, 'choose');
+  assert.deepEqual(joined.intents.map((item) => item.gameId), ['chat-tag', 'chatgarden']);
+
+  const tagOnly = resolveDirectGameCommand(['join'], []);
+  assert.equal(tagOnly.mode, 'single');
+  assert.equal(tagOnly.intents[0].command, 'spmt chattag');
+
+  const colors = resolveDirectGameCommand(['red'], ['chatwars', 'colorwars']);
+  assert.equal(colors.mode, 'broadcast');
+  assert.deepEqual(colors.intents.map((item) => item.gameId), ['chatwars', 'colorwars']);
+
+  const chaos = resolveDirectGameCommand(['explode'], ['chaosmode']);
+  assert.equal(chaos.intents[0].command, 'spmt chaos explode');
+  assert.equal(resolveDirectGameCommand(['explode'], []).intents.length, 0);
+
+  const internal = resolveDirectGameCommand(['chicken', 'start'], ['chickenroyale']);
+  assert.equal(internal.recognized, false);
 });
 
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {
@@ -64,14 +101,16 @@ test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => 
     'bingo', 'chat-tag', 'chat-tag', 'nope', 'quackverse', 'emojirain', 'wordstorm',
     'petrace', 'chatwars', 'colorwars', 'treasurehunt', 'pixelbattle', 'chaosmode',
   ]);
-  assert.equal(ids.length, 8);
+  assert.equal(ids.length, 11);
   assert.deepEqual(ids.slice(0, 3), ['bingo', 'chat-tag', 'quackverse']);
   assert.ok(!ids.includes('nope'));
 });
 
-test('overlay profiles are neutral, cloneable and do not default to Chat Tag', () => {
+test('overlay profiles default to one all-game rotating Nebula surface and remain cloneable', () => {
   const blank = createGameOverlayProfile('12345', { ownerLogin: 'SpaceMountainLive' });
-  assert.deepEqual(blank.gameIds, []);
+  assert.equal(blank.gameIds.length, 20);
+  assert.equal(blank.layout, 'rotation');
+  assert.ok(blank.gameIds.includes('chat-tag'));
 
   const created = createGameOverlayProfile('12345', {
     ownerLogin: 'SpaceMountainLive',
@@ -110,11 +149,14 @@ test('bot image patches resolved chat, canonical Games Hub commands and Chat Tag
 test('game event transport is bounded and Games Points are a separate wallet', () => {
   const ingest = read('src/app/api/game-hub/chat/route.ts');
   const reader = read('src/app/api/overlay/game-hub/events/route.ts');
+  const bus = read('src/lib/game-hub-event-bus.ts');
   const state = read('src/lib/game-hub-state.ts');
   const points = read('src/app/api/game-hub/points/route.ts');
   assert.match(ingest, /isBotRequest/);
-  assert.match(ingest, /MAX_EVENTS_PER_CHANNEL = 250/);
-  assert.match(ingest, /10 \* 60 \* 1000/);
+  assert.match(ingest, /appendNebulaChatEvent/);
+  assert.match(ingest, /scoreWriteDue/);
+  assert.match(bus, /MAX_EVENTS_PER_CHANNEL = 250/);
+  assert.match(bus, /10 \* 60 \* 1000/);
   assert.match(reader, /MAX_READ_EVENTS = 100/);
   assert.match(reader, /Cache-Control.*no-store/);
   assert.match(state, /gamePointsBalance/);
@@ -136,12 +178,12 @@ test('leaving a game preserves leaderboard history while stopping participation'
 test('compact replies preserve useful text before a link and stay under Twitch limits', () => {
   const link = 'https://example.test/games/rules?channel=space';
   const reply = fitCompactReplyWithLink(
-    '@viewer Games Hub scores:',
+    '@viewer Nebula Arcade scores:',
     Array.from({ length: 20 }, (_, index) => `[Game ${index + 1}] [${index + 1}th] ${1000 - index} score · 4 wins · 12 plays`),
     link,
   );
   assert.ok(reply.length <= 480);
-  assert.match(reply, /Games Hub scores:/);
+  assert.match(reply, /Nebula Arcade scores:/);
   assert.match(reply, /\[Game 1\]/);
   assert.ok(reply.endsWith(link));
   assert.match(reply, /\+\d+ more/);
@@ -225,8 +267,8 @@ test('rules and score stay ACTIVE-scoped while leader mirrors StreamWeaver-style
   assert.match(command, /command === 'leader'/);
   assert.match(command, /command === 'pleader'/);
   assert.match(command, /fitCompactReplyWithLink/);
-  assert.match(command, /Games Hub scores:/);
-  assert.match(command, /Games Hub profile:/);
+  assert.match(command, /Nebula Arcade scores:/);
+  assert.match(command, /Nebula Arcade profile:/);
   assert.match(command, /Games Points leaders:/);
   assert.match(command, /games\/score\?channel=/);
   assert.match(command, /games\/leader\?player=/);
@@ -313,7 +355,8 @@ test('Bingo revival uses the same Play slot and restores the old route safely', 
   assert.match(play, /QuackverseCardGame/);
   assert.match(play, /GameHubPrototypeSurface/);
   assert.match(play, /is STOPPED/);
-  assert.match(play, /spmt \{commandKey\} start/);
+  assert.match(play, /spmt start/);
+  assert.match(play, /NebulaGameFrame/);
   assert.match(legacy, /redirect\('\/games\/bingo'\)/);
 });
 

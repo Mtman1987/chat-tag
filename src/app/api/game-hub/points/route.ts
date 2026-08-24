@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'SPMT authentication required.' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const amount = Math.floor(Number(body.amount || 0));
-  const reason = String(body.reason || 'Games Hub purchase').trim().slice(0, 160);
+  const reason = String(body.reason || 'Nebula Arcade purchase').trim().slice(0, 160);
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: 'A positive spend amount is required.' }, { status: 400 });
   }
