@@ -59,7 +59,7 @@ Confirm these values exist in Fly secrets or runtime environment before deployin
 ### Discord / DSH / Kite
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_WEBHOOK_URL` or `DISCORD_TAG_WEBHOOK_URL`
-- `NEBULA_ARCADE_WEBHOOK_NAME` / `NEBULA_ARCADE_AVATAR_URL` if customized. The older `CHAT_TAG_WEBHOOK_NAME` / `CHAT_TAG_AVATAR_URL` names remain supported.
+- `NEBULA_ARCADE_WEBHOOK_NAME` / `NEBULA_ARCADE_AVATAR_URL` if customized. The older avatar variables remain supported, but the retired Chat Tag name can no longer override public Nebula Arcade branding.
 - `DSH_API_BASE` or DSH URL variables used by the current deployment.
 
 Use Fly to review/set secrets without printing secret values into logs:

@@ -7,10 +7,7 @@ const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || '';
-const CHAT_TAG_WEBHOOK_NAME =
-  process.env.NEBULA_ARCADE_WEBHOOK_NAME ||
-  process.env.CHAT_TAG_WEBHOOK_NAME ||
-  'Nebula Arcade';
+const CHAT_TAG_WEBHOOK_NAME = process.env.NEBULA_ARCADE_WEBHOOK_NAME || 'Nebula Arcade';
 const CHAT_TAG_AVATAR_URL =
   process.env.NEBULA_ARCADE_AVATAR_URL ||
   process.env.CHAT_TAG_AVATAR_URL ||
@@ -23,6 +20,7 @@ const CHAT_TAG_CHANNEL_ID =
   process.env.DISCORD_CHANNEL_ID ||
   '1463633163673927732';
 const DISCORD_CHANNEL_CLEANUP_LIMIT = Number(process.env.DISCORD_CHANNEL_CLEANUP_LIMIT || 5000);
+export const NEBULA_ARCADE_EMBED_REVISION = 2;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -196,30 +194,33 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
   const currentTagValue = tag.currentIt
     ? [
         `**${tag.currentIt.twitchUsername} is IT**`,
-        taggedAtUnix ? `Holding it <t:${taggedAtUnix}:R>` : 'Tag time unavailable',
-        `${Number(tag.playerCount || 0)} players`,
+        `${taggedAtUnix ? `<t:${taggedAtUnix}:R>` : 'Time unavailable'} · ${Number(tag.playerCount || 0)} players`,
       ].join('\n')
     : [
         '**FREE FOR ALL**',
-        'Double-points tags are live',
-        taggedAtUnix ? `Last tag <t:${taggedAtUnix}:R>` : 'No tags yet',
-        `${Number(tag.playerCount || 0)} players`,
+        `2× points · ${taggedAtUnix ? `last tag <t:${taggedAtUnix}:R>` : 'no tags yet'} · ${Number(tag.playerCount || 0)} players`,
       ].join('\n');
-  const announcementFields = announcements.slice(0, 3).map((announcement: any, index: number) => {
+  const announcementFields = Array.from({ length: 3 }, (_, index) => {
+    const announcement = announcements[index];
+    if (!announcement) {
+      return {
+        name: index === 0 ? '📣 Latest Update' : index === 1 ? '📢 Previous Update' : '🗂️ Earlier Update',
+        value: index === 0 ? 'No announcements yet.' : 'No earlier update.',
+        inline: true,
+      };
+    }
     const timestamp = Number(announcement.timestamp || 0);
     const unix = timestamp > 0 ? Math.floor(timestamp / 1000) : 0;
-    const details = Array.isArray(announcement.details)
-      ? announcement.details.filter(Boolean).slice(0, 2).join('\n')
-      : '';
     const value = [
       String(announcement.description || 'Chat Tag was updated.'),
-      details,
       unix ? `🕒 <t:${unix}:R>` : '',
-    ].filter(Boolean).join('\n').slice(0, 500);
+    ].filter(Boolean).join('\n').slice(0, 240);
     return {
       name: index === 0
-        ? `📣 Latest · ${announcement.title || 'Chat Tag Update'}`.slice(0, 80)
-        : `📢 ${announcement.title || 'Previous Update'}`.slice(0, 80),
+        ? `📣 Latest · ${announcement.title || 'Update'}`.slice(0, 60)
+        : index === 1
+          ? `📢 ${announcement.title || 'Previous Update'}`.slice(0, 60)
+          : `🗂️ ${announcement.title || 'Earlier Update'}`.slice(0, 60),
       value,
       inline: true,
     };
@@ -229,8 +230,8 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
       .slice(0, 3)
       .map((h: any) => {
         const icon = h.blocked ? '🛡️' : h.doublePoints ? '🔥' : '🎯';
-        if (h.blocked) return `${icon} ${h.taggerUsername} -> ${h.taggedUsername} (${h.blocked})`;
-        return `${icon} ${h.taggerUsername} tagged ${h.taggedUsername}${h.doublePoints ? ' (2x)' : ''}`;
+        if (h.blocked) return `${icon} ${h.taggerUsername} → ${h.taggedUsername} · blocked`;
+        return `${icon} ${h.taggerUsername} → ${h.taggedUsername}${h.doublePoints ? ' · 2×' : ''}`;
       })
       .join('\n') || 'No recent tags';
 
@@ -238,8 +239,10 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
     leaderboard
       .filter((p: any) => (p.twitchUsername || '').toLowerCase() !== 'mtman1987')
       .slice(0, 3)
-      .map((p: any, i: number) => `**#${i + 1}** ${p.twitchUsername} - ${p.score} pts (${p.tags} tags)`)
+      .map((p: any, i: number) => `${['🥇', '🥈', '🥉'][i]} ${p.twitchUsername} · ${p.score}`)
       .join('\n') || 'No players yet';
+
+  const rowBreak = { name: '\u200b', value: '\u200b', inline: false };
 
   return {
     embeds: [
@@ -250,18 +253,19 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
         color: tag.isFreeForAll ? 0xff4500 : 0x00d9ff,
         fields: [
           { name: '🎯 Current Tag', value: currentTagValue, inline: true },
-          { name: '📜 Recent Tags', value: recentLines, inline: true },
           { name: '🏆 Top 3', value: top3Lines, inline: true },
-          ...(announcementFields.length > 0
-            ? announcementFields
-            : [{ name: '📣 Latest', value: 'No announcements yet.', inline: true }]),
+          rowBreak,
+          { name: '📜 Recent Tags', value: recentLines, inline: true },
+          announcementFields[0],
+          rowBreak,
+          announcementFields[1],
+          announcementFields[2],
         ],
         author: {
           name: 'Nebula Arcade · 20 Games',
           ...(iconUrl ? { icon_url: iconUrl } : {}),
         },
         ...(showcaseUrl ? { image: { url: showcaseUrl } } : {}),
-        ...(tag.currentIt?.avatarUrl ? { thumbnail: { url: tag.currentIt.avatarUrl } } : {}),
         footer: { text: 'Nebula Arcade · type spmt controls to play Chat Tag' },
         timestamp: new Date().toISOString(),
       },
@@ -284,6 +288,10 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
       : [],
     allowed_mentions: { parse: [] },
   };
+}
+
+export function shouldReplacePersistentChatTagEmbed(stored: any) {
+  return Boolean(stored?.messageId) && Number(stored?.embedRevision || 0) < NEBULA_ARCADE_EMBED_REVISION;
 }
 
 async function requestDiscord(path: string, init: RequestInit) {
@@ -380,6 +388,15 @@ async function deleteDiscordMessage(channelId: string, messageId: string) {
   });
 }
 
+async function deletePersistentChatTagMessage(stored: any) {
+  if (DISCORD_WEBHOOK_URL && stored?.via === 'webhook') {
+    const response = await fetch(getWebhookMessageUrl(stored.messageId), { method: 'DELETE' });
+    if (response.ok || response.status === 404) return;
+    console.warn(`[ChatTagEmbed] Webhook replacement delete failed (${response.status}); trying bot delete`);
+  }
+  await deleteDiscordMessage(stored.channelId || CHAT_TAG_CHANNEL_ID, stored.messageId);
+}
+
 async function listDiscordMessages(channelId: string, before?: string) {
   const query = new URLSearchParams({ limit: '100' });
   if (before) query.set('before', before);
@@ -444,7 +461,16 @@ export async function postOrUpdateChatTagEmbed() {
   const state = await readAppState();
   const gameState = buildGameStatePayload(state);
   const payload = buildChatTagEmbed(gameState);
-  const stored = state.discordMessages?.chatTagPersistentEmbed as any;
+  let stored = state.discordMessages?.chatTagPersistentEmbed as any;
+
+  if (shouldReplacePersistentChatTagEmbed(stored)) {
+    console.log('[ChatTagEmbed] Replacing legacy persistent message to apply Nebula Arcade identity');
+    await deletePersistentChatTagMessage(stored);
+    await updateAppState((draft) => {
+      if (draft.discordMessages) delete draft.discordMessages.chatTagPersistentEmbed;
+    });
+    stored = null;
+  }
 
   if (stored?.messageId && DISCORD_WEBHOOK_URL && stored.via !== 'webhook') {
     console.warn('[ChatTagEmbed] Stored persistent embed was bot-owned, wiping channel before webhook replacement');
@@ -482,6 +508,7 @@ export async function postOrUpdateChatTagEmbed() {
       channelId: CHAT_TAG_CHANNEL_ID,
       messageId,
       via: DISCORD_WEBHOOK_URL ? 'webhook' : 'bot',
+      embedRevision: NEBULA_ARCADE_EMBED_REVISION,
       updatedAt: new Date().toISOString(),
     };
   });

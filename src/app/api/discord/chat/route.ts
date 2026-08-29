@@ -13,10 +13,7 @@ import { finalizePrivateDmDiscordMessage } from '@/lib/private-dm-finalizer';
 export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
-const CHAT_TAG_WEBHOOK_NAME =
-  process.env.NEBULA_ARCADE_WEBHOOK_NAME ||
-  process.env.CHAT_TAG_WEBHOOK_NAME ||
-  'Nebula Arcade';
+const CHAT_TAG_WEBHOOK_NAME = process.env.NEBULA_ARCADE_WEBHOOK_NAME || 'Nebula Arcade';
 const CLEANUP_DELAY_MS = 10 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 const SUPPORT_TICKET_COMMANDS = new Set(['support', 'ticket', 'doctor']);

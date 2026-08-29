@@ -70,6 +70,7 @@ test('Discord showcase ships one animated frame for every Nebula Arcade game', (
   assert.equal(asset.subarray(0, 6).toString(), 'GIF89a');
   assert.equal(frameCount, GAME_HUB_CATALOG.length);
   for (const game of GAME_HUB_CATALOG) assert.match(generator, new RegExp(`\\("${game.name}",`));
+  assert.match(generator, /duration=2900/);
   assert.match(read('src/app/games/page.tsx'), /nebula-arcade-games-showcase\.gif/);
 });
 

@@ -127,7 +127,7 @@ def main():
         OUTPUT,
         save_all=True,
         append_images=frames[1:],
-        duration=1450,
+        duration=2900,
         loop=0,
         optimize=True,
         disposal=2,

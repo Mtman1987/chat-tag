@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildChatTagEmbed, buildGameStatePayload } from '../src/lib/chat-tag-discord';
+import {
+  NEBULA_ARCADE_EMBED_REVISION,
+  buildChatTagEmbed,
+  buildGameStatePayload,
+  shouldReplacePersistentChatTagEmbed,
+} from '../src/lib/chat-tag-discord';
 
 function testState() {
   const taggedAt = Date.now() - 17 * 60 * 1000;
@@ -79,17 +84,19 @@ function testState() {
   } as any;
 }
 
-test('permanent dashboard uses two compact rows with the latest three announcements', () => {
+test('permanent dashboard uses three explicit two-column rows', () => {
   const gameState = buildGameStatePayload(testState());
   const payload = buildChatTagEmbed(gameState, 'https://arcade.example');
   const fields = payload.embeds[0].fields;
 
   assert.equal(gameState.recentAnnouncements.length, 3);
-  assert.deepEqual(fields.slice(0, 3).map((field) => field.name), ['🎯 Current Tag', '📜 Recent Tags', '🏆 Top 3']);
-  assert.ok(fields.every((field) => field.inline));
-  assert.match(fields[3].name, /Latest.*New Tag/);
-  assert.match(fields[3].value, /mamafeisty.*robdparry/);
-  assert.match(fields[4].name, /Automatic Rotation/);
+  assert.deepEqual(
+    fields.filter((field) => field.inline).map((field) => field.name),
+    ['🎯 Current Tag', '🏆 Top 3', '📜 Recent Tags', '📣 Latest · 🎯 New Tag', '📢 🎲 Automatic Rotation', '🗂️ 🔥 Double-Points Tag'],
+  );
+  assert.equal(fields.filter((field) => !field.inline).length, 2);
+  assert.match(fields[4].value, /mamafeisty.*robdparry/);
+  assert.match(fields[6].name, /Automatic Rotation/);
   assert.doesNotMatch(JSON.stringify(fields), /This should not be displayed/);
   assert.doesNotMatch(JSON.stringify(fields), /Add to OBS|tinyurl\.com\/spmt-overlay/);
 });
@@ -103,7 +110,13 @@ test('current tagged duration uses a live Discord relative timestamp', () => {
   assert.match(currentTag, /robdparry is IT/);
   assert.match(currentTag, new RegExp(`<t:${expectedUnix}:R>`));
   assert.doesNotMatch(currentTag, /0 min/);
-  assert.equal(payload.embeds[0].thumbnail?.url, 'https://example.com/avatar.png');
+  assert.equal((payload.embeds[0] as any).thumbnail, undefined);
+});
+
+test('legacy persistent message is replaced once so Discord accepts the new webhook author', () => {
+  assert.equal(shouldReplacePersistentChatTagEmbed({ messageId: 'old', via: 'webhook' }), true);
+  assert.equal(shouldReplacePersistentChatTagEmbed({ messageId: 'new', embedRevision: NEBULA_ARCADE_EMBED_REVISION }), false);
+  assert.equal(shouldReplacePersistentChatTagEmbed(null), false);
 });
 
 test('dashboard links and brands the animated 20-game Nebula Arcade showcase', () => {
