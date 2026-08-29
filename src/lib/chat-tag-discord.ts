@@ -242,8 +242,6 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
       .map((p: any, i: number) => `${['🥇', '🥈', '🥉'][i]} ${p.twitchUsername} · ${p.score}`)
       .join('\n') || 'No players yet';
 
-  const rowBreak = { name: '\u200b', value: '\u200b', inline: false };
-
   return {
     embeds: [
       {
@@ -253,19 +251,16 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
         color: tag.isFreeForAll ? 0xff4500 : 0x00d9ff,
         fields: [
           { name: '🎯 Current Tag', value: currentTagValue, inline: true },
-          { name: '🏆 Top 3', value: top3Lines, inline: true },
-          rowBreak,
           { name: '📜 Recent Tags', value: recentLines, inline: true },
-          announcementFields[0],
-          rowBreak,
-          announcementFields[1],
-          announcementFields[2],
+          { name: '🏆 Top 3', value: top3Lines, inline: true },
+          ...announcementFields,
         ],
         author: {
           name: 'Nebula Arcade · 20 Games',
           ...(iconUrl ? { icon_url: iconUrl } : {}),
         },
         ...(showcaseUrl ? { image: { url: showcaseUrl } } : {}),
+        ...(tag.currentIt?.avatarUrl ? { thumbnail: { url: tag.currentIt.avatarUrl } } : {}),
         footer: { text: 'Nebula Arcade · type spmt controls to play Chat Tag' },
         timestamp: new Date().toISOString(),
       },
