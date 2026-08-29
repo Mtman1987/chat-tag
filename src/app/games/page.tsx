@@ -1,7 +1,29 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalCommandSummary } from '@/lib/game-hub-commands';
 import { NebulaArcadeShowcase } from '@/components/nebula-arcade-showcase';
+
+const showcaseImage = 'https://chat-tag-new.fly.dev/brand/nebula-arcade-games-showcase.gif';
+
+export const metadata: Metadata = {
+  title: 'Nebula Arcade · 20 Games',
+  description: 'One bot, one rotating overlay, and 20 equal community games built for live chat.',
+  openGraph: {
+    title: 'Nebula Arcade · 20 Games',
+    description: 'See all 20 live-chat games in the Nebula Arcade rotation.',
+    url: 'https://chat-tag-new.fly.dev/games',
+    siteName: 'Nebula Arcade',
+    type: 'website',
+    images: [{ url: showcaseImage, width: 800, height: 450, alt: 'Nebula Arcade 20-game showcase' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Nebula Arcade · 20 Games',
+    description: 'See all 20 live-chat games in the Nebula Arcade rotation.',
+    images: [showcaseImage],
+  },
+};
 
 export default function GamesHubPage() {
   return (

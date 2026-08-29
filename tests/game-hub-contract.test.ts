@@ -54,7 +54,23 @@ test('all recovered Library games ship as embedded Nebula pages with parent even
   const home = read('src/components/nebula-arcade-showcase.tsx');
   assert.match(home, /ROTATION_MS/);
   assert.match(home, /NebulaGameFrame/);
+  assert.match(home, /NativeGamePreview/);
+  assert.doesNotMatch(home, /filter\(\(game\) => Boolean\(game\.sourcePrototype\)\)/);
   assert.match(home, /demo/);
+});
+
+test('Discord showcase ships one animated frame for every Nebula Arcade game', () => {
+  const asset = fs.readFileSync(path.join(root, 'public/brand/nebula-arcade-games-showcase.gif'));
+  const generator = read('scripts/generate-nebula-discord-showcase.py');
+  let frameCount = 0;
+  for (let index = 0; index < asset.length - 2; index += 1) {
+    if (asset[index] === 0x21 && asset[index + 1] === 0xf9 && asset[index + 2] === 0x04) frameCount += 1;
+  }
+
+  assert.equal(asset.subarray(0, 6).toString(), 'GIF89a');
+  assert.equal(frameCount, GAME_HUB_CATALOG.length);
+  for (const game of GAME_HUB_CATALOG) assert.match(generator, new RegExp(`\\("${game.name}",`));
+  assert.match(read('src/app/games/page.tsx'), /nebula-arcade-games-showcase\.gif/);
 });
 
 test('every Games Hub chat command uses the spmt namespace', () => {

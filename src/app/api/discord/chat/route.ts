@@ -13,7 +13,10 @@ import { finalizePrivateDmDiscordMessage } from '@/lib/private-dm-finalizer';
 export const dynamic = 'force-dynamic';
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
-const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
+const CHAT_TAG_WEBHOOK_NAME =
+  process.env.NEBULA_ARCADE_WEBHOOK_NAME ||
+  process.env.CHAT_TAG_WEBHOOK_NAME ||
+  'Nebula Arcade';
 const CLEANUP_DELAY_MS = 10 * 60 * 1000;
 const ACTIVE_CHAT_MS = Number(process.env.AUTO_ROTATE_MINUTES || 4) * 60 * 1000;
 const SUPPORT_TICKET_COMMANDS = new Set(['support', 'ticket', 'doctor']);
@@ -95,9 +98,10 @@ async function sendDiscordReply(channelId: string, content: string, context: Dis
     channelId,
     content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
+    avatarUrl: context.chatTagLogoUrl,
     embeds: [
       {
-        title: 'Chat Tag',
+        title: 'Nebula Arcade · Chat Tag',
         description: content,
         color: 0x00d9ff,
         ...replyEmbedIdentity(context),
@@ -185,6 +189,7 @@ async function sendDiscordPackReply(
     channelId,
     content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
+    avatarUrl: context.chatTagLogoUrl,
     embeds: [embed, ...cardEmbeds],
     allowedMentions: { parse: [] },
     botToken: DISCORD_BOT_TOKEN,
