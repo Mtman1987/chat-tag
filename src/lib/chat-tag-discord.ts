@@ -187,7 +187,7 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
   const history = gameState.recentHistory || [];
   const gamesUrl = nebulaArcadeUrl('/games', publicOrigin);
   const iconUrl = nebulaArcadeUrl('/brand/chat-tag-icon-512.png', publicOrigin);
-  const showcaseUrl = nebulaArcadeUrl('/brand/nebula-arcade-games-showcase.gif', publicOrigin);
+  const showcaseUrl = nebulaArcadeUrl('/brand/nebula-arcade-games-showcase.gif?v=2', publicOrigin);
 
   const taggedAt = Number(tag.lastTagTime || 0);
   const taggedAtUnix = taggedAt > 0 ? Math.floor(taggedAt / 1000) : 0;
