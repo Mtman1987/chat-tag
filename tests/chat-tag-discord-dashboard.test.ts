@@ -79,29 +79,44 @@ function testState() {
   } as any;
 }
 
-test('permanent dashboard shows the latest three announcements first', () => {
+test('permanent dashboard uses two compact rows with the latest three announcements', () => {
   const gameState = buildGameStatePayload(testState());
-  const payload = buildChatTagEmbed(gameState);
+  const payload = buildChatTagEmbed(gameState, 'https://arcade.example');
   const fields = payload.embeds[0].fields;
 
   assert.equal(gameState.recentAnnouncements.length, 3);
-  assert.match(fields[0].name, /LATEST ANNOUNCEMENT/);
-  assert.match(fields[0].value, /mamafeisty.*robdparry/);
-  assert.match(fields[1].name, /Automatic Rotation/);
+  assert.deepEqual(fields.slice(0, 3).map((field) => field.name), ['🎯 Current Tag', '📜 Recent Tags', '🏆 Top 3']);
+  assert.ok(fields.every((field) => field.inline));
+  assert.match(fields[3].name, /Latest.*New Tag/);
+  assert.match(fields[3].value, /mamafeisty.*robdparry/);
+  assert.match(fields[4].name, /Automatic Rotation/);
   assert.doesNotMatch(JSON.stringify(fields), /This should not be displayed/);
   assert.doesNotMatch(JSON.stringify(fields), /Add to OBS|tinyurl\.com\/spmt-overlay/);
 });
 
 test('current tagged duration uses a live Discord relative timestamp', () => {
   const gameState = buildGameStatePayload(testState());
-  const payload = buildChatTagEmbed(gameState);
-  const description = payload.embeds[0].description;
+  const payload = buildChatTagEmbed(gameState, 'https://arcade.example');
+  const currentTag = payload.embeds[0].fields[0].value;
   const expectedUnix = Math.floor(Number(gameState.tag.lastTagTime) / 1000);
 
-  assert.match(description, /robdparry is IT/);
-  assert.match(description, new RegExp(`<t:${expectedUnix}:R>`));
-  assert.doesNotMatch(description, /0 min/);
+  assert.match(currentTag, /robdparry is IT/);
+  assert.match(currentTag, new RegExp(`<t:${expectedUnix}:R>`));
+  assert.doesNotMatch(currentTag, /0 min/);
   assert.equal(payload.embeds[0].thumbnail?.url, 'https://example.com/avatar.png');
+});
+
+test('dashboard links and brands the animated 20-game Nebula Arcade showcase', () => {
+  const payload = buildChatTagEmbed(buildGameStatePayload(testState()), 'https://arcade.example/base');
+  const embed = payload.embeds[0];
+
+  assert.equal(embed.title, '🎮 Nebula Arcade · Chat Tag Live');
+  assert.equal(embed.url, 'https://arcade.example/games');
+  assert.equal(embed.author.name, 'Nebula Arcade · 20 Games');
+  assert.equal(embed.author.icon_url, 'https://arcade.example/brand/chat-tag-icon-512.png');
+  assert.equal(embed.image?.url, 'https://arcade.example/brand/nebula-arcade-games-showcase.gif');
+  assert.equal(payload.components[0].components[0].label, 'Open all 20 games');
+  assert.equal(payload.components[0].components[0].url, 'https://arcade.example/games');
 });
 
 test('recent tag events backfill the announcement section before new announcements accumulate', () => {

@@ -1,13 +1,18 @@
 import { readAppState, toMillis, updateAppState, type AppState } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { applyCrownsToDiscordPayload } from '@/lib/discord-webhooks';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_TAG_WEBHOOK_URL || '';
-const CHAT_TAG_WEBHOOK_NAME = process.env.CHAT_TAG_WEBHOOK_NAME || 'Chat Tag';
+const CHAT_TAG_WEBHOOK_NAME =
+  process.env.NEBULA_ARCADE_WEBHOOK_NAME ||
+  process.env.CHAT_TAG_WEBHOOK_NAME ||
+  'Nebula Arcade';
 const CHAT_TAG_AVATAR_URL =
+  process.env.NEBULA_ARCADE_AVATAR_URL ||
   process.env.CHAT_TAG_AVATAR_URL ||
   process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
   '';
@@ -27,10 +32,19 @@ function isUnknownDiscordMessageError(error: Error) {
   return /Discord request failed \(404\)|Unknown Message|code"?\s*:\s*10008/i.test(error.message || '');
 }
 
+function nebulaArcadeUrl(pathname: string, publicOrigin = getPublicAppOrigin()) {
+  try {
+    return new URL(pathname, publicOrigin).toString();
+  } catch {
+    return '';
+  }
+}
+
 function withChatTagWebhookIdentity(payload: Record<string, unknown>) {
+  const avatarUrl = CHAT_TAG_AVATAR_URL || nebulaArcadeUrl('/brand/chat-tag-icon-512.png');
   return {
     username: CHAT_TAG_WEBHOOK_NAME,
-    ...(CHAT_TAG_AVATAR_URL ? { avatar_url: CHAT_TAG_AVATAR_URL } : {}),
+    ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     ...payload,
   };
 }
@@ -168,39 +182,46 @@ export function buildGameStatePayload(state: AppState) {
   };
 }
 
-export function buildChatTagEmbed(gameState: any) {
+export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOrigin()) {
   const tag = gameState.tag || {};
   const leaderboard = gameState.leaderboard || [];
   const announcements = gameState.recentAnnouncements || [];
   const history = gameState.recentHistory || [];
+  const gamesUrl = nebulaArcadeUrl('/games', publicOrigin);
+  const iconUrl = nebulaArcadeUrl('/brand/chat-tag-icon-512.png', publicOrigin);
+  const showcaseUrl = nebulaArcadeUrl('/brand/nebula-arcade-games-showcase.gif', publicOrigin);
 
   const taggedAt = Number(tag.lastTagTime || 0);
   const taggedAtUnix = taggedAt > 0 ? Math.floor(taggedAt / 1000) : 0;
-  const itLine = tag.currentIt
-    ? `🎯 **${tag.currentIt.twitchUsername} is IT**`
-    : '🔥 **FREE FOR ALL** — Anyone can tag for DOUBLE POINTS!';
-  const timeLine = tag.currentIt && taggedAtUnix
-    ? `⏳ Tagged <t:${taggedAtUnix}:R>\n🗓️ Holding the tag since <t:${taggedAtUnix}:F>`
-    : tag.lastTagTime
-      ? `⏱️ Last tag <t:${taggedAtUnix}:R>`
-      : '⏱️ No tags yet';
+  const currentTagValue = tag.currentIt
+    ? [
+        `**${tag.currentIt.twitchUsername} is IT**`,
+        taggedAtUnix ? `Holding it <t:${taggedAtUnix}:R>` : 'Tag time unavailable',
+        `${Number(tag.playerCount || 0)} players`,
+      ].join('\n')
+    : [
+        '**FREE FOR ALL**',
+        'Double-points tags are live',
+        taggedAtUnix ? `Last tag <t:${taggedAtUnix}:R>` : 'No tags yet',
+        `${Number(tag.playerCount || 0)} players`,
+      ].join('\n');
   const announcementFields = announcements.slice(0, 3).map((announcement: any, index: number) => {
     const timestamp = Number(announcement.timestamp || 0);
     const unix = timestamp > 0 ? Math.floor(timestamp / 1000) : 0;
     const details = Array.isArray(announcement.details)
-      ? announcement.details.filter(Boolean).slice(0, 5).join('\n')
+      ? announcement.details.filter(Boolean).slice(0, 2).join('\n')
       : '';
     const value = [
       String(announcement.description || 'Chat Tag was updated.'),
       details,
-      unix ? `🕒 <t:${unix}:R> • <t:${unix}:f>` : '',
-    ].filter(Boolean).join('\n\n').slice(0, 1024);
+      unix ? `🕒 <t:${unix}:R>` : '',
+    ].filter(Boolean).join('\n').slice(0, 500);
     return {
       name: index === 0
-        ? `📣 LATEST ANNOUNCEMENT — ${announcement.title || 'Chat Tag Update'}`
-        : `📢 ${announcement.title || 'Previous Announcement'}`,
+        ? `📣 Latest · ${announcement.title || 'Chat Tag Update'}`.slice(0, 80)
+        : `📢 ${announcement.title || 'Previous Update'}`.slice(0, 80),
       value,
-      inline: false,
+      inline: true,
     };
   });
   const recentLines =
@@ -223,22 +244,44 @@ export function buildChatTagEmbed(gameState: any) {
   return {
     embeds: [
       {
-        title: '🏷️ SPMT Chat Tag',
-        description: `${itLine}\n${timeLine}`,
+        title: '🎮 Nebula Arcade · Chat Tag Live',
+        ...(gamesUrl ? { url: gamesUrl } : {}),
+        description: 'One bot · 20 equal games · live community status',
         color: tag.isFreeForAll ? 0xff4500 : 0x00d9ff,
         fields: [
+          { name: '🎯 Current Tag', value: currentTagValue, inline: true },
+          { name: '📜 Recent Tags', value: recentLines, inline: true },
+          { name: '🏆 Top 3', value: top3Lines, inline: true },
           ...(announcementFields.length > 0
             ? announcementFields
-            : [{ name: '📣 LATEST ANNOUNCEMENT', value: 'No announcements yet.', inline: false }]),
-          { name: '📜 Recent Tag History', value: recentLines, inline: false },
-          { name: '🏆 Top 3', value: top3Lines, inline: true },
+            : [{ name: '📣 Latest', value: 'No announcements yet.', inline: true }]),
         ],
+        author: {
+          name: 'Nebula Arcade · 20 Games',
+          ...(iconUrl ? { icon_url: iconUrl } : {}),
+        },
+        ...(showcaseUrl ? { image: { url: showcaseUrl } } : {}),
         ...(tag.currentIt?.avatarUrl ? { thumbnail: { url: tag.currentIt.avatarUrl } } : {}),
-        footer: { text: 'type spmt controls to interact with chat tag' },
+        footer: { text: 'Nebula Arcade · type spmt controls to play Chat Tag' },
         timestamp: new Date().toISOString(),
       },
     ],
-    components: [],
+    components: gamesUrl
+      ? [
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 5,
+                label: 'Open all 20 games',
+                emoji: { name: '🎮' },
+                url: gamesUrl,
+              },
+            ],
+          },
+        ]
+      : [],
     allowed_mentions: { parse: [] },
   };
 }

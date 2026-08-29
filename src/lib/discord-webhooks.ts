@@ -3,6 +3,8 @@ import { readAppState, updateAppState, type JsonObject } from '@/lib/volume-stor
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { decorateCrownsDeep, getWinners } from '@/lib/chat-tag-crowns';
 
+const DEFAULT_WEBHOOK_NAME = 'Nebula Arcade';
+
 export type DiscordWebhookRecord = {
   id: string;
   token: string;
@@ -100,6 +102,15 @@ function normalizeDiscordUrl(value: unknown): string | undefined {
   return undefined;
 }
 
+function defaultNebulaArcadeAvatarUrl() {
+  return normalizeDiscordUrl(
+    process.env.NEBULA_ARCADE_AVATAR_URL ||
+    process.env.CHAT_TAG_AVATAR_URL ||
+    process.env.DISCORD_CHAT_TAG_AVATAR_URL ||
+    '/brand/chat-tag-icon-512.png',
+  );
+}
+
 function sanitizeDiscordEmbeds(embeds: JsonObject[] | undefined): JsonObject[] | undefined {
   if (!Array.isArray(embeds)) return embeds;
 
@@ -132,7 +143,7 @@ function normalizeWebhookRecord(channelId: string, webhook: any, fallbackName: s
     id: String(webhook?.id || ''),
     token: String(webhook?.token || ''),
     channelId: String(channelId || ''),
-    name: String(webhook?.name || fallbackName || 'Chat Tag'),
+    name: String(webhook?.name || fallbackName || DEFAULT_WEBHOOK_NAME),
     createdAt: webhook?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -157,7 +168,7 @@ export async function recordDiscordMessageHistory(entry: JsonObject): Promise<vo
 export async function getOrCreateDiscordWebhook(
   channelId: string,
   botToken: string,
-  webhookName = 'Chat Tag'
+  webhookName = DEFAULT_WEBHOOK_NAME
 ): Promise<DiscordWebhookRecord> {
   const normalizedChannelId = String(channelId || '').trim();
   if (!normalizedChannelId) {
@@ -297,14 +308,16 @@ export async function sendDiscordMessage(rawPayload: DiscordSendPayload): Promis
 
   try {
     const embeds = sanitizeDiscordEmbeds(payload.embeds);
-    const webhook = await getOrCreateDiscordWebhook(channelId, botToken, payload.webhookName || 'Chat Tag');
+    const username = payload.username || DEFAULT_WEBHOOK_NAME;
+    const avatarUrl = payload.avatarUrl || defaultNebulaArcadeAvatarUrl();
+    const webhook = await getOrCreateDiscordWebhook(channelId, botToken, payload.webhookName || DEFAULT_WEBHOOK_NAME);
     const res = await fetch(`https://discord.com/api/v10/webhooks/${webhook.id}/${webhook.token}?wait=true`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content: payload.content,
-        username: payload.username || 'Chat Tag',
-        avatar_url: payload.avatarUrl || undefined,
+        username,
+        avatar_url: avatarUrl,
         embeds,
         components: payload.components,
         allowed_mentions: payload.allowedMentions || { parse: [] },
@@ -340,8 +353,8 @@ export async function sendDiscordMessage(rawPayload: DiscordSendPayload): Promis
       webhookId: webhook.id,
       messageId: message?.id || null,
       transport: 'webhook',
-      username: payload.username || null,
-      avatarUrl: payload.avatarUrl || null,
+      username,
+      avatarUrl: avatarUrl || null,
       content: payload.content,
       embeds: payload.embeds || [],
       components: payload.components || [],
