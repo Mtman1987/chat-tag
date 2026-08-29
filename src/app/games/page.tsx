@@ -4,7 +4,7 @@ import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalCommandSummary } from '@/lib/game-hub-commands';
 import { NebulaArcadeShowcase } from '@/components/nebula-arcade-showcase';
 
-const showcaseImage = 'https://chat-tag-new.fly.dev/brand/nebula-arcade-games-showcase.gif';
+const showcaseImage = 'https://chat-tag-new.fly.dev/brand/nebula-arcade-games-showcase.gif?v=2';
 
 export const metadata: Metadata = {
   title: 'Nebula Arcade · 20 Games',

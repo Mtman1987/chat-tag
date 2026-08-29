@@ -127,7 +127,7 @@ test('dashboard links and brands the animated 20-game Nebula Arcade showcase', (
   assert.equal(embed.url, 'https://arcade.example/games');
   assert.equal(embed.author.name, 'Nebula Arcade · 20 Games');
   assert.equal(embed.author.icon_url, 'https://arcade.example/brand/chat-tag-icon-512.png');
-  assert.equal(embed.image?.url, 'https://arcade.example/brand/nebula-arcade-games-showcase.gif');
+  assert.equal(embed.image?.url, 'https://arcade.example/brand/nebula-arcade-games-showcase.gif?v=2');
   assert.equal(payload.components[0].components[0].label, 'Open all 20 games');
   assert.equal(payload.components[0].components[0].url, 'https://arcade.example/games');
 });
