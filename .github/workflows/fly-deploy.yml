@@ -160,3 +160,25 @@ jobs:
           flyctl status --app chat-tag-bot-new
           curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
             https://chat-tag-bot-new.fly.dev/health
+
+  capture-live-quackverse:
+    name: Capture live Quackverse card
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture production card 1 in Chrome
+        run: |
+          set -euo pipefail
+          CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          "$CHROME" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+            --window-size=1200,1200 \
+            --screenshot=quackverse-live-card-1.png \
+            'https://chat-tag-new.fly.dev/api/quackverse/art/canon?cardId=1'
+          test -s quackverse-live-card-1.png
+      - name: Upload browser screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: quackverse-live-card-1
+          path: quackverse-live-card-1.png
+          if-no-files-found: error
+          retention-days: 1
