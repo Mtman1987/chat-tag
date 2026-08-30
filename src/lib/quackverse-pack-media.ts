@@ -70,7 +70,7 @@ export function createQuackversePackMediaEvent(input: {
 }
 
 export function quackversePackRenderUrl(event: QuackversePackMediaEvent): string {
-  return `${STREAMWEAVER_URL}/card-pack-overlay?event=${encodeURIComponent(encodeEvent(event))}&capture=1`;
+  return `${STREAMWEAVER_URL}/overlay/card-pack?event=${encodeURIComponent(encodeEvent(event))}&capture=1`;
 }
 
 async function dshRequest(path: string, init: RequestInit) {
