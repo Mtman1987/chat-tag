@@ -79,7 +79,7 @@ async function discoverPrototypeGames(origin: string) {
       id,
       name: catalogEntry?.game.name || titleFromHtml(html, filename),
       order: catalogEntry?.order ?? (GAME_HUB_CATALOG.length + extraOrder),
-      revision: `html-${digest}`,
+      revision: `html-${NEBULA_GAMEPLAY_REVISION}-${digest}`,
       captureSeconds: NEBULA_GAMEPLAY_CAPTURE_SECONDS,
       captureUrl: prototypeCaptureUrl(filename, id, origin),
       sourceKind: 'html' as const,
