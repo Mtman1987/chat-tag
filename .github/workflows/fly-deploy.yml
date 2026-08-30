@@ -31,9 +31,15 @@ jobs:
             const merged = [];
             for (const branch of branches) {
               if (!branch?.name || branch.name === defaultBranch) continue;
-              const comparison = await github.rest.repos.compareCommits({
-                owner, repo, base: branch.name, head: defaultBranch,
-              });
+              let comparison;
+              try {
+                comparison = await github.rest.repos.compareCommits({
+                  owner, repo, base: branch.name, head: defaultBranch,
+                });
+              } catch (error) {
+                core.warning(`Skipping branch comparison for ${branch.name}: ${error.message || error}`);
+                continue;
+              }
               if (!['ahead', 'identical'].includes(comparison.data.status)) {
                 core.notice(`Retaining unmerged branch ${branch.name}.`);
                 continue;
@@ -50,11 +56,7 @@ jobs:
                 await github.rest.git.deleteRef({ owner, repo, ref: `heads/${branch.name}` });
                 core.notice(`Deleted older merged branch ${branch.name}.`);
               } catch (error) {
-                if (error.status === 404 || error.status === 422) {
-                  core.warning(`Could not delete ${branch.name}; it may be protected or already absent.`);
-                  continue;
-                }
-                throw error;
+                core.warning(`Could not delete ${branch.name}; branch cleanup is non-blocking: ${error.message || error}`);
               }
             }
   test:
