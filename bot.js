@@ -304,6 +304,21 @@ async function refreshDiscordEmbed(reason) {
   }
 }
 
+const NEBULA_GAMEPLAY_ROTATION_MS = 10 * 60 * 1000;
+
+function scheduleNebulaGameplayEmbedRotation() {
+  const delay = NEBULA_GAMEPLAY_ROTATION_MS - (Date.now() % NEBULA_GAMEPLAY_ROTATION_MS) + 1500;
+  setTimeout(async () => {
+    try {
+      await refreshDiscordEmbed('Nebula Arcade gameplay rotation');
+    } catch (error) {
+      console.error('[Bot] Nebula gameplay embed rotation failed:', error.message || error);
+    } finally {
+      scheduleNebulaGameplayEmbedRotation();
+    }
+  }, delay);
+}
+
 async function apiCall(endpoint, options = {}) {
   try {
     const headers = {
@@ -1000,6 +1015,7 @@ console.log = (...args) => {
   let token = await getValidToken();
   console.log('[Bot] Username:', username);
   console.log('[Bot] Token:', token.substring(0, 10) + '...');
+  scheduleNebulaGameplayEmbedRotation();
 
   // Refresh token every 2 hours to prevent stale Helix calls
   setInterval(async () => {

@@ -21,6 +21,7 @@ const CHAT_TAG_CHANNEL_ID =
   '1463633163673927732';
 const DISCORD_CHANNEL_CLEANUP_LIMIT = Number(process.env.DISCORD_CHANNEL_CLEANUP_LIMIT || 5000);
 export const NEBULA_ARCADE_EMBED_REVISION = 2;
+export const NEBULA_GAMEPLAY_ROTATION_MS = 10 * 60 * 1000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,6 +34,17 @@ function isUnknownDiscordMessageError(error: Error) {
 function nebulaArcadeUrl(pathname: string, publicOrigin = getPublicAppOrigin()) {
   try {
     return new URL(pathname, publicOrigin).toString();
+  } catch {
+    return '';
+  }
+}
+
+export function nebulaGameplayImageUrl(now = Date.now()) {
+  const dshOrigin = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
+  try {
+    const url = new URL('/api/nebula-arcade/gameplay/current.gif', dshOrigin);
+    url.searchParams.set('slot', String(Math.floor(now / NEBULA_GAMEPLAY_ROTATION_MS)));
+    return url.toString();
   } catch {
     return '';
   }
@@ -187,7 +199,7 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
   const history = gameState.recentHistory || [];
   const gamesUrl = nebulaArcadeUrl('/games', publicOrigin);
   const iconUrl = nebulaArcadeUrl('/brand/chat-tag-icon-512.png', publicOrigin);
-  const showcaseUrl = nebulaArcadeUrl('/brand/nebula-arcade-games-showcase.gif?v=2', publicOrigin);
+  const showcaseUrl = nebulaGameplayImageUrl();
 
   const taggedAt = Number(tag.lastTagTime || 0);
   const taggedAtUnix = taggedAt > 0 ? Math.floor(taggedAt / 1000) : 0;
