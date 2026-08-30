@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 31396)
+Total output lines: 3020
+
 const tmi = require('tmi.js');
 const fs = require('fs');
 const path = require('path');
@@ -302,6 +305,21 @@ async function refreshDiscordEmbed(reason) {
   if (announceRes?.__ok === false || announceRes?.success === false || announceRes?.embed?.ok === false) {
     console.error(`[Bot] Chat Tag embed refresh failed: ${announceRes?.error || announceRes?.embed?.error || announceRes?.__status || 'unknown error'}`);
   }
+}
+
+const NEBULA_GAMEPLAY_ROTATION_MS = 10 * 60 * 1000;
+
+function scheduleNebulaGameplayEmbedRotation() {
+  const delay = NEBULA_GAMEPLAY_ROTATION_MS - (Date.now() % NEBULA_GAMEPLAY_ROTATION_MS) + 1500;
+  setTimeout(async () => {
+    try {
+      await refreshDiscordEmbed('Nebula Arcade gameplay rotation');
+    } catch (error) {
+      console.error('[Bot] Nebula gameplay embed rotation failed:', error.message || error);
+    } finally {
+      scheduleNebulaGameplayEmbedRotation();
+    }
+  }, delay);
 }
 
 async function apiCall(endpoint, options = {}) {
@@ -1000,6 +1018,7 @@ console.log = (...args) => {
   let token = await getValidToken();
   console.log('[Bot] Username:', username);
   console.log('[Bot] Token:', token.substring(0, 10) + '...');
+  scheduleNebulaGameplayEmbedRotation();
 
   // Refresh token every 2 hours to prevent stale Helix calls
   setInterval(async () => {
@@ -1516,134 +1535,7 @@ console.log = (...args) => {
 
     const pointsResult = await forwardToDSH({
       type: 'raid',
-      twitchLogin: login,
-      twitchId,
-      username: login,
-      channel: targetChannel,
-      viewers,
-    });
-
-    const twitchUser = twitchId ? { id: twitchId } : await helixGetUser(login);
-    const passResult = twitchUser?.id
-      ? await grantPassForEvent(
-          targetChannel,
-          `user_${twitchUser.id}`,
-          login,
-          `raided with ${viewers} viewers`,
-          { announce: false },
-        )
-      : { granted: false, reason: 'not-a-player' };
-
-    await announceRaidSupport(targetChannel, login, pointsResult, passResult);
-  }
-
-  // ── TMI.js fallback event handlers (kept as backup, EventSub is primary) ──
-  client.on('submysterygift', async (channel, username, numbOfSubs, methods, userstate) => {
-    const login = (userstate['login'] || username || '').toLowerCase();
-    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
-    if (!login || !uid) return;
-    console.log(`[TMI-Event] Gift sub: ${login} gifted ${numbOfSubs} subs`);
-    forwardToDSH({ type: 'gift_sub', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', ''), quantity: numbOfSubs });
-    await grantPassForEvent(channel, uid, login, `gifted ${numbOfSubs} subs (tmi)`);
-  });
-
-  client.on('subscription', async (channel, username, method, message, userstate) => {
-    const login = (userstate['login'] || username || '').toLowerCase();
-    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
-    if (!login || !uid) return;
-    console.log(`[TMI-Event] Subscription: ${login}`);
-    forwardToDSH({ type: 'subscription', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', '') });
-    await grantPassForEvent(channel, uid, login, `subscribed (tmi)`);
-  });
-
-  client.on('resub', async (channel, username, months, message, userstate, methods) => {
-    const login = (userstate['login'] || username || '').toLowerCase();
-    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
-    if (!login || !uid) return;
-    console.log(`[TMI-Event] Resub: ${login} (${months} months)`);
-    forwardToDSH({ type: 'subscription', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', '') });
-    await grantPassForEvent(channel, uid, login, `resubscribed ${months}mo (tmi)`);
-  });
-
-  client.on('cheer', async (channel, userstate, message) => {
-    const bits = parseInt(userstate.bits || '0');
-    const login = (userstate['username'] || '').toLowerCase();
-    const uid = userstate['user-id'] ? `user_${userstate['user-id']}` : null;
-    if (!login || !uid) return;
-    console.log(`[TMI-Event] Cheer: ${login} cheered ${bits} bits`);
-    forwardToDSH({ type: 'cheer', twitchLogin: login, twitchId: userstate['user-id'], username: login, channel: channel.replace('#', ''), bits });
-    if (bits < 100) return;
-    await grantPassForEvent(channel, uid, login, `cheered ${bits} bits (tmi)`);
-  });
-
-  client.on('raided', async (channel, username, viewers) => {
-    const login = (username || '').toLowerCase();
-    console.log(`[TMI-Event] Raid: ${login} raided with ${viewers} viewers`);
-    await handleRaidSupport(channel, login, viewers);
-  });
-
-  // ── EventSub WebSocket (primary event source) ──
-  async function getEventSubToken() {
-    // Use the bot's USER token — EventSub channel events require user auth, not app auth
-    // The bot token is already validated/refreshed by getValidToken()
-    return env.TWITCH_BOT_TOKEN;
-  }
-
-  async function lookupBroadcasterId(login) {
-    if (broadcasterIdCache.has(login)) return broadcasterIdCache.get(login);
-    const user = await helixGetUser(login);
-    if (!user) return null;
-    const entry = { id: user.id, login: user.login };
-    broadcasterIdCache.set(login, entry);
-    return entry;
-  }
-
-  async function subscribeEventSub(type, version, condition) {
-    const token = await getEventSubToken();
-    const clientId = getTwitchClientId();
-    const key = `${type}:${JSON.stringify(condition)}`;
-    if (eventSubSubscriptions.has(key)) return;
-
-    const res = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
-      method: 'POST',
-      headers: {
-        'Client-ID': clientId,
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type,
-        version,
-        condition,
-        transport: { method: 'websocket', session_id: eventSubSessionId },
-      }),
-    });
-
-    if (res.ok) {
-      eventSubSubscriptions.add(key);
-      console.log(`[EventSub] ✅ Subscribed: ${type} for ${JSON.stringify(condition)}`);
-    } else {
-      const text = await res.text();
-      // 409 = already exists, that's fine
-      if (res.status === 409) {
-        eventSubSubscriptions.add(key);
-      } else {
-        console.error(`[EventSub] ❌ Subscribe failed ${type}: ${res.status} ${text}`);
-      }
-    }
-  }
-
-  async function subscribeToChannelEvents(broadcasterId) {
-    const cond = { broadcaster_user_id: broadcasterId };
-    await subscribeEventSub('channel.follow', '2', { ...cond, moderator_user_id: broadcasterId });
-    await subscribeEventSub('channel.subscribe', '1', cond);
-    await subscribeEventSub('channel.subscription.gift', '1', cond);
-    await subscribeEventSub('channel.subscription.message', '1', cond);
-    await subscribeEventSub('channel.cheer', '1', cond);
-    await subscribeEventSub('channel.raid', '1', { to_broadcaster_user_id: broadcasterId });
-  }
-
-  async function handleEventSubNotification(payload) {
+      twitch…1396 tokens truncated…cation(payload) {
     const type = payload?.subscription?.type;
     const event = payload?.event;
     if (!type || !event) return;

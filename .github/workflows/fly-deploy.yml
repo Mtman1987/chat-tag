@@ -72,6 +72,8 @@ jobs:
         run: npm run test:auth-routing
       - name: Run durable player history tests
         run: node --import tsx --test tests/player-history.test.ts tests/chat-tag-runtime-resilience.test.ts
+      - name: Run Nebula gameplay GIF rotation tests
+        run: node --import tsx --test tests/nebula-gameplay-rotation.test.ts tests/chat-tag-discord-dashboard.test.ts
       - name: Run canonical Personal overlay regression
         run: node --import tsx --test tests/canonical-personal-overlay.test.ts tests/admin-shell-parity.test.ts tests/layout-cleanup.test.ts
       - name: Typecheck
