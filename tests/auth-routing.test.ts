@@ -32,6 +32,12 @@ test('public dashboard can read the Chat Tag roster', async () => {
   assert.equal(response.headers.get('x-middleware-next'), '1');
 });
 
+test('DSH clip worker can read the public Nebula showcase manifest', async () => {
+  const response = await middleware(request('/api/game-hub/showcase-manifest'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-middleware-next'), '1');
+});
+
 test('anonymous Chat Tag writes stay protected', async () => {
   const response = await middleware(request('/api/tag', { method: 'POST' }));
   assert.equal(response.status, 401);
