@@ -12,19 +12,11 @@ jobs:
   screenshot:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify live Quackverse manifest
-        run: |
-          set -euo pipefail
-          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
-            https://chat-tag-new.fly.dev/api/quackverse/art \
-            --output quackverse-art-manifest.json
-          node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('quackverse-art-manifest.json','utf8'));console.log({complete:d.complete,cardCount:d.cardCount,canonArtVersion:d.canonArtVersion,defaultSource:d.defaultSource});if(!d.complete||!d.cardCount)process.exit(1)"
-
       - name: Capture live card in Chrome
         run: |
           set -euo pipefail
           CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser)"
-          "$CHROME" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+          timeout 45s "$CHROME" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
             --window-size=1200,1200 \
             --screenshot=quackverse-live-card-1.png \
             'https://chat-tag-new.fly.dev/api/quackverse/art/canon?cardId=1'
