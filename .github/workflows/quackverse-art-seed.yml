@@ -1,0 +1,77 @@
+name: Quackverse AI Art Seed
+
+on:
+  push:
+    branches:
+      - ops/quackverse-art-seed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quackverse-ai-art-seed
+  cancel-in-progress: false
+
+jobs:
+  seed-static-art:
+    name: Seed missing Quackverse static art
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Seed missing cards in batches of five
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "FLY_API_TOKEN is not set"
+            exit 1
+          fi
+
+          flyctl ssh console --app chat-tag-new -C 'node -e '"'"'
+          const base = "http://127.0.0.1:3000";
+          const secret = String(process.env.BOT_SECRET_KEY || "").trim();
+          if (!secret) throw new Error("BOT_SECRET_KEY is unavailable inside chat-tag-new");
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          async function main() {
+            for (let pass = 1; pass <= 30; pass += 1) {
+              const response = await fetch(base + "/api/quackverse/art/generate?secret=" + encodeURIComponent(secret), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  variant: "static",
+                  limit: 5,
+                  missingOnly: true,
+                  providerOverride: "seaart"
+                })
+              });
+              const data = await response.json().catch(() => null);
+              console.log(JSON.stringify({ pass, status: response.status, data }, null, 2));
+              if (!response.ok) throw new Error("Quackverse generation endpoint failed with HTTP " + response.status);
+              if (data?.complete === true || Number(data?.remaining || 0) === 0) {
+                console.log("Quackverse static art complete.");
+                return;
+              }
+              const successes = Array.isArray(data?.results) ? data.results.filter((item) => item?.success).length : 0;
+              if (successes === 0) {
+                throw new Error("A full batch produced zero successful images; stopping rather than looping endlessly.");
+              }
+              await sleep(1500);
+            }
+            throw new Error("Quackverse seeding exceeded 30 passes without reaching completion.");
+          }
+          main().catch((error) => { console.error(error); process.exit(1); });
+          '"'"''
+
+      - name: Verify final art manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            https://chat-tag-new.fly.dev/api/quackverse/art \
+            --output /tmp/quackverse-art.json
+          node -e 'const fs=require("fs");const data=JSON.parse(fs.readFileSync("/tmp/quackverse-art.json","utf8"));console.log(JSON.stringify({cardCount:data.cardCount,staticCount:data.staticCount,missingStaticCount:data.missingStaticCount,complete:data.complete},null,2));if(!data.complete||data.missingStaticCount!==0)process.exit(1)'

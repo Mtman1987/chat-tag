@@ -17,8 +17,6 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
-const CANON_ART_VERSION = 2;
-const CANON_UPDATED_AT = 'canon-v2';
 const ALLOWED_MIME_TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -27,33 +25,44 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   'image/avif': 'avif',
 };
 
-type UploadFileRecord = { name?: string; fileName?: string; type?: string; mimeType?: string; data?: string; base64?: string; content?: string; bytes?: number[] };
+type UploadFileRecord = {
+  name?: string;
+  fileName?: string;
+  type?: string;
+  mimeType?: string;
+  data?: string;
+  base64?: string;
+  content?: string;
+  bytes?: number[];
+};
+
 type UploadPayload = { cardId?: unknown; variant?: unknown; file?: unknown };
 
 function manifestFromState(state: any): QuackverseArtManifest {
   return normalizeQuackverseArtManifest(state?.gameSettings?.default?.quackverseArt);
 }
 
-function builtInStaticAsset(cardId: number) {
-  return {
-    fileName: `builtin/${cardId}.svg`,
-    mimeType: 'image/svg+xml',
-    originalName: `quackverse-canon-${cardId}.svg`,
-    updatedAt: CANON_UPDATED_AT,
-    url: `/api/quackverse/art/canon?cardId=${cardId}`,
-    builtIn: true,
-  };
+async function assetExists(cardId: number, asset?: QuackverseArtAsset | null) {
+  if (!asset?.fileName) return false;
+  try {
+    const stat = await fs.stat(path.join(ART_ROOT, asset.fileName));
+    return stat.isFile() && stat.size > 0;
+  } catch {
+    return false;
+  }
 }
 
-function withPublicUrls(manifest: QuackverseArtManifest) {
+async function withPublicUrls(manifest: QuackverseArtManifest) {
   const cards: Record<string, Record<QuackverseArtVariant, any>> = {};
   for (const card of quackverseCards) {
     const entry = manifest[String(card.id)] || {};
+    const staticReady = await assetExists(card.id, entry.static);
+    const hoverReady = await assetExists(card.id, entry.hover);
     cards[String(card.id)] = {
-      static: entry.static
+      static: staticReady && entry.static
         ? { ...entry.static, url: quackverseArtFileUrl(card.id, 'static', entry.static.updatedAt), builtIn: false }
-        : builtInStaticAsset(card.id),
-      hover: entry.hover
+        : null,
+      hover: hoverReady && entry.hover
         ? { ...entry.hover, url: quackverseArtFileUrl(card.id, 'hover', entry.hover.updatedAt), builtIn: false }
         : null,
     } as any;
@@ -61,21 +70,8 @@ function withPublicUrls(manifest: QuackverseArtManifest) {
   return cards;
 }
 
-async function removeIfExists(filePath: string) { await fs.rm(filePath, { force: true }).catch(() => {}); }
-
-async function migrateLegacyArtOnce() {
-  const state = await readAppState();
-  const currentVersion = Number(state?.gameSettings?.default?.quackverseCanonArtVersion || 0);
-  if (currentVersion >= CANON_ART_VERSION) return manifestFromState(state);
-
-  await fs.rm(ART_ROOT, { recursive: true, force: true }).catch(() => {});
-  await updateAppState((nextState) => {
-    if (!nextState.gameSettings.default) nextState.gameSettings.default = {};
-    nextState.gameSettings.default.quackverseArt = {};
-    nextState.gameSettings.default.quackverseCanonArtVersion = CANON_ART_VERSION;
-    return { quackverseCanonArtVersion: CANON_ART_VERSION };
-  });
-  return {};
+async function removeIfExists(filePath: string) {
+  await fs.rm(filePath, { force: true }).catch(() => {});
 }
 
 async function readUploadPayload(req: NextRequest): Promise<{ ok: true; data: UploadPayload } | { ok: false; response: Response }> {
@@ -110,20 +106,26 @@ async function normalizeUploadFile(file: unknown): Promise<{ bytes: Buffer; mime
 }
 
 export async function GET() {
-  const manifest = await migrateLegacyArtOnce();
+  const appState = await readAppState();
+  const manifest = manifestFromState(appState);
+  const cards = await withPublicUrls(manifest);
+  const staticCount = Object.values(cards).filter((entry) => entry.static).length;
+  const hoverCount = Object.values(cards).filter((entry) => entry.hover).length;
   return NextResponse.json({
-    cards: withPublicUrls(manifest),
-    canonArtVersion: CANON_ART_VERSION,
-    defaultSource: 'built-in-canon',
-    complete: true,
+    cards,
     cardCount: quackverseCards.length,
+    staticCount,
+    hoverCount,
+    missingStaticCount: quackverseCards.length - staticCount,
+    missingHoverCount: quackverseCards.length - hoverCount,
+    complete: staticCount === quackverseCards.length,
+    defaultSource: 'persisted-ai-or-manual',
   });
 }
 
 export async function POST(req: NextRequest) {
   const auth = requireAdminRequest(req);
   if (!auth.ok) return auth.response;
-  await migrateLegacyArtOnce();
   const payload = await readUploadPayload(req);
   if (!payload.ok) return payload.response;
   const cardId = Number(payload.data.cardId);
@@ -143,19 +145,24 @@ export async function POST(req: NextRequest) {
   const absolutePath = path.join(ART_ROOT, relativePath);
   const existing = await readAppState();
   const previous = manifestFromState(existing)[String(cardId)]?.[variant];
-  if (previous?.fileName && previous.fileName !== fileName) await removeIfExists(path.join(ART_ROOT, String(cardId), previous.fileName));
   await fs.writeFile(absolutePath, file.bytes);
+  if (previous?.fileName && previous.fileName !== relativePath.replace(/\\/g, '/')) {
+    await removeIfExists(path.join(ART_ROOT, previous.fileName));
+  }
 
-  const asset: QuackverseArtAsset = { fileName: relativePath.replace(/\\/g, '/'), mimeType: file.mimeType, originalName: file.originalName || fileName, updatedAt: new Date().toISOString() };
+  const asset: QuackverseArtAsset = {
+    fileName: relativePath.replace(/\\/g, '/'),
+    mimeType: file.mimeType,
+    originalName: file.originalName || fileName,
+    updatedAt: new Date().toISOString(),
+  };
   await updateAppState((state) => {
     if (!state.gameSettings.default) state.gameSettings.default = {};
     const current = normalizeQuackverseArtManifest(state.gameSettings.default.quackverseArt);
     const entry: QuackverseArtEntry = current[String(cardId)] || {};
     entry[variant] = asset;
     state.gameSettings.default.quackverseArt = { ...current, [String(cardId)]: entry };
-    state.gameSettings.default.quackverseCanonArtVersion = CANON_ART_VERSION;
     return state.gameSettings.default.quackverseArt;
   });
-
   return NextResponse.json({ success: true, cardId, variant, asset: { ...asset, url: quackverseArtFileUrl(cardId, variant, asset.updatedAt) } });
 }
