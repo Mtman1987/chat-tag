@@ -9,6 +9,15 @@ test('showcase catalog exposes all 20 games for gameplay capture', () => {
   assert.equal(new Set(GAME_HUB_CATALOG.map((game) => game.id)).size, 20);
 });
 
+test('showcase manifest auto-discovers HTML games and fingerprints their source', () => {
+  const route = readFileSync(new URL('../src/app/api/game-hub/showcase-manifest/route.ts', import.meta.url), 'utf8');
+  assert.match(route, /public', 'nebula-arcade', 'games/);
+  assert.match(route, /readdir\(PROTOTYPE_GAME_DIRECTORY/);
+  assert.match(route, /createHash\('sha256'\)\.update\(html\)/);
+  assert.match(route, /cacheStrategy: 'capture-once-per-source-revision'/);
+  assert.match(route, /searchParams\.set\('demo', '1'\)/);
+});
+
 test('DSH gameplay image URL changes only at ten-minute boundaries', () => {
   const start = 2 * NEBULA_GAMEPLAY_ROTATION_MS;
   assert.equal(nebulaGameplayImageUrl(start), nebulaGameplayImageUrl(start + NEBULA_GAMEPLAY_ROTATION_MS - 1));
