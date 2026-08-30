@@ -1,3 +1,3 @@
-export const NEBULA_GAMEPLAY_REVISION = '2026-08-30-gameplay-1';
+export const NEBULA_GAMEPLAY_REVISION = '2026-08-30-gameplay-2';
 export const NEBULA_GAMEPLAY_CAPTURE_SECONDS = 60;
 export const NEBULA_GAMEPLAY_ROTATION_SECONDS = 10 * 60;
