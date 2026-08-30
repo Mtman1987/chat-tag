@@ -194,12 +194,14 @@ export async function middleware(request: NextRequest) {
   const isPublicTagRead = request.method === 'GET' && pathname === '/api/tag';
   const isPublicLiveMembersRead = request.method === 'GET' && pathname === '/api/discord/live-members';
   const isPublicGameScopeRead = request.method === 'GET' && pathname === '/api/game-hub/channel';
+  const isPublicShowcaseManifestRead = request.method === 'GET' && pathname === '/api/game-hub/showcase-manifest';
   const isPublicBingoStateRead = request.method === 'GET' && pathname === '/api/bingo/state';
   if (
     pathname === '/'
     || isPublicTagRead
     || isPublicLiveMembersRead
     || isPublicGameScopeRead
+    || isPublicShowcaseManifestRead
     || isPublicBingoStateRead
     || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))
     || isStatic(pathname)
