@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
+import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-registry';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import {
   NEBULA_GAMEPLAY_CAPTURE_SECONDS,
@@ -8,6 +8,21 @@ import {
 } from '@/lib/nebula-gameplay-config';
 
 export const dynamic = 'force-dynamic';
+
+function gameplayCaptureUrl(game: GameHubGame, origin: string) {
+  if (game.sourcePrototype) {
+    const filename = String(game.sourcePrototype).split('/').pop();
+    if (filename) {
+      const url = new URL(`/nebula-arcade/games/${encodeURIComponent(filename)}`, origin);
+      url.searchParams.set('embedded', '1');
+      url.searchParams.set('room', `nebula-showcase-${game.id}`);
+      url.searchParams.set('demo', '1');
+      return url.toString();
+    }
+  }
+
+  return new URL(`/overlay/game-hub/showcase/${encodeURIComponent(game.id)}`, origin).toString();
+}
 
 export async function GET(request: NextRequest) {
   const origin = getPublicAppOrigin() || request.nextUrl.origin;
@@ -18,7 +33,7 @@ export async function GET(request: NextRequest) {
     order,
     revision: NEBULA_GAMEPLAY_REVISION,
     captureSeconds: NEBULA_GAMEPLAY_CAPTURE_SECONDS,
-    captureUrl: new URL(`/overlay/game-hub/showcase/${encodeURIComponent(game.id)}`, origin).toString(),
+    captureUrl: gameplayCaptureUrl(game, origin),
   }));
 
   return NextResponse.json({
