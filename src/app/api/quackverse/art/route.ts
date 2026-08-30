@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs/promises';
 import { requireAdminRequest } from '@/lib/auth';
+import { quackverseCards } from '@/lib/quackverse-data';
 import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
 import {
   normalizeQuackverseArtManifest,
@@ -17,6 +18,7 @@ export const runtime = 'nodejs';
 
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const CANON_ART_VERSION = 2;
+const CANON_UPDATED_AT = 'canon-v2';
 const ALLOWED_MIME_TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -32,14 +34,28 @@ function manifestFromState(state: any): QuackverseArtManifest {
   return normalizeQuackverseArtManifest(state?.gameSettings?.default?.quackverseArt);
 }
 
+function builtInStaticAsset(cardId: number) {
+  return {
+    fileName: `builtin/${cardId}.svg`,
+    mimeType: 'image/svg+xml',
+    originalName: `quackverse-canon-${cardId}.svg`,
+    updatedAt: CANON_UPDATED_AT,
+    url: `/api/quackverse/art/canon?cardId=${cardId}`,
+    builtIn: true,
+  };
+}
+
 function withPublicUrls(manifest: QuackverseArtManifest) {
   const cards: Record<string, Record<QuackverseArtVariant, any>> = {};
-  for (const [cardId, entry] of Object.entries(manifest)) {
-    const numericCardId = Number(cardId);
-    if (!Number.isFinite(numericCardId)) continue;
-    cards[cardId] = {
-      static: entry.static ? { ...entry.static, url: quackverseArtFileUrl(numericCardId, 'static', entry.static.updatedAt) } : null,
-      hover: entry.hover ? { ...entry.hover, url: quackverseArtFileUrl(numericCardId, 'hover', entry.hover.updatedAt) } : null,
+  for (const card of quackverseCards) {
+    const entry = manifest[String(card.id)] || {};
+    cards[String(card.id)] = {
+      static: entry.static
+        ? { ...entry.static, url: quackverseArtFileUrl(card.id, 'static', entry.static.updatedAt), builtIn: false }
+        : builtInStaticAsset(card.id),
+      hover: entry.hover
+        ? { ...entry.hover, url: quackverseArtFileUrl(card.id, 'hover', entry.hover.updatedAt), builtIn: false }
+        : null,
     } as any;
   }
   return cards;
@@ -95,7 +111,13 @@ async function normalizeUploadFile(file: unknown): Promise<{ bytes: Buffer; mime
 
 export async function GET() {
   const manifest = await migrateLegacyArtOnce();
-  return NextResponse.json({ cards: withPublicUrls(manifest), canonArtVersion: CANON_ART_VERSION, defaultSource: 'built-in-canon' });
+  return NextResponse.json({
+    cards: withPublicUrls(manifest),
+    canonArtVersion: CANON_ART_VERSION,
+    defaultSource: 'built-in-canon',
+    complete: true,
+    cardCount: quackverseCards.length,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -108,6 +130,7 @@ export async function POST(req: NextRequest) {
   const variant = String(payload.data.variant || '') as QuackverseArtVariant;
   const file = await normalizeUploadFile(payload.data.file);
   if (!Number.isFinite(cardId) || cardId < 1) return NextResponse.json({ error: 'cardId is required.' }, { status: 400 });
+  if (!quackverseCards.some((card) => card.id === cardId)) return NextResponse.json({ error: 'Unknown Quackverse card.' }, { status: 404 });
   if (variant !== 'static' && variant !== 'hover') return NextResponse.json({ error: 'variant must be static or hover.' }, { status: 400 });
   if (!file) return NextResponse.json({ error: 'file is required.' }, { status: 400 });
   if (!ALLOWED_MIME_TYPES[file.mimeType]) return NextResponse.json({ error: 'Unsupported file type.' }, { status: 400 });
