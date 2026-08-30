@@ -17,6 +17,7 @@ const PUBLIC_PREFIXES = [
   '/api/overlay/',
   '/overlay',
   '/games',
+  '/nebula-arcade/games/',
   '/quackverse',
   '/quackverse-guide',
   '/quackverse-overlay',
@@ -213,8 +214,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Legacy service authentication remains accepted for existing callers while
-  // bot-to-bot integrations migrate to scoped SPMT client-credentials tokens.
   if (hasValidBotSecret(request)) {
     return NextResponse.next();
   }
@@ -229,9 +228,6 @@ export async function middleware(request: NextRequest) {
       accessToken = refreshed.tokens.access_token;
     }
   }
-  // A valid signed ChatTag/Twitch session is app identity evidence, not SPMT
-  // authority. Read it even when SPMT is present so legacy app-owned data such
-  // as Quackverse collections stays attached to the immutable Twitch user ID.
   const legacySession = await verifyLegacySession(request);
   if (!identity && !legacySession) {
     if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Sign in with SPMT or Twitch to continue' }, { status: 401 });
