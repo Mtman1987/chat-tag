@@ -26,6 +26,7 @@ const PUBLIC_PREFIXES = [
   '/api/quackverse/events',
   '/api/quackverse/pack-preview',
   '/api/quackverse/pack/image',
+  '/api/quackverse/art',
   '/api/twitch/live',
   '/_next/',
   '/favicon.ico',
