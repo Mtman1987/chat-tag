@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { getAuthHeaders } from '@/lib/client-auth';
@@ -27,6 +28,14 @@ type QuackverseArtEntry = {
 type QuackverseArtResponse = {
   cards?: Record<string, QuackverseArtEntry>;
 };
+
+const IMAGE_PROVIDERS = [
+  { value: 'seaart', label: 'SeaArt', detail: 'best final-card test' },
+  { value: 'eden', label: 'Eden / Leonardo', detail: 'baseline comparison' },
+  { value: 'cloudflare', label: 'Cloudflare FLUX', detail: 'fast reference test' },
+] as const;
+
+type QuackverseImageProvider = (typeof IMAGE_PROVIDERS)[number]['value'];
 
 function cardStatus(entry?: QuackverseArtEntry | null) {
   const staticReady = Boolean(entry?.static);
@@ -93,11 +102,17 @@ export function QuackverseArtManager() {
   const [familyOverride, setFamilyOverride] = useState('');
   const [subclassOverride, setSubclassOverride] = useState('');
   const [customInstructions, setCustomInstructions] = useState('');
+  const [providerOverride, setProviderOverride] = useState<QuackverseImageProvider>('seaart');
   const [promptPreview, setPromptPreview] = useState('');
 
   const selectedCard = useMemo(
     () => quackverseCards.find((card) => card.id === selectedCardId) || quackverseCards[0],
     [selectedCardId],
+  );
+
+  const selectedProvider = useMemo(
+    () => IMAGE_PROVIDERS.find((provider) => provider.value === providerOverride) || IMAGE_PROVIDERS[0],
+    [providerOverride],
   );
 
   const filteredCards = useMemo(() => {
@@ -152,7 +167,7 @@ export function QuackverseArtManager() {
     async (variant: 'static' | 'hover', cardIds: number[], previewOnly = false) => {
       if (!cardIds.length) return;
       setLoading(true);
-      setGenerationMessage(previewOnly ? 'Building exact prompt preview...' : `Generating ${variant} art for ${cardIds.length} card${cardIds.length === 1 ? '' : 's'}...`);
+      setGenerationMessage(previewOnly ? 'Building exact prompt preview...' : `Generating ${variant} art with ${providerOverride} for ${cardIds.length} card${cardIds.length === 1 ? '' : 's'}...`);
       try {
         const response = await fetch('/api/quackverse/art/generate', {
           method: 'POST',
@@ -164,7 +179,7 @@ export function QuackverseArtManager() {
             missingOnly: false,
             previewOnly,
             includePrompt: true,
-            providerOverride: 'eden',
+            providerOverride,
             familyOverride: cardIds.length === 1 ? familyOverride : '',
             subclassOverride: cardIds.length === 1 ? subclassOverride : '',
             customInstructions: cardIds.length === 1 ? customInstructions : '',
@@ -192,7 +207,33 @@ export function QuackverseArtManager() {
         setLoading(false);
       }
     },
-    [customInstructions, familyOverride, refresh, subclassOverride],
+    [customInstructions, familyOverride, providerOverride, refresh, subclassOverride],
+  );
+
+  const deleteAssets = useCallback(
+    async (payload: { cardId?: number; variant: 'static' | 'hover' | 'all'; all?: boolean; generatedOnly?: boolean }) => {
+      setLoading(true);
+      setGenerationMessage(payload.all ? 'Deleting generated Quackverse art...' : 'Deleting selected Quackverse art...');
+      try {
+        const response = await fetch('/api/quackverse/art', {
+          method: 'DELETE',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.error || `Delete failed (${response.status})`);
+        }
+        const removedCount = Number(data?.removedCount || 0);
+        setGenerationMessage(`Deleted ${removedCount} art asset${removedCount === 1 ? '' : 's'}.`);
+        await refresh();
+      } catch (error: any) {
+        setGenerationMessage(error?.message || 'Delete failed');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [refresh],
   );
 
   const selectedEntry = manifest[String(selectedCard.id)] || null;
@@ -266,11 +307,23 @@ export function QuackverseArtManager() {
 
             <div data-quackverse-art-actions className="relative z-20 space-y-4 rounded-lg border border-white/10 bg-black/20 p-3 pointer-events-auto">
               <div className="space-y-3 rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3">
-                <div>
-                  <div className="text-sm font-semibold text-white">Quackverse Image Generator</div>
-                  <div className="text-xs text-slate-300">
-                    Eden / Leonardo · {selectedCard.type} · detected family {(selectedCard as any).family || 'General'} · subclass {(selectedCard as any).trunk || selectedCard.role || 'General'}
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-start">
+                  <div>
+                    <div className="text-sm font-semibold text-white">Quackverse Image Generator</div>
+                    <div className="text-xs text-slate-300">
+                      {selectedProvider.label} · {selectedProvider.detail} · {selectedCard.type} · detected family {(selectedCard as any).family || 'General'} · subclass {(selectedCard as any).trunk || selectedCard.role || 'General'}
+                    </div>
                   </div>
+                  <Select value={providerOverride} onValueChange={(value) => setProviderOverride(value as QuackverseImageProvider)}>
+                    <SelectTrigger className="h-9 border-white/10 bg-slate-950 text-white">
+                      <SelectValue placeholder="Provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {IMAGE_PROVIDERS.map((provider) => (
+                        <SelectItem key={provider.value} value={provider.value}>{provider.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Input
@@ -328,6 +381,23 @@ export function QuackverseArtManager() {
                   </div>
                 )}
                 {generationMessage && <div className="text-xs text-cyan-100">{generationMessage}</div>}
+                <div className="space-y-2 rounded-md border border-red-300/20 bg-red-500/10 p-3">
+                  <div className="text-sm font-semibold text-white">Cleanup</div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button type="button" variant="secondary" disabled={loading || !selectedEntry?.static} onClick={() => void deleteAssets({ cardId: selectedCard.id, variant: 'static' })} className="bg-red-500/20 text-red-50 hover:bg-red-500/30">
+                      Delete Selected Static
+                    </Button>
+                    <Button type="button" variant="secondary" disabled={loading || !selectedEntry?.hover} onClick={() => void deleteAssets({ cardId: selectedCard.id, variant: 'hover' })} className="bg-red-500/20 text-red-50 hover:bg-red-500/30">
+                      Delete Selected Hover
+                    </Button>
+                    <Button type="button" variant="secondary" disabled={loading} onClick={() => { if (window.confirm('Delete every generated static image? Manual uploads stay.')) void deleteAssets({ all: true, generatedOnly: true, variant: 'static' }); }} className="bg-red-950/60 text-red-50 hover:bg-red-900/70">
+                      Purge Generated Static
+                    </Button>
+                    <Button type="button" variant="secondary" disabled={loading} onClick={() => { if (window.confirm('Delete every generated hover image? Manual uploads stay.')) void deleteAssets({ all: true, generatedOnly: true, variant: 'hover' }); }} className="bg-red-950/60 text-red-50 hover:bg-red-900/70">
+                      Purge Generated Hover
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               <div className="relative z-20 space-y-2 pointer-events-auto">
