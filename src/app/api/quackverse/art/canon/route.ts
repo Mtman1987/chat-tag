@@ -125,11 +125,15 @@ export async function GET(req: NextRequest) {
   const manifest = normalizeQuackverseArtManifest(state?.gameSettings?.default?.quackverseArt);
   const asset = manifest[String(card.id)]?.static;
   if (asset?.fileName) {
-    const persistedUrl = new URL(`/api/quackverse/art/file?cardId=${card.id}&variant=static&t=${encodeURIComponent(asset.updatedAt)}`, req.nextUrl.origin);
-    const response = NextResponse.redirect(persistedUrl, 307);
-    response.headers.set('Cache-Control', 'no-store');
-    response.headers.set('X-Quackverse-Art-Source', 'persisted');
-    return response;
+    const persistedPath = `/api/quackverse/art/file?cardId=${card.id}&variant=static&t=${encodeURIComponent(asset.updatedAt)}`;
+    return new NextResponse(null, {
+      status: 307,
+      headers: {
+        Location: persistedPath,
+        'Cache-Control': 'no-store',
+        'X-Quackverse-Art-Source': 'persisted',
+      },
+    });
   }
 
   const svg = card.type === 'Equipment' ? equipmentSvg(card) : duckSvg(card);
