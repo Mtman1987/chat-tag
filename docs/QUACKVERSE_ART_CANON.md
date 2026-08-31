@@ -59,7 +59,7 @@ The admin manager can choose SeaArt, Eden / Leonardo, or Cloudflare FLUX per tes
 
 Generated assets can be deleted from the manager. Bulk cleanup only removes StreamWeaver-generated files and preserves manual uploads, while selected-card cleanup can remove a specific static or hover slot.
 
-Quackverse image generation hardcodes `1024x640` output for the `16:10` card art window. The prompt and provider request both target the same landscape crop so accepted art should not depend on square-provider defaults.
+Quackverse image generation hardcodes a `1024x640` / `16:10` card-window composition target. Cloudflare receives that exact request size; Eden and SeaArt receive provider-safe `1024x1024` requests because they can reject non-standard resolutions, while the prompt keeps the complete subject inside the center `16:10` crop with extra environmental bleed.
 
 ## Serving artwork
 
