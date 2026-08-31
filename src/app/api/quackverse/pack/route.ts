@@ -9,6 +9,11 @@ import { makeId, updateAppState, readAppState } from '@/lib/volume-store';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 import {
+  normalizeQuackverseArtManifest,
+  quackverseArtVersionForCard,
+  quackverseArtVersionForCards,
+} from '@/lib/quackverse-art';
+import {
   normalizeQuackverseState,
   quackverseDailyPackLimit,
   quackverseDayKey,
@@ -62,8 +67,23 @@ function resolvePublicOrigin(req: NextRequest, body?: any) {
   return getPublicAppOrigin(req);
 }
 
-function quackverseCardImageUrl(origin: string, cardId: unknown) {
-  return `${origin}/api/quackverse/pack-preview?ids=${encodeURIComponent(String(cardId))}&mode=card`;
+function appendCacheVersion(url: string, version: string) {
+  if (!version) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}t=${encodeURIComponent(version)}`;
+}
+
+function quackverseCardImageUrl(origin: string, cardId: unknown, artVersion = '') {
+  return appendCacheVersion(
+    `${origin}/api/quackverse/pack-preview?ids=${encodeURIComponent(String(cardId))}&mode=card`,
+    artVersion,
+  );
+}
+
+function quackversePackImageUrl(origin: string, packId: unknown, artVersion = '') {
+  return appendCacheVersion(
+    `${origin}/api/quackverse/pack/image?packId=${encodeURIComponent(String(packId))}`,
+    artVersion,
+  );
 }
 
 function quackverseOverlayCard(card: any, origin: string) {
@@ -74,7 +94,7 @@ function quackverseOverlayCard(card: any, origin: string) {
     name: card.name,
     rarity: card.rarity || 'Unknown',
     setCode: 'QV',
-    imageUrl: quackverseCardImageUrl(origin, cardId),
+    imageUrl: card?.cardImageUrl || quackverseCardImageUrl(origin, cardId),
   };
 }
 
@@ -91,7 +111,7 @@ async function notifyStreamWeaverPackOverlay(input: {
   // tenant; the pack open itself remains successful.
   if (!secret || !STREAMWEAVER_URL || !input.origin || !input.tenantId) return;
 
-  const packImageUrl = `${input.origin}/api/quackverse/pack/image?packId=${encodeURIComponent(input.packId)}&t=${Date.now()}`;
+  const packImageUrl = quackversePackImageUrl(input.origin, input.packId, String(Date.now()));
   const pack = input.pack.map((card) => quackverseOverlayCard(card, input.origin));
 
   const response = await fetch(`${STREAMWEAVER_URL}/api/quackverse/pack-overlay`, {
@@ -168,16 +188,26 @@ export async function GET(req: NextRequest) {
     const origin = getPublicAppOrigin(req);
     const appState = await readAppState();
     const events = Array.isArray(appState.quackversePackOpens) ? appState.quackversePackOpens : [];
+    const artManifest = normalizeQuackverseArtManifest(appState.gameSettings?.default?.quackverseArt);
     return NextResponse.json({
-      events: events.slice(0, limit).map((event: any) => ({
-        id: String(event?.id || ''),
-        at: String(event?.at || ''),
-        twitchUsername: String(event?.twitchUsername || ''),
-        packNumberToday: Number(event?.packNumberToday || 0),
-        packsRemaining: Number(event?.packsRemaining || 0),
-        cards: Array.isArray(event?.cards) ? event.cards.slice(0, 5) : [],
-        packImageUrl: origin && event?.id ? `${origin}/api/quackverse/pack/image?packId=${encodeURIComponent(String(event.id))}` : '',
-      })).filter((event: any) => event.id),
+      events: events.slice(0, limit).map((event: any) => {
+        const cards = Array.isArray(event?.cards) ? event.cards.slice(0, 5) : [];
+        return {
+          id: String(event?.id || ''),
+          at: String(event?.at || ''),
+          twitchUsername: String(event?.twitchUsername || ''),
+          packNumberToday: Number(event?.packNumberToday || 0),
+          packsRemaining: Number(event?.packsRemaining || 0),
+          cards,
+          packImageUrl: origin && event?.id
+            ? quackversePackImageUrl(
+                origin,
+                event.id,
+                quackverseArtVersionForCards(artManifest, cards.map((card: any) => card?.id)),
+              )
+            : '',
+        };
+      }).filter((event: any) => event.id),
     });
   }
 
@@ -286,7 +316,7 @@ export async function POST(req: NextRequest) {
         },
         ...(Array.isArray(appState.quackversePackOpens) ? appState.quackversePackOpens : []),
       ].slice(0, 1000);
-      return { collection, pack, packId };
+      return { collection, pack, packId, quackverseArt: appState.gameSettings?.default?.quackverseArt };
     }
 
     if (action === 'addToDeck') {
@@ -345,17 +375,22 @@ export async function POST(req: NextRequest) {
     return { error: 'Invalid pack action.', status: 400, collection };
   });
 
+  const artManifest = normalizeQuackverseArtManifest((result as any).quackverseArt);
+  const packCards = Array.isArray((result as any).pack) ? (result as any).pack : [];
+  const packArtVersion = quackverseArtVersionForCards(artManifest, packCards.map((card: any) => card?.id));
   const payload = {
     ...publicCollection((result as any).collection),
-    pack: Array.isArray((result as any).pack)
-      ? (result as any).pack.map((card: any) => ({
+    pack: packCards.length
+      ? packCards.map((card: any) => ({
           ...card,
-          cardImageUrl: publicOrigin ? quackverseCardImageUrl(publicOrigin, card.id) : '',
+          cardImageUrl: publicOrigin
+            ? quackverseCardImageUrl(publicOrigin, card.id, quackverseArtVersionForCard(artManifest, card.id))
+            : '',
         }))
       : undefined,
     packId: typeof (result as any).packId === 'string' ? (result as any).packId : undefined,
     packImageUrl: publicOrigin && typeof (result as any).packId === 'string'
-      ? `${publicOrigin}/api/quackverse/pack/image?packId=${encodeURIComponent((result as any).packId)}`
+      ? quackversePackImageUrl(publicOrigin, (result as any).packId, packArtVersion)
       : undefined,
   };
   if ((result as any).error) {

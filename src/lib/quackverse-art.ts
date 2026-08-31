@@ -18,6 +18,33 @@ export function quackverseArtFileUrl(cardId: number, variant: QuackverseArtVaria
   return `${url.pathname}${url.search}`;
 }
 
+function manifestCardKey(cardId: unknown) {
+  const numeric = Number(cardId);
+  if (!Number.isFinite(numeric) || numeric < 1) return '';
+  return String(numeric);
+}
+
+export function quackverseArtVersionForCard(
+  manifest: QuackverseArtManifest,
+  cardId: unknown,
+  variant: QuackverseArtVariant = 'static',
+) {
+  const key = manifestCardKey(cardId);
+  return key ? manifest[key]?.[variant]?.updatedAt || '' : '';
+}
+
+export function quackverseArtVersionForCards(
+  manifest: QuackverseArtManifest,
+  cardIds: readonly unknown[],
+  variant: QuackverseArtVariant = 'static',
+) {
+  const versions = cardIds
+    .map((cardId) => quackverseArtVersionForCard(manifest, cardId, variant))
+    .filter(Boolean);
+  versions.sort();
+  return versions[versions.length - 1] || '';
+}
+
 export function normalizeQuackverseArtManifest(value: unknown): QuackverseArtManifest {
   if (!value || typeof value !== 'object') return {};
 
