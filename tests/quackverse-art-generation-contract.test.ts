@@ -86,5 +86,7 @@ test('Quackverse generation hardcodes the provider request to the card art windo
 
   assert.match(source, /QUACKVERSE_CARD_ART_RESOLUTION = '1024x640'/);
   assert.match(source, /resolution: QUACKVERSE_CARD_ART_RESOLUTION/);
+  assert.match(source, /QUACKVERSE_NEGATIVE_PROMPT/);
+  assert.match(source, /negativePrompt: QUACKVERSE_NEGATIVE_PROMPT/);
   assert.doesNotMatch(source, /resolution: body\.resolution \|\| '1024x1024'/);
 });
