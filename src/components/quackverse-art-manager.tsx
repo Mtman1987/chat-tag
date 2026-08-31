@@ -195,11 +195,16 @@ export function QuackverseArtManager() {
           setGenerationMessage(prompt ? `Prompt ready (${prompt.length}/1450 characters). No image generated.` : 'Prompt preview unavailable.');
           return;
         }
-        const successCount = Array.isArray(data?.results)
-          ? data.results.filter((item: any) => item?.success).length
-          : 0;
-        const failedCount = Math.max(0, Number(data?.count || 0) - successCount);
-        setGenerationMessage(`Generated ${successCount} ${variant} asset${successCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed` : ''}.`);
+        const resultItems = Array.isArray(data?.results) ? data.results : [];
+        const successCount = resultItems.filter((item: any) => item?.success).length;
+        const failedItems = resultItems.filter((item: any) => !item?.success);
+        const failedCount = failedItems.length;
+        const firstError = String(failedItems[0]?.error || '').trim();
+        if (!data?.success && firstError) {
+          setGenerationMessage(`Generation failed: ${firstError}`);
+          return;
+        }
+        setGenerationMessage(`Generated ${successCount} ${variant} asset${successCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed${firstError ? `: ${firstError}` : ''}` : ''}.`);
         await refresh();
       } catch (error: any) {
         setGenerationMessage(error?.message || 'Generation failed');
