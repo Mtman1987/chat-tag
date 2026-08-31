@@ -21,7 +21,8 @@ const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAV
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
 const IMAGE_PROMPT_MAX_CHARS = 1450;
 const QUACKVERSE_CARD_ART_ASPECT = '16:10 landscape';
-const QUACKVERSE_CARD_ART_RESOLUTION = '1024x640';
+const QUACKVERSE_CARD_ART_TARGET_RESOLUTION = '1024x640';
+const QUACKVERSE_PROVIDER_SAFE_RESOLUTION = '1024x1024';
 const PROMPT_SAFETY_SUFFIX = ' ARTWORK ONLY. No card frame, stats, captions, written text, logo, watermark or UI.';
 const QUACKVERSE_NEGATIVE_PROMPT = 'concept sheet, model sheet, reference sheet, turnaround, multiple angles, duplicate character, panels, vignettes, anatomy study, weapon study, diagram, callouts, labels, text, watermark, logo, white background, cropped head, cropped bill, cropped limbs, cropped weapon';
 const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaart']);
@@ -29,7 +30,7 @@ const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaa
 const FINISHED_CARD_ART_RULES = [
   'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
   'Exactly one primary subject, one camera angle and one pose; no duplicate character, no multiple angles, no turnaround, no panels and no white sketch-sheet background.',
-  `Exact output shape: ${QUACKVERSE_CARD_ART_ASPECT} (${QUACKVERSE_CARD_ART_RESOLUTION}), matching the visible Quackverse card art window; compose as a landscape card-art image, not a square portrait or reference board.`,
+  `Exact composition target: ${QUACKVERSE_CARD_ART_ASPECT} (${QUACKVERSE_CARD_ART_TARGET_RESOLUTION}), matching the visible Quackverse card art window; if a provider returns a square canvas, keep the complete subject inside the center 16:10 crop with extra environmental bleed outside it.`,
   'Card-crop safe: keep the face, bill, chest, silhouette, signature weapon/focus and key VFX readable inside the central 70% with no cropped-off head, bill, arms, wings, legs, weapon or equipment.',
   'Cinematic environmental background with depth and finished production card-art lighting.',
 ].join(' ');
@@ -75,6 +76,10 @@ function visualCanonForCard(card: any) {
 function quackverseProviderOverride(value: unknown) {
   const requested = String(value || process.env.QUACKVERSE_IMAGE_PROVIDER || 'seaart').trim().toLowerCase();
   return QUACKVERSE_IMAGE_PROVIDER_OVERRIDES.has(requested) ? requested : 'seaart';
+}
+
+function quackverseProviderRequestResolution(provider: string) {
+  return provider === 'cloudflare' ? QUACKVERSE_CARD_ART_TARGET_RESOLUTION : QUACKVERSE_PROVIDER_SAFE_RESOLUTION;
 }
 
 function canShareReferenceOrigin(origin: string) {
@@ -214,11 +219,13 @@ function normalizeStreamWeaverPayload(data: any) {
 async function callStreamWeaverImage(prompt: string, body: any, referenceImages: string[]) {
   const tenantId = String(body.tenantId || body.streamweaverTenantId || STREAMWEAVER_TENANT_ID).trim();
   if (!tenantId) throw new Error('Quackverse StreamWeaver tenant is not configured.');
+  const providerOverride = quackverseProviderOverride(body.providerOverride);
+  const requestResolution = quackverseProviderRequestResolution(providerOverride);
   const requestBody: Record<string, unknown> = {
     prompt,
     scope: 'public',
     tenantId,
-    resolution: QUACKVERSE_CARD_ART_RESOLUTION,
+    resolution: requestResolution,
     numImages: 1,
     model: body.model || undefined,
     providerParams: {
@@ -227,7 +234,7 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
       seed: Number(body.seed || 0) || undefined,
     },
   };
-  requestBody.providerOverride = quackverseProviderOverride(body.providerOverride);
+  requestBody.providerOverride = providerOverride;
 
   const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
     method: 'POST',
@@ -248,7 +255,7 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
   ].map((value) => String(value || '').trim()).find(Boolean);
   if (!imageUrl) throw new Error('StreamWeaver did not return an image URL.');
   const absoluteImageUrl = new URL(imageUrl, STREAMWEAVER_URL).toString();
-  return { imageUrl: absoluteImageUrl, provider: String(data?.provider || 'streamweaver'), tenantId };
+  return { imageUrl: absoluteImageUrl, provider: String(data?.provider || 'streamweaver'), tenantId, resolution: requestResolution };
 }
 
 async function fetchGeneratedImage(imageUrl: string) {
@@ -359,7 +366,8 @@ export async function POST(req: NextRequest) {
         referenceCount: references.length,
         provider: generated.provider,
         tenantId: generated.tenantId,
-        resolution: QUACKVERSE_CARD_ART_RESOLUTION,
+        targetResolution: QUACKVERSE_CARD_ART_TARGET_RESOLUTION,
+        requestResolution: generated.resolution,
         success: true,
         asset,
       });
