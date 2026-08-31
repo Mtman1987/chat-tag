@@ -20,6 +20,8 @@ Artwork must preserve the card's established identity in this order:
 
 Family/faction/trunk members should look related, not cloned. Shared palette ranges, material language, motifs and VFX should coexist with distinct faces, plumage, poses, silhouettes and signature gear.
 
+Invalid static art includes concept sheets, model sheets, character turnarounds, multiple poses or angles, duplicate characters, reference diagrams, white sketch backgrounds, and accidental crops that cut off the subject's face, bill, limbs, weapon, or core silhouette. These should be regenerated and should not count as approved card art.
+
 `src/lib/quackverse-visual-canon.ts` is the canonical visual metadata source used by the AI prompt builder.
 
 ## Static generation
