@@ -1,4 +1,5 @@
 One-shot Quackverse AI art seed trigger.
-Triggered after StreamWeaver deployed provider-safe Eden/Leonardo prompt compaction.
-UTC: 2026-08-31T05:58Z
-Batch policy: existing workflow, missing-only, batches of five, stop on zero successes.
+Live chat-tag generator now caps provider prompts at 1450 characters.
+SeaArt was temporarily unavailable, so this run uses the branch workflow's Eden/Leonardo provider.
+UTC: 2026-08-31T06:05Z
+Batch policy: missing-only, batches of five, stop on zero successes.
