@@ -20,12 +20,15 @@ const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
 const IMAGE_PROMPT_MAX_CHARS = 1450;
+const QUACKVERSE_CARD_ART_ASPECT = '16:10 landscape';
+const QUACKVERSE_CARD_ART_RESOLUTION = '1024x640';
 const PROMPT_SAFETY_SUFFIX = ' ARTWORK ONLY. No card frame, stats, captions, written text, logo, watermark or UI.';
 const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaart']);
 
 const FINISHED_CARD_ART_RULES = [
   'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
   'Exactly one primary subject in one camera angle and one pose. No duplicate character, no multiple angles, no turnaround, no front/back/side views, no panels, no vignettes, no anatomy/wing/weapon studies, no diagram callouts and no white sketch-sheet background.',
+  `Exact output shape: ${QUACKVERSE_CARD_ART_ASPECT} (${QUACKVERSE_CARD_ART_RESOLUTION}), matching the visible Quackverse card art window; compose as a landscape card-art image, not a square portrait or reference board.`,
   'Card-crop safe: keep the face, bill, chest, silhouette, signature weapon/focus and key VFX readable inside the central 70% of the image, with no accidental cropped-off head, bill, arms, wings, legs, weapon or equipment.',
   'Use a cinematic environmental background with depth and lighting like finished production card art.',
 ].join(' ');
@@ -214,7 +217,7 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
     prompt,
     scope: 'public',
     tenantId,
-    resolution: body.resolution || '1024x1024',
+    resolution: QUACKVERSE_CARD_ART_RESOLUTION,
     numImages: 1,
     model: body.model || undefined,
     providerParams: {
