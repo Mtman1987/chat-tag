@@ -1,4 +1,5 @@
 One-shot Quackverse AI art seed trigger.
-UTC: 2026-08-31T05:55Z
-Deploy current main locally, then seed missing static art in batches of five.
-Stop immediately if a full batch has zero successes.
+Triggered after StreamWeaver deployed provider-safe Eden/Leonardo prompt compaction.
+UTC: 2026-08-31T06:06Z
+Batch policy: existing workflow, missing-only, batches of five, stop on zero successes.
+Provider: Eden.
