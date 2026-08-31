@@ -300,7 +300,7 @@ export function QuackverseArtManager() {
                     Preview Exact Prompt
                   </Button>
                   <Button type="button" disabled={loading} onClick={() => void generateAsset('static', [selectedCard.id])}>
-                    Generate Selected
+                    Generate Static Art
                   </Button>
                   <Button
                     type="button"
