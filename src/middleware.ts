@@ -87,6 +87,7 @@ function trustedOwnerUserIds(): Set<string> {
   );
 }
 
+// Server authorization uses verified SPMT roles or configured immutable owner IDs; usernames are never a privilege boundary.
 function isAdmin(identity: any): boolean {
   if (identity?.isAdmin === true || identity?.is_admin === true || identity?.is_admin === 1) return true;
   const role = String(identity?.role || '').toLowerCase();
