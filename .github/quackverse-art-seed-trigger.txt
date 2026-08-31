@@ -3,3 +3,4 @@ Triggered after provider-safe Eden prompts and lease-safe seed workflow were mer
 UTC: 2026-08-31T06:12Z
 Batch policy: missing-only, batches of five, stop on zero successes.
 Provider: Eden.
+One-shot five-card generator test after live deploy: 2026-08-31T09:31:00Z
