@@ -1,5 +1,5 @@
 One-shot Quackverse AI art seed trigger.
-Triggered after StreamWeaver deployed provider-safe Eden/Leonardo prompt compaction.
-UTC: 2026-08-31T06:06Z
-Batch policy: existing workflow, missing-only, batches of five, stop on zero successes.
+Triggered after provider-safe Eden prompts and lease-safe seed workflow were merged.
+UTC: 2026-08-31T06:12Z
+Batch policy: missing-only, batches of five, stop on zero successes.
 Provider: Eden.
