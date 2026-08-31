@@ -35,3 +35,45 @@ test('Quackverse art canon docs define invalid auto-generation output', async ()
   assert.match(source, /multiple poses or angles/);
   assert.match(source, /should be regenerated/);
 });
+
+
+test('Quackverse prompts actually include canon family common-thread helpers', async () => {
+  const source = await read('src/app/api/quackverse/art/generate/route.ts');
+
+  assert.match(source, /canonCommonThreadDirection\(card, canon, family\)/);
+  assert.match(source, /equipmentCommonThreadDirection\(card, family\)/);
+  assert.match(source, /FINISHED_CARD_ART_RULES/);
+});
+
+test('Quackverse generation uses public reference URLs and a validated provider override', async () => {
+  const source = await read('src/app/api/quackverse/art/generate/route.ts');
+
+  assert.match(source, /getPublicAppOrigin/);
+  assert.match(source, /canShareReferenceOrigin/);
+  assert.match(source, /quackverseProviderOverride/);
+  assert.match(source, /referenceImagesFor\(card, referenceOrigin, manifest\)/);
+  assert.doesNotMatch(source, /referenceImagesFor\(card, req\.nextUrl\.origin, manifest\)/);
+});
+
+test('Quackverse admin manager can choose providers and delete generated art', async () => {
+  const source = await read('src/components/quackverse-art-manager.tsx');
+
+  assert.match(source, /IMAGE_PROVIDERS/);
+  assert.match(source, /SelectValue/);
+  assert.match(source, /providerOverride/);
+  assert.match(source, /cloudflare/);
+  assert.match(source, /eden/);
+  assert.match(source, /seaart/);
+  assert.match(source, /deleteAssets/);
+  assert.match(source, /Purge Generated Static/);
+});
+
+test('Quackverse art API can delete selected assets and purge generated assets only', async () => {
+  const source = await read('src/app/api/quackverse/art/route.ts');
+
+  assert.match(source, /export async function DELETE/);
+  assert.match(source, /generatedOnly/);
+  assert.match(source, /isGeneratedAsset/);
+  assert.match(source, /Bulk delete requires generatedOnly=true/);
+  assert.match(source, /removeIfExists/);
+});
