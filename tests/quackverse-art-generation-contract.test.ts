@@ -67,6 +67,7 @@ test('Quackverse admin manager can choose providers and delete generated art', a
   assert.match(source, /eden/);
   assert.match(source, /seaart/);
   assert.match(source, /deleteAssets/);
+  assert.match(source, /Generation failed:/);
   assert.match(source, /Purge Generated Static/);
 });
 
@@ -81,11 +82,14 @@ test('Quackverse art API can delete selected assets and purge generated assets o
 });
 
 
-test('Quackverse generation hardcodes the provider request to the card art window size', async () => {
+test('Quackverse generation hardcodes the card window and uses provider-safe request sizes', async () => {
   const source = await read('src/app/api/quackverse/art/generate/route.ts');
 
-  assert.match(source, /QUACKVERSE_CARD_ART_RESOLUTION = '1024x640'/);
-  assert.match(source, /resolution: QUACKVERSE_CARD_ART_RESOLUTION/);
+  assert.match(source, /QUACKVERSE_CARD_ART_TARGET_RESOLUTION = '1024x640'/);
+  assert.match(source, /QUACKVERSE_PROVIDER_SAFE_RESOLUTION = '1024x1024'/);
+  assert.match(source, /quackverseProviderRequestResolution/);
+  assert.match(source, /provider === 'cloudflare'/);
+  assert.match(source, /resolution: requestResolution/);
   assert.match(source, /QUACKVERSE_NEGATIVE_PROMPT/);
   assert.match(source, /negativePrompt: QUACKVERSE_NEGATIVE_PROMPT/);
   assert.doesNotMatch(source, /resolution: body\.resolution \|\| '1024x1024'/);
