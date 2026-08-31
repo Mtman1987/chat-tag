@@ -19,7 +19,14 @@ export const runtime = 'nodejs';
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
-const IMAGE_PROMPT_MAX_CHARS = 1450;
+const IMAGE_PROMPT_MAX_CHARS = 2200;
+
+const FINISHED_CARD_ART_RULES = [
+  'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
+  'Exactly one primary subject in one camera angle and one pose. No duplicate character, no multiple angles, no turnaround, no front/back/side views, no panels, no vignettes, no anatomy/wing/weapon studies, no diagram callouts and no white sketch-sheet background.',
+  'Card-crop safe: keep the face, bill, chest, silhouette, signature weapon/focus and key VFX readable inside the central 70% of the image, with no accidental cropped-off head, bill, arms, wings, legs, weapon or equipment.',
+  'Use a cinematic environmental background with depth and lighting like finished production card art.',
+].join(' ');
 
 type ArtFamily = 'light-ranger' | 'cosmic' | 'void' | 'storm' | 'galaxy-ranger' | 'photon-ranger' | 'general';
 
@@ -63,8 +70,23 @@ function clampImagePrompt(prompt: string) {
   if (prompt.length <= IMAGE_PROMPT_MAX_CHARS) return prompt;
   const clipped = prompt.slice(0, IMAGE_PROMPT_MAX_CHARS - 1);
   const sentenceBoundary = clipped.lastIndexOf('. ');
-  const safeEnd = sentenceBoundary >= 1100 ? sentenceBoundary + 1 : clipped.length;
+  const safeEnd = sentenceBoundary >= 1500 ? sentenceBoundary + 1 : clipped.length;
   return clipped.slice(0, safeEnd).trim();
+}
+
+function canonCommonThreadDirection(card: any, canon: ReturnType<typeof visualCanonForCard>, family: ArtFamily) {
+  const gameplayFamily = String(card.family || canon.family || family);
+  const trunk = String(card.trunk || card.role || canon.subclass);
+  return [
+    `Common-thread lock: this card belongs to the ${gameplayFamily} family/trunk; it must look related through ${canon.armorStyle}, ${canon.palette.join(', ')}, ${canon.vfx}, ${canon.species} anatomy and ${canon.plumage} plumage.`,
+    `Trunk likeness: ${trunk} controls the stance, gear, combat role and silhouette; keep those canonical while making this card unique through face, pose, expression and signature equipment.`,
+  ].join(' ');
+}
+
+function equipmentCommonThreadDirection(card: any, family: ArtFamily) {
+  const gameplayFamily = String(card.family || family);
+  const trunk = String(card.trunk || card.role || card.type || 'equipment');
+  return `Common-thread lock: this equipment belongs to the ${gameplayFamily} family/trunk, with ${trunk} materials, emblems, silhouette language and VFX that visually connect it to related cards while keeping this item unique.`;
 }
 
 function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily) {
@@ -76,6 +98,8 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
     return [
       'QUACKVERSE EQUIPMENT ART.',
       `Create original artwork for the card "${card.name}".`,
+      FINISHED_CARD_ART_RULES,
+      equipmentCommonThreadDirection(card, family),
       `Gameplay family: ${card.family || 'Gear'}. Trunk/role: ${card.trunk || card.role || 'Gear'}.`,
       `Role/theme: ${card.role || card.effect || 'Quackverse equipment'}.`,
       familyDirection(family),
@@ -90,6 +114,8 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
   return [
     'QUACKVERSE CANON CHARACTER ART.',
     `Create original artwork for the existing Quackverse character "${card.name}".`,
+    FINISHED_CARD_ART_RULES,
+    canonCommonThreadDirection(card, canon, family),
     `Gameplay family: ${card.family || canon.family}. Trunk/role: ${card.trunk || card.role || canon.subclass}.`,
     'CANONICAL IDENTITY IS FIXED. Do not redesign the species, plumage pattern, body silhouette, armor language, signature weapon or palette hierarchy.',
     `Species: ${canon.species}. Required plumage/anatomy: ${canon.plumage}.`,
