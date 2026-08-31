@@ -1,0 +1,4 @@
+One-shot Quackverse AI art seed trigger.
+Triggered from ChatGPT after StreamWeaver image route was confirmed live.
+UTC: 2026-08-31T05:38Z
+Batch policy: existing workflow, missing-only, batches of five, stop on zero successes.
