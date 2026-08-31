@@ -57,7 +57,7 @@ jobs:
                   variant: "static",
                   limit: 5,
                   missingOnly: true,
-                  providerOverride: "seaart"
+                  providerOverride: "eden"
                 })
               });
               const data = await response.json().catch(() => null);
