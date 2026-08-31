@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "slotOrder": "row-major-left-to-right-top-to-bottom",
+  "fileNaming": "card-###-<slug>-static.png",
+  "sheets": [
+    {"sheetId":"C01","category":"solar-rangers","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[21,36,52,72,42,78,58,62]},
+    {"sheetId":"C02","category":"eclipse-drakes-night-rangers","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[25,53,73,29,59,46,66,17]},
+    {"sheetId":"C03","category":"cosmic-drakes-recon","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[31,49,69,22,2,6,16,26]},
+    {"sheetId":"C04","category":"waddle-lunar-support","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[7,14,27,41,77,47,67,57]},
+    {"sheetId":"C05","category":"frost-gale-rangers","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[34,70,50,60,44,64,80,28]},
+    {"sheetId":"C06","category":"storm-tide-rangers","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[4,5,32,48,68,54,38,74]},
+    {"sheetId":"C07","category":"forge-heavy","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[24,76,40,30,56,15,45,65]},
+    {"sheetId":"C08","category":"eclipse-house-assassins-support","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[9,18,19,55,43,63,79,37]},
+    {"sheetId":"C09","category":"mystics-scholars-utility","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[8,10,11,12,13,23,39,75]},
+    {"sheetId":"C10","category":"legendary-impact-champions","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[1,3,20,33,35,51,71,61]},
+    {"sheetId":"G01","category":"ranger-elemental-gear","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[81,85,86,89,96,97,98,90]},
+    {"sheetId":"G02","category":"eclipse-forge-heavy-gear","resolution":"1920x2400","grid":"2x4","crop":"960x600","cardIds":[83,84,87,91,93,95,99,100]},
+    {"sheetId":"G03","category":"support-scholar-relics","resolution":"3072x1280","grid":"3x2","crop":"1024x640","cardIds":[82,88,92,94,101,null]}
+  ]
+}
