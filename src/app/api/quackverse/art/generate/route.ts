@@ -19,6 +19,7 @@ export const runtime = 'nodejs';
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
+const IMAGE_PROMPT_MAX_CHARS = 1450;
 
 type ArtFamily = 'light-ranger' | 'cosmic' | 'void' | 'storm' | 'galaxy-ranger' | 'photon-ranger' | 'general';
 
@@ -56,6 +57,14 @@ function familyDirection(family: ArtFamily) {
 
 function visualCanonForCard(card: any) {
   return getQuackverseVisualCanon({ ...card, family: card.family || familyForCard(card) });
+}
+
+function clampImagePrompt(prompt: string) {
+  if (prompt.length <= IMAGE_PROMPT_MAX_CHARS) return prompt;
+  const clipped = prompt.slice(0, IMAGE_PROMPT_MAX_CHARS - 1);
+  const sentenceBoundary = clipped.lastIndexOf('. ');
+  const safeEnd = sentenceBoundary >= 1100 ? sentenceBoundary + 1 : clipped.length;
+  return clipped.slice(0, safeEnd).trim();
 }
 
 function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily) {
@@ -244,7 +253,7 @@ export async function POST(req: NextRequest) {
     try {
       const family = familyForCard(card);
       const references = await referenceImagesFor(card, req.nextUrl.origin, manifest);
-      const prompt = buildPrompt(card, variant, family);
+      const prompt = clampImagePrompt(buildPrompt(card, variant, family));
       const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
       const generated = await callStreamWeaverImage(prompt, body, references);
       const image = await fetchGeneratedImage(generated.imageUrl);
