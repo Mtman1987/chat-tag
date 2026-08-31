@@ -124,8 +124,8 @@ export async function GET(req: NextRequest) {
   const state = await readAppState();
   const manifest = normalizeQuackverseArtManifest(state?.gameSettings?.default?.quackverseArt);
   const asset = manifest[String(card.id)]?.static;
-  if (asset?.url) {
-    const persistedUrl = new URL(asset.url, req.nextUrl.origin);
+  if (asset?.fileName) {
+    const persistedUrl = new URL(`/api/quackverse/art/file?cardId=${card.id}&variant=static&t=${encodeURIComponent(asset.updatedAt)}`, req.nextUrl.origin);
     const response = NextResponse.redirect(persistedUrl, 307);
     response.headers.set('Cache-Control', 'no-store');
     response.headers.set('X-Quackverse-Art-Source', 'persisted');
