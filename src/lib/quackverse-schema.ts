@@ -183,7 +183,7 @@ export function normalizeQuackverseCard(card: QuackverseLegacyCard): QuackverseC
   const effectTags = uniqueTags(structuredEffects.flatMap((effect) => effect.tags));
   const family = inferFamily(card);
   const text = textParts(card).join(' ');
-  const canonicalArtUrl = `/api/quackverse/art/canon?cardId=${card.id}`;
+  const canonicalArtUrl = `/api/quackverse/art/canon?cardId=${card.id}&v=ai-art-1`;
   const base = { ...card, artUrl: canonicalArtUrl, artHoverUrl: canonicalArtUrl, cost: 0, costType: 'none' as QuackverseCostType, targets: structuredEffects[0]?.targets || 'self', timing: structuredEffects[0]?.timing || (card.type === 'Equipment' ? 'onEquip' : 'active'), effectTags, family, trunk: inferTrunk(card, family), rarity: normalizeRarity(card), text, structuredEffects };
   if (card.type === 'Duck') return { ...base, type: 'Duck', atk: Number(card.atk), def: Number(card.def), spd: Number(card.spd), spc: Number(card.spc), hp: Number(card.hp) };
   return { ...base, type: 'Equipment', atk: null, def: null, spd: null, spc: null, hp: null };

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { getAuthHeaders } from '@/lib/client-auth';
 import { quackverseCards, type QuackverseCard } from '@/lib/quackverse-data';
@@ -89,6 +90,10 @@ export function QuackverseArtManager() {
   const [manifest, setManifest] = useState<Record<string, QuackverseArtEntry>>({});
   const [loading, setLoading] = useState(false);
   const [generationMessage, setGenerationMessage] = useState('');
+  const [familyOverride, setFamilyOverride] = useState('');
+  const [subclassOverride, setSubclassOverride] = useState('');
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [promptPreview, setPromptPreview] = useState('');
 
   const selectedCard = useMemo(
     () => quackverseCards.find((card) => card.id === selectedCardId) || quackverseCards[0],
@@ -144,10 +149,10 @@ export function QuackverseArtManager() {
   );
 
   const generateAsset = useCallback(
-    async (variant: 'static' | 'hover', cardIds: number[]) => {
+    async (variant: 'static' | 'hover', cardIds: number[], previewOnly = false) => {
       if (!cardIds.length) return;
       setLoading(true);
-      setGenerationMessage(`Generating ${variant} art for ${cardIds.length} card${cardIds.length === 1 ? '' : 's'}...`);
+      setGenerationMessage(previewOnly ? 'Building exact prompt preview...' : `Generating ${variant} art for ${cardIds.length} card${cardIds.length === 1 ? '' : 's'}...`);
       try {
         const response = await fetch('/api/quackverse/art/generate', {
           method: 'POST',
@@ -157,11 +162,23 @@ export function QuackverseArtManager() {
             cardIds,
             limit: cardIds.length,
             missingOnly: false,
+            previewOnly,
+            includePrompt: true,
+            providerOverride: 'eden',
+            familyOverride: cardIds.length === 1 ? familyOverride : '',
+            subclassOverride: cardIds.length === 1 ? subclassOverride : '',
+            customInstructions: cardIds.length === 1 ? customInstructions : '',
           }),
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) {
           throw new Error(data?.error || `Generation failed (${response.status})`);
+        }
+        if (previewOnly) {
+          const prompt = String(data?.results?.[0]?.prompt || '');
+          setPromptPreview(prompt);
+          setGenerationMessage(prompt ? `Prompt ready (${prompt.length}/1450 characters). No image generated.` : 'Prompt preview unavailable.');
+          return;
         }
         const successCount = Array.isArray(data?.results)
           ? data.results.filter((item: any) => item?.success).length
@@ -175,7 +192,7 @@ export function QuackverseArtManager() {
         setLoading(false);
       }
     },
-    [refresh],
+    [customInstructions, familyOverride, refresh, subclassOverride],
   );
 
   const selectedEntry = manifest[String(selectedCard.id)] || null;
@@ -248,29 +265,49 @@ export function QuackverseArtManager() {
             <AssetPreview card={selectedCard} entry={selectedEntry} />
 
             <div data-quackverse-art-actions className="relative z-20 space-y-4 rounded-lg border border-white/10 bg-black/20 p-3 pointer-events-auto">
-              <div className="space-y-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3">
-                <div className="text-sm font-semibold text-white">Generate with StreamWeaver SeaArt</div>
-                <div className="relative z-30 grid gap-2 pointer-events-auto">
-                  <Button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => void generateAsset('static', [selectedCard.id])}
-                    className="relative z-30 justify-start pointer-events-auto"
-                  >
+              <div className="space-y-3 rounded-md border border-cyan-300/20 bg-cyan-300/10 p-3">
+                <div>
+                  <div className="text-sm font-semibold text-white">Quackverse Image Generator</div>
+                  <div className="text-xs text-slate-300">
+                    Eden / Leonardo · {selectedCard.type} · detected family {(selectedCard as any).family || 'General'} · subclass {(selectedCard as any).trunk || selectedCard.role || 'General'}
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={familyOverride}
+                    onChange={(event) => setFamilyOverride(event.target.value)}
+                    placeholder={`Family: ${(selectedCard as any).family || 'auto'}`}
+                    className="h-9 bg-slate-950"
+                  />
+                  <Input
+                    value={subclassOverride}
+                    onChange={(event) => setSubclassOverride(event.target.value)}
+                    placeholder={`Subclass: ${(selectedCard as any).trunk || selectedCard.role || 'auto'}`}
+                    className="h-9 bg-slate-950"
+                  />
+                </div>
+                <Textarea
+                  value={customInstructions}
+                  onChange={(event) => setCustomInstructions(event.target.value)}
+                  placeholder={selectedCard.type === 'Equipment'
+                    ? 'Equipment tweaks: materials, silhouette, glow, setting...'
+                    : 'Duck tweaks: pose, armor details, expression, setting...'}
+                  maxLength={500}
+                  className="min-h-24 bg-slate-950"
+                />
+                <div className="relative z-30 grid gap-2 pointer-events-auto sm:grid-cols-2">
+                  <Button type="button" variant="outline" disabled={loading} onClick={() => void generateAsset('static', [selectedCard.id], true)}>
+                    Preview Exact Prompt
+                  </Button>
+                  <Button type="button" disabled={loading} onClick={() => void generateAsset('static', [selectedCard.id])}>
                     Generate Static Art
                   </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={loading}
-                    onClick={() => void generateAsset('hover', [selectedCard.id])}
-                    className="relative z-30 justify-start pointer-events-auto"
-                  >
+                  <Button type="button" variant="secondary" disabled={loading} onClick={() => void generateAsset('hover', [selectedCard.id])}>
                     Generate Hover Still
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     disabled={loading}
                     onClick={() => {
                       const missing = quackverseCards
@@ -279,15 +316,18 @@ export function QuackverseArtManager() {
                         .map((card) => card.id);
                       void generateAsset('static', missing);
                     }}
-                    className="relative z-30 justify-start pointer-events-auto"
+                    className="sm:col-span-2"
                   >
-                    Fill Next 5 Missing
+                    Test Next 5 Missing
                   </Button>
                 </div>
+                {promptPreview && (
+                  <div className="rounded-md border border-white/10 bg-slate-950 p-2">
+                    <div className="mb-1 text-xs font-semibold text-white">Exact prompt sent to image provider</div>
+                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-[0.68rem] leading-relaxed text-slate-300">{promptPreview}</pre>
+                  </div>
+                )}
                 {generationMessage && <div className="text-xs text-cyan-100">{generationMessage}</div>}
-                <div className="text-xs text-slate-400">
-                  Hover stills are saved in the hover slot now; true GIF/video hover generation can be swapped in once StreamWeaver exposes a video generation route.
-                </div>
               </div>
 
               <div className="relative z-20 space-y-2 pointer-events-auto">

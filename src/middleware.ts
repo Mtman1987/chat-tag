@@ -26,13 +26,12 @@ const PUBLIC_PREFIXES = [
   '/api/quackverse/events',
   '/api/quackverse/pack-preview',
   '/api/quackverse/pack/image',
-  '/api/quackverse/art',
   '/api/twitch/live',
   '/_next/',
   '/favicon.ico',
 ];
 
-const ADMIN_PREFIXES = ['/api/admin/', '/api/settings', '/settings', '/api/logs', '/api/tag/mod-log'];
+const ADMIN_PREFIXES = ['/api/admin/', '/api/settings', '/settings', '/api/logs', '/api/tag/mod-log', '/api/quackverse/art/generate'];
 
 function requestSignal(): AbortSignal | undefined {
   if (typeof AbortSignal === 'undefined' || typeof AbortSignal.timeout !== 'function') return undefined;
@@ -88,6 +87,7 @@ function trustedOwnerUserIds(): Set<string> {
   );
 }
 
+// Server authorization uses verified SPMT roles or configured immutable owner IDs; usernames are never a privilege boundary.
 function isAdmin(identity: any): boolean {
   if (identity?.isAdmin === true || identity?.is_admin === true || identity?.is_admin === 1) return true;
   const role = String(identity?.role || '').toLowerCase();
@@ -198,6 +198,10 @@ export async function middleware(request: NextRequest) {
   const isPublicGameScopeRead = request.method === 'GET' && pathname === '/api/game-hub/channel';
   const isPublicShowcaseManifestRead = request.method === 'GET' && pathname === '/api/game-hub/showcase-manifest';
   const isPublicBingoStateRead = request.method === 'GET' && pathname === '/api/bingo/state';
+  // Generated artwork is public to view. Generation itself is never public.
+  const isPublicQuackverseArtRead = request.method === 'GET'
+    && pathname !== '/api/quackverse/art/generate'
+    && (pathname === '/api/quackverse/art' || pathname.startsWith('/api/quackverse/art/'));
   if (
     pathname === '/'
     || isPublicTagRead
@@ -205,6 +209,7 @@ export async function middleware(request: NextRequest) {
     || isPublicGameScopeRead
     || isPublicShowcaseManifestRead
     || isPublicBingoStateRead
+    || isPublicQuackverseArtRead
     || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))
     || isStatic(pathname)
   ) {
