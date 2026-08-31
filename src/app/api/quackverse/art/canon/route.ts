@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs/promises';
+import path from 'path';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getQuackverseVisualCanon } from '@/lib/quackverse-visual-canon';
+import { normalizeQuackverseArtManifest } from '@/lib/quackverse-art';
+import { dataDirPath, readAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 
 const affinityColors: Record<string, [string, string, string]> = {
   Radiant: ['#f8fafc', '#67e8f9', '#facc15'],
@@ -119,11 +125,30 @@ export async function GET(req: NextRequest) {
   const cardId = Number(req.nextUrl.searchParams.get('cardId'));
   const card = quackverseCards.find((item) => item.id === cardId);
   if (!card) return NextResponse.json({ error: 'Card not found.' }, { status: 404 });
+  const state = await readAppState();
+  const manifest = normalizeQuackverseArtManifest(state?.gameSettings?.default?.quackverseArt);
+  const asset = manifest[String(card.id)]?.static;
+  if (asset?.fileName) {
+    try {
+      const safeFileName = path.basename(asset.fileName);
+      const bytes = await fs.readFile(path.join(ART_ROOT, safeFileName));
+      return new NextResponse(bytes, {
+        headers: {
+          'Content-Type': asset.mimeType || 'image/jpeg',
+          'Cache-Control': 'public, max-age=60, must-revalidate',
+          'X-Quackverse-Art-Source': 'persisted',
+        },
+      });
+    } catch {
+      // A missing volume file falls back to the built-in art below.
+    }
+  }
+
   const svg = card.type === 'Equipment' ? equipmentSvg(card) : duckSvg(card);
   return new NextResponse(svg, {
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'no-store',
       'X-Quackverse-Art-Source': 'canonical-built-in',
     },
   });
