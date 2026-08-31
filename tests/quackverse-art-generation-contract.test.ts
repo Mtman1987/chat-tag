@@ -15,6 +15,8 @@ test('Quackverse image generation asks for one finished card image, not a concep
   assert.match(source, /no turnaround/);
   assert.match(source, /Card-crop safe/);
   assert.match(source, /central 70%/);
+  assert.match(source, /16:10 landscape/);
+  assert.match(source, /1024x640/);
 });
 
 test('Quackverse generation carries family and trunk visual identity into the prompt', async () => {
@@ -76,4 +78,13 @@ test('Quackverse art API can delete selected assets and purge generated assets o
   assert.match(source, /isGeneratedAsset/);
   assert.match(source, /Bulk delete requires generatedOnly=true/);
   assert.match(source, /removeIfExists/);
+});
+
+
+test('Quackverse generation hardcodes the provider request to the card art window size', async () => {
+  const source = await read('src/app/api/quackverse/art/generate/route.ts');
+
+  assert.match(source, /QUACKVERSE_CARD_ART_RESOLUTION = '1024x640'/);
+  assert.match(source, /resolution: QUACKVERSE_CARD_ART_RESOLUTION/);
+  assert.doesNotMatch(source, /resolution: body\.resolution \|\| '1024x1024'/);
 });
