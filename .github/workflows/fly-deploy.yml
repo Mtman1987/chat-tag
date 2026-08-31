@@ -88,9 +88,12 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: [test, branch-housekeeping]
     runs-on: ubuntu-latest
-    concurrency: fly-deploy-web
+    concurrency:
+      group: fly-deploy-web
+      cancel-in-progress: true
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      NO_COLOR: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@v1
@@ -101,7 +104,7 @@ jobs:
             exit 1
           fi
       - name: Deploy chat-tag-new
-        run: flyctl deploy --remote-only --config fly.toml --ha=false
+        run: flyctl deploy --local-only --no-cache --lease-timeout 2m --deploy-retries 3 --config fly.toml --ha=false
       - name: Verify chat-tag-new
         run: |
           set -euo pipefail
@@ -140,10 +143,13 @@ jobs:
   deploy-bot:
     name: Deploy bot app
     runs-on: ubuntu-latest
-    concurrency: fly-deploy-bot
+    concurrency:
+      group: fly-deploy-bot
+      cancel-in-progress: true
     needs: deploy-web
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      NO_COLOR: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@v1
@@ -154,7 +160,7 @@ jobs:
             exit 1
           fi
       - name: Deploy chat-tag-bot-new
-        run: flyctl deploy --remote-only --config fly-bot.toml --ha=false
+        run: flyctl deploy --local-only --no-cache --lease-timeout 2m --deploy-retries 3 --config fly-bot.toml --ha=false
       - name: Verify chat-tag-bot-new
         run: |
           flyctl status --app chat-tag-bot-new
