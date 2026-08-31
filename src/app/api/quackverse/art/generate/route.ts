@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
-import { requireAdminRequest } from '@/lib/auth';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getQuackverseVisualCanon } from '@/lib/quackverse-visual-canon';
 import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
@@ -19,7 +18,8 @@ export const runtime = 'nodejs';
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
-const IMAGE_PROMPT_MAX_CHARS = 2200;
+const IMAGE_PROMPT_MAX_CHARS = 1450;
+const PROMPT_SAFETY_SUFFIX = ' ARTWORK ONLY. No card frame, stats, captions, written text, logo, watermark or UI.';
 
 const FINISHED_CARD_ART_RULES = [
   'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
@@ -67,11 +67,17 @@ function visualCanonForCard(card: any) {
 }
 
 function clampImagePrompt(prompt: string) {
-  if (prompt.length <= IMAGE_PROMPT_MAX_CHARS) return prompt;
-  const clipped = prompt.slice(0, IMAGE_PROMPT_MAX_CHARS - 1);
+  const normalized = prompt.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= IMAGE_PROMPT_MAX_CHARS) return normalized;
+  const available = IMAGE_PROMPT_MAX_CHARS - PROMPT_SAFETY_SUFFIX.length;
+  const clipped = normalized.slice(0, available);
   const sentenceBoundary = clipped.lastIndexOf('. ');
-  const safeEnd = sentenceBoundary >= 1500 ? sentenceBoundary + 1 : clipped.length;
-  return clipped.slice(0, safeEnd).trim();
+  const safeEnd = sentenceBoundary >= 900 ? sentenceBoundary + 1 : clipped.length;
+  return clipped.slice(0, safeEnd).trim() + PROMPT_SAFETY_SUFFIX;
+}
+
+function promptControl(value: unknown, maxLength: number) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 function canonCommonThreadDirection(card: any, canon: ReturnType<typeof visualCanonForCard>, family: ArtFamily) {
@@ -89,7 +95,15 @@ function equipmentCommonThreadDirection(card: any, family: ArtFamily) {
   return `Common-thread lock: this equipment belongs to the ${gameplayFamily} family/trunk, with ${trunk} materials, emblems, silhouette language and VFX that visually connect it to related cards while keeping this item unique.`;
 }
 
-function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily) {
+function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily, controls: { family?: string; subclass?: string; instructions?: string } = {}) {
+  const ownerFamily = promptControl(controls.family, 160);
+  const ownerSubclass = promptControl(controls.subclass, 160);
+  const ownerInstructions = promptControl(controls.instructions, 500);
+  const ownerDirection = [
+    ownerFamily ? `Owner family direction: ${ownerFamily}.` : '',
+    ownerSubclass ? `Owner subclass/role direction: ${ownerSubclass}.` : '',
+    ownerInstructions ? `Owner art direction: ${ownerInstructions}.` : '',
+  ].filter(Boolean).join(' ');
   const motion = variant === 'hover'
     ? 'Dynamic action-keyframe composition with controlled motion trails and energetic lighting.'
     : 'Clean collectible-card illustration with a strong centered full-character hero composition.';
@@ -98,6 +112,7 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
     return [
       'QUACKVERSE EQUIPMENT ART.',
       `Create original artwork for the card "${card.name}".`,
+      ownerDirection,
       FINISHED_CARD_ART_RULES,
       equipmentCommonThreadDirection(card, family),
       `Gameplay family: ${card.family || 'Gear'}. Trunk/role: ${card.trunk || card.role || 'Gear'}.`,
@@ -114,6 +129,7 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
   return [
     'QUACKVERSE CANON CHARACTER ART.',
     `Create original artwork for the existing Quackverse character "${card.name}".`,
+    ownerDirection,
     FINISHED_CARD_ART_RULES,
     canonCommonThreadDirection(card, canon, family),
     `Gameplay family: ${card.family || canon.family}. Trunk/role: ${card.trunk || card.role || canon.subclass}.`,
@@ -253,14 +269,18 @@ async function persistGeneratedArt(cardId: number, variant: QuackverseArtVariant
 }
 
 export async function POST(req: NextRequest) {
-  const auth = requireAdminRequest(req);
-  if (!auth.ok) return auth.response;
   const body = await req.json().catch(() => ({}));
   const variant = String(body?.variant || 'static') as QuackverseArtVariant;
   if (variant !== 'static' && variant !== 'hover') return NextResponse.json({ error: 'variant must be static or hover.' }, { status: 400 });
 
   const limit = Math.max(1, Math.min(20, Number(body?.limit || 5) || 5));
   const missingOnly = body?.missingOnly !== false;
+  const previewOnly = body?.previewOnly === true;
+  const promptControls = {
+    family: body?.familyOverride,
+    subclass: body?.subclassOverride,
+    instructions: body?.customInstructions,
+  };
   const requestedIds = Array.isArray(body?.cardIds)
     ? body.cardIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isFinite(id))
     : [];
@@ -279,8 +299,22 @@ export async function POST(req: NextRequest) {
     try {
       const family = familyForCard(card);
       const references = await referenceImagesFor(card, req.nextUrl.origin, manifest);
-      const prompt = clampImagePrompt(buildPrompt(card, variant, family));
+      const prompt = clampImagePrompt(buildPrompt(card, variant, family, promptControls));
       const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
+      if (previewOnly) {
+        results.push({
+          cardId: card.id,
+          name: card.name,
+          type: card.type,
+          variant,
+          family,
+          trunk: card.trunk || card.role,
+          prompt,
+          success: true,
+          preview: true,
+        });
+        continue;
+      }
       const generated = await callStreamWeaverImage(prompt, body, references);
       const image = await fetchGeneratedImage(generated.imageUrl);
       const asset = await persistGeneratedArt(card.id, variant, image.bytes, image.mimeType, generated.provider);
@@ -323,6 +357,7 @@ export async function POST(req: NextRequest) {
     remaining,
     complete: remaining === 0,
     nextRecommendedLimit: Math.min(5, remaining),
-    note: 'AI artwork is generated once, persisted per card, and skipped on future missing-only runs after the physical file is verified.',
+    previewOnly,
+    note: previewOnly ? 'Prompt preview only; no image was generated or saved.' : 'AI artwork is generated once, persisted per card, and skipped on future missing-only runs after the physical file is verified.',
   });
 }
