@@ -37,6 +37,7 @@ type UploadFileRecord = {
 };
 
 type UploadPayload = { cardId?: unknown; variant?: unknown; file?: unknown };
+type DeletePayload = { cardId?: unknown; variant?: unknown; all?: unknown; generatedOnly?: unknown };
 
 function manifestFromState(state: any): QuackverseArtManifest {
   return normalizeQuackverseArtManifest(state?.gameSettings?.default?.quackverseArt);
@@ -72,6 +73,23 @@ async function withPublicUrls(manifest: QuackverseArtManifest) {
 
 async function removeIfExists(filePath: string) {
   await fs.rm(filePath, { force: true }).catch(() => {});
+}
+
+function artAssetPath(fileName: string) {
+  const root = path.resolve(ART_ROOT);
+  const fullPath = path.resolve(ART_ROOT, String(fileName || '').replace(/^[/\\]+/, ''));
+  return fullPath.startsWith(`${root}${path.sep}`) ? fullPath : null;
+}
+
+function normalizeDeleteVariant(value: unknown): QuackverseArtVariant[] | null {
+  const variant = String(value || 'static').trim().toLowerCase();
+  if (variant === 'static' || variant === 'hover') return [variant as QuackverseArtVariant];
+  if (variant === 'all' || variant === 'both') return ['static', 'hover'];
+  return null;
+}
+
+function isGeneratedAsset(asset?: QuackverseArtAsset | null) {
+  return /^streamweaver-/i.test(String(asset?.originalName || ''));
 }
 
 async function readUploadPayload(req: NextRequest): Promise<{ ok: true; data: UploadPayload } | { ok: false; response: Response }> {
@@ -165,4 +183,53 @@ export async function POST(req: NextRequest) {
     return state.gameSettings.default.quackverseArt;
   });
   return NextResponse.json({ success: true, cardId, variant, asset: { ...asset, url: quackverseArtFileUrl(cardId, variant, asset.updatedAt) } });
+}
+
+
+export async function DELETE(req: NextRequest) {
+  const auth = requireAdminRequest(req);
+  if (!auth.ok) return auth.response;
+
+  const body = await req.json().catch(() => ({})) as DeletePayload;
+  const variants = normalizeDeleteVariant(body.variant);
+  const all = body.all === true;
+  const generatedOnly = body.generatedOnly === true;
+  const cardId = Number(body.cardId);
+
+  if (!variants) return NextResponse.json({ error: 'variant must be static, hover, or all.' }, { status: 400 });
+  if (all && !generatedOnly) return NextResponse.json({ error: 'Bulk delete requires generatedOnly=true.' }, { status: 400 });
+  if (!all && (!Number.isFinite(cardId) || cardId < 1)) return NextResponse.json({ error: 'cardId is required.' }, { status: 400 });
+  if (!all && !quackverseCards.some((card) => card.id === cardId)) return NextResponse.json({ error: 'Unknown Quackverse card.' }, { status: 404 });
+
+  const removed: Array<{ cardId: number; variant: QuackverseArtVariant; fileName: string; generated: boolean }> = [];
+  await updateAppState((state) => {
+    if (!state.gameSettings.default) state.gameSettings.default = {};
+    const current = normalizeQuackverseArtManifest(state.gameSettings.default.quackverseArt);
+    const targetIds = all ? quackverseCards.map((card) => card.id) : [cardId];
+
+    for (const targetId of targetIds) {
+      const entry = current[String(targetId)];
+      if (!entry) continue;
+      for (const variant of variants) {
+        const asset = entry[variant];
+        if (!asset?.fileName) continue;
+        const generated = isGeneratedAsset(asset);
+        if (generatedOnly && !generated) continue;
+        removed.push({ cardId: targetId, variant, fileName: asset.fileName, generated });
+        delete entry[variant];
+      }
+      if (entry.static || entry.hover) current[String(targetId)] = entry;
+      else delete current[String(targetId)];
+    }
+
+    state.gameSettings.default.quackverseArt = current;
+    return state.gameSettings.default.quackverseArt;
+  });
+
+  await Promise.all(removed.map(async (item) => {
+    const fullPath = artAssetPath(item.fileName);
+    if (fullPath) await removeIfExists(fullPath);
+  }));
+
+  return NextResponse.json({ success: true, removedCount: removed.length, removed });
 }
