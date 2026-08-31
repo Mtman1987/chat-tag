@@ -3,7 +3,9 @@ name: Quackverse AI Art Seed
 on:
   push:
     branches:
-      - ops/quackverse-art-seed
+      - main
+    paths:
+      - .github/quackverse-art-seed-trigger.txt
   workflow_dispatch:
 
 permissions:
@@ -11,19 +13,21 @@ permissions:
 
 concurrency:
   group: quackverse-ai-art-seed
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   seed-static-art:
-    name: Seed missing Quackverse static art
+    name: Deploy and seed missing Quackverse static art
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      NO_COLOR: "1"
     steps:
+      - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
-      - name: Seed missing cards in batches of five
+      - name: Deploy current main web app from GitHub runner
         shell: bash
         run: |
           set -euo pipefail
@@ -31,7 +35,14 @@ jobs:
             echo "FLY_API_TOKEN is not set"
             exit 1
           fi
+          flyctl deploy --local-only --no-cache --lease-timeout 2m --deploy-retries 3 --config fly.toml --ha=false
+          flyctl status --app chat-tag-new
+          curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors https://chat-tag-new.fly.dev/api/health
 
+      - name: Seed missing cards in batches of five
+        shell: bash
+        run: |
+          set -euo pipefail
           flyctl ssh console --app chat-tag-new -C 'node -e '"'"'
           const base = "http://127.0.0.1:3000";
           const secret = String(process.env.BOT_SECRET_KEY || "").trim();
