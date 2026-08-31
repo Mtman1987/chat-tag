@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getQuackverseVisualCanon } from '@/lib/quackverse-visual-canon';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
 import {
   normalizeQuackverseArtManifest,
@@ -20,6 +21,7 @@ const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAV
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
 const IMAGE_PROMPT_MAX_CHARS = 1450;
 const PROMPT_SAFETY_SUFFIX = ' ARTWORK ONLY. No card frame, stats, captions, written text, logo, watermark or UI.';
+const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaart']);
 
 const FINISHED_CARD_ART_RULES = [
   'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
@@ -64,6 +66,24 @@ function familyDirection(family: ArtFamily) {
 
 function visualCanonForCard(card: any) {
   return getQuackverseVisualCanon({ ...card, family: card.family || familyForCard(card) });
+}
+
+function quackverseProviderOverride(value: unknown) {
+  const requested = String(value || process.env.QUACKVERSE_IMAGE_PROVIDER || 'seaart').trim().toLowerCase();
+  return QUACKVERSE_IMAGE_PROVIDER_OVERRIDES.has(requested) ? requested : 'seaart';
+}
+
+function canShareReferenceOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== 'https:') return false;
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') return false;
+    if (hostname.endsWith('.internal')) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function clampImagePrompt(prompt: string) {
@@ -111,9 +131,11 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
   if (card.type === 'Equipment') {
     return [
       'QUACKVERSE FINAL EQUIPMENT CARD ART.',
+      FINISHED_CARD_ART_RULES,
       `Card: "${card.name}".`,
       `One equipment item only. Type: ${card.trunk || card.role || 'Gear'}. Function: ${card.effect || card.role || 'Quackverse equipment'}.`,
       `Family: ${card.family || family}. ${familyDirection(family)}`,
+      equipmentCommonThreadDirection(card, family),
       ownerDirection,
       composition,
       'Premium fantasy science-fiction object, detailed materials, cinematic environmental background and dramatic lighting.',
@@ -125,12 +147,15 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
   const canon = visualCanonForCard(card);
   return [
     'QUACKVERSE FINAL DUCK CHARACTER CARD ART.',
+    FINISHED_CARD_ART_RULES,
     `Character: "${card.name}". Exactly one anthropomorphic upright ${canon.species} waterfowl person, never a human and never a human in a bird mask.`,
     `Species identity: unmistakable species-correct bill, expressive avian eyes, visible feathers, two arms and two legs. Plumage: ${canon.plumage}.`,
     `Class/subclass: ${canon.className} / ${ownerSubclass || canon.subclass}. Body: ${canon.build}.`,
     `Signature weapon: ${canon.signatureWeapon}. Armor: ${canon.armorStyle}.`,
     `Palette: ${canon.palette.join(', ')}. Effects: ${canon.vfx}.`,
     `Family/trunk: ${ownerFamily || card.family || canon.family} / ${card.trunk || card.role || canon.subclass}.`,
+    `Family direction: ${familyDirection(family)}`,
+    canonCommonThreadDirection(card, canon, family),
     ownerDirection,
     card.effect ? `Ability cue: ${card.effect}.` : '',
     card.flavor ? `Attitude: ${card.flavor}.` : '',
@@ -197,7 +222,7 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
       seed: Number(body.seed || 0) || undefined,
     },
   };
-  if (body.providerOverride) requestBody.providerOverride = body.providerOverride;
+  requestBody.providerOverride = quackverseProviderOverride(body.providerOverride);
 
   const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
     method: 'POST',
@@ -284,11 +309,13 @@ export async function POST(req: NextRequest) {
     if (candidates.length >= limit) break;
   }
 
+  const referenceOrigin = getPublicAppOrigin(req);
+  const shareReferences = canShareReferenceOrigin(referenceOrigin);
   const results: any[] = [];
   for (const card of candidates) {
     try {
       const family = familyForCard(card);
-      const references = await referenceImagesFor(card, req.nextUrl.origin, manifest);
+      const references = shareReferences ? await referenceImagesFor(card, referenceOrigin, manifest) : [];
       const prompt = clampImagePrompt(buildPrompt(card, variant, family, promptControls));
       const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
       if (previewOnly) {
