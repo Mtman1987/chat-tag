@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   seed-static-art:
-    name: Deploy and seed missing Quackverse static art
+    name: Seed missing Quackverse static art
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -27,15 +27,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
-      - name: Deploy current main web app from GitHub runner
+      - name: Verify live app before seeding
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${FLY_API_TOKEN:-}" ]; then
-            echo "FLY_API_TOKEN is not set"
-            exit 1
-          fi
-          flyctl deploy --local-only --no-cache --lease-timeout 2m --deploy-retries 3 --config fly.toml --ha=false
           flyctl status --app chat-tag-new
           curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors https://chat-tag-new.fly.dev/api/health
 
