@@ -24,6 +24,8 @@ Invalid static art includes concept sheets, model sheets, character turnarounds,
 
 `src/lib/quackverse-visual-canon.ts` is the canonical visual metadata source used by the AI prompt builder.
 
+The canonical bulk-contact-sheet generation plan, exact crop coordinates, slot-to-card mapping, output filenames, import workflow, and the 13 concrete generation prompts are maintained in [`docs/QUACKVERSE_ART_SHEET_PLAN.md`](./QUACKVERSE_ART_SHEET_PLAN.md). Sheet grouping is only an authoring convenience; individual per-card canon always wins if a sheet theme conflicts with an identity lock.
+
 ## Static generation
 
 `POST /api/quackverse/art/generate` is admin-only and card-specific.
