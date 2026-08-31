@@ -1,0 +1,4 @@
+One-shot Quackverse AI art seed trigger.
+UTC: 2026-08-31T05:55Z
+Deploy current main locally, then seed missing static art in batches of five.
+Stop immediately if a full batch has zero successes.
