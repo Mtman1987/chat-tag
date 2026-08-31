@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getQuackverseVisualCanon } from '@/lib/quackverse-visual-canon';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
 import {
   normalizeQuackverseArtManifest,
@@ -19,13 +20,18 @@ const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev').replace(/\/$/, '');
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
 const IMAGE_PROMPT_MAX_CHARS = 1450;
+const QUACKVERSE_CARD_ART_ASPECT = '16:10 landscape';
+const QUACKVERSE_CARD_ART_RESOLUTION = '1024x640';
 const PROMPT_SAFETY_SUFFIX = ' ARTWORK ONLY. No card frame, stats, captions, written text, logo, watermark or UI.';
+const QUACKVERSE_NEGATIVE_PROMPT = 'concept sheet, model sheet, reference sheet, turnaround, multiple angles, duplicate character, panels, vignettes, anatomy study, weapon study, diagram, callouts, labels, text, watermark, logo, white background, cropped head, cropped bill, cropped limbs, cropped weapon';
+const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaart']);
 
 const FINISHED_CARD_ART_RULES = [
   'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
-  'Exactly one primary subject in one camera angle and one pose. No duplicate character, no multiple angles, no turnaround, no front/back/side views, no panels, no vignettes, no anatomy/wing/weapon studies, no diagram callouts and no white sketch-sheet background.',
-  'Card-crop safe: keep the face, bill, chest, silhouette, signature weapon/focus and key VFX readable inside the central 70% of the image, with no accidental cropped-off head, bill, arms, wings, legs, weapon or equipment.',
-  'Use a cinematic environmental background with depth and lighting like finished production card art.',
+  'Exactly one primary subject, one camera angle and one pose; no duplicate character, no multiple angles, no turnaround, no panels and no white sketch-sheet background.',
+  `Exact output shape: ${QUACKVERSE_CARD_ART_ASPECT} (${QUACKVERSE_CARD_ART_RESOLUTION}), matching the visible Quackverse card art window; compose as a landscape card-art image, not a square portrait or reference board.`,
+  'Card-crop safe: keep the face, bill, chest, silhouette, signature weapon/focus and key VFX readable inside the central 70% with no cropped-off head, bill, arms, wings, legs, weapon or equipment.',
+  'Cinematic environmental background with depth and finished production card-art lighting.',
 ].join(' ');
 
 type ArtFamily = 'light-ranger' | 'cosmic' | 'void' | 'storm' | 'galaxy-ranger' | 'photon-ranger' | 'general';
@@ -64,6 +70,24 @@ function familyDirection(family: ArtFamily) {
 
 function visualCanonForCard(card: any) {
   return getQuackverseVisualCanon({ ...card, family: card.family || familyForCard(card) });
+}
+
+function quackverseProviderOverride(value: unknown) {
+  const requested = String(value || process.env.QUACKVERSE_IMAGE_PROVIDER || 'seaart').trim().toLowerCase();
+  return QUACKVERSE_IMAGE_PROVIDER_OVERRIDES.has(requested) ? requested : 'seaart';
+}
+
+function canShareReferenceOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== 'https:') return false;
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') return false;
+    if (hostname.endsWith('.internal')) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function clampImagePrompt(prompt: string) {
@@ -111,9 +135,11 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
   if (card.type === 'Equipment') {
     return [
       'QUACKVERSE FINAL EQUIPMENT CARD ART.',
+      FINISHED_CARD_ART_RULES,
       `Card: "${card.name}".`,
       `One equipment item only. Type: ${card.trunk || card.role || 'Gear'}. Function: ${card.effect || card.role || 'Quackverse equipment'}.`,
       `Family: ${card.family || family}. ${familyDirection(family)}`,
+      equipmentCommonThreadDirection(card, family),
       ownerDirection,
       composition,
       'Premium fantasy science-fiction object, detailed materials, cinematic environmental background and dramatic lighting.',
@@ -125,12 +151,15 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
   const canon = visualCanonForCard(card);
   return [
     'QUACKVERSE FINAL DUCK CHARACTER CARD ART.',
+    FINISHED_CARD_ART_RULES,
     `Character: "${card.name}". Exactly one anthropomorphic upright ${canon.species} waterfowl person, never a human and never a human in a bird mask.`,
+    canonCommonThreadDirection(card, canon, family),
     `Species identity: unmistakable species-correct bill, expressive avian eyes, visible feathers, two arms and two legs. Plumage: ${canon.plumage}.`,
     `Class/subclass: ${canon.className} / ${ownerSubclass || canon.subclass}. Body: ${canon.build}.`,
     `Signature weapon: ${canon.signatureWeapon}. Armor: ${canon.armorStyle}.`,
     `Palette: ${canon.palette.join(', ')}. Effects: ${canon.vfx}.`,
     `Family/trunk: ${ownerFamily || card.family || canon.family} / ${card.trunk || card.role || canon.subclass}.`,
+    `Family direction: ${familyDirection(family)}`,
     ownerDirection,
     card.effect ? `Ability cue: ${card.effect}.` : '',
     card.flavor ? `Attitude: ${card.flavor}.` : '',
@@ -189,15 +218,16 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
     prompt,
     scope: 'public',
     tenantId,
-    resolution: body.resolution || '1024x1024',
+    resolution: QUACKVERSE_CARD_ART_RESOLUTION,
     numImages: 1,
     model: body.model || undefined,
     providerParams: {
       referenceImages,
+      negativePrompt: QUACKVERSE_NEGATIVE_PROMPT,
       seed: Number(body.seed || 0) || undefined,
     },
   };
-  if (body.providerOverride) requestBody.providerOverride = body.providerOverride;
+  requestBody.providerOverride = quackverseProviderOverride(body.providerOverride);
 
   const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
     method: 'POST',
@@ -284,11 +314,13 @@ export async function POST(req: NextRequest) {
     if (candidates.length >= limit) break;
   }
 
+  const referenceOrigin = getPublicAppOrigin(req);
+  const shareReferences = canShareReferenceOrigin(referenceOrigin);
   const results: any[] = [];
   for (const card of candidates) {
     try {
       const family = familyForCard(card);
-      const references = await referenceImagesFor(card, req.nextUrl.origin, manifest);
+      const references = shareReferences ? await referenceImagesFor(card, referenceOrigin, manifest) : [];
       const prompt = clampImagePrompt(buildPrompt(card, variant, family, promptControls));
       const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
       if (previewOnly) {
@@ -327,6 +359,7 @@ export async function POST(req: NextRequest) {
         referenceCount: references.length,
         provider: generated.provider,
         tenantId: generated.tenantId,
+        resolution: QUACKVERSE_CARD_ART_RESOLUTION,
         success: true,
         asset,
       });

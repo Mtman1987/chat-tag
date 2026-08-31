@@ -41,6 +41,7 @@ jobs:
           flyctl ssh console --app chat-tag-new -C 'node -e '"'"'
           const base = "http://127.0.0.1:3000";
           const secret = String(process.env.BOT_SECRET_KEY || "").trim();
+          const providerOverride = String(process.env.QUACKVERSE_IMAGE_PROVIDER || "seaart").trim();
           if (!secret) throw new Error("BOT_SECRET_KEY is unavailable inside chat-tag-new");
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           async function main() {
@@ -55,7 +56,7 @@ jobs:
                 limit: 5,
                 missingOnly: true,
                 includePrompt: true,
-                providerOverride: "eden"
+                providerOverride
               })
             });
             const data = await response.json().catch(() => null);
