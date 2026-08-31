@@ -55,7 +55,9 @@ Quackverse uses the existing StreamWeaver `/api/ai/image` route through its Moun
 
 Returned persisted image URLs may be relative to StreamWeaver. The Quackverse caller resolves them to absolute URLs before downloading and storing the image locally.
 
-SeaArt is the intended quality provider for the current static backlog. Provider/model failures are surfaced per card so they can be corrected and retried without losing prior successes.
+The admin manager can choose SeaArt, Eden / Leonardo, or Cloudflare FLUX per test batch so bad provider behavior is easy to compare before scaling beyond five cards. Reference images sent to StreamWeaver must use a trusted public HTTPS ChatTag origin; localhost and internal Fly SSH origins are never forwarded.
+
+Generated assets can be deleted from the manager. Bulk cleanup only removes StreamWeaver-generated files and preserves manual uploads, while selected-card cleanup can remove a specific static or hover slot.
 
 ## Serving artwork
 
