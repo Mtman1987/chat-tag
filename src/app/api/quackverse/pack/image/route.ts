@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { readAppState } from '@/lib/volume-store';
-import { normalizeQuackverseArtManifest } from '@/lib/quackverse-art';
+import { normalizeQuackverseArtManifest, quackverseArtFileUrl, type QuackverseArtManifest } from '@/lib/quackverse-art';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { quackverseCards } from '@/lib/quackverse-data';
 
@@ -45,10 +45,12 @@ function rarityColor(rarity?: string) {
   return rarityColors[rarity || ''] || '#22d3ee';
 }
 
-function buildCardArtUrl(cardId: number, origin: string, manifest: Record<string, any>) {
-  const custom = manifest[String(cardId)]?.static?.url;
+function buildCardArtUrl(cardId: number, origin: string, manifest: QuackverseArtManifest) {
+  const custom = manifest[String(cardId)]?.static;
   const card = quackverseCards.find((item) => item.id === cardId);
-  const rawUrl = custom || card?.artUrl || card?.artHoverUrl || '';
+  const rawUrl = custom
+    ? quackverseArtFileUrl(cardId, 'static', custom.updatedAt)
+    : card?.artUrl || card?.artHoverUrl || '';
   if (!rawUrl) return '';
   try {
     return new URL(rawUrl, origin).toString();
