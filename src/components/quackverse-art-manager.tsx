@@ -302,6 +302,9 @@ export function QuackverseArtManager() {
                   <Button type="button" disabled={loading} onClick={() => void generateAsset('static', [selectedCard.id])}>
                     Generate Static Art
                   </Button>
+                  <Button type="button" variant="secondary" disabled={loading} onClick={() => void generateAsset('hover', [selectedCard.id])}>
+                    Generate Hover Still
+                  </Button>
                   <Button
                     type="button"
                     variant="secondary"
