@@ -26,6 +26,12 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   avif: 'image/avif',
 };
 
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function findEndOfCentralDirectory(bytes: Uint8Array) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const minimum = Math.max(0, bytes.byteLength - 0xffff - 22);
@@ -71,7 +77,7 @@ async function inflateRaw(data: Uint8Array) {
   } catch {
     throw new Error('This browser does not support ZIP deflate decompression. Use current Chrome or Edge.');
   }
-  const source = new Blob([data]).stream().pipeThrough(stream);
+  const source = new Blob([ownedArrayBuffer(data)]).stream().pipeThrough(stream);
   return new Uint8Array(await new Response(source).arrayBuffer());
 }
 
@@ -140,7 +146,7 @@ export function QuackverseArtZipImport({ disabled = false, onImported }: Props) 
         setStatus(`Importing ${index + 1} / ${items.length}: #${descriptor.cardId} ${descriptor.baseName}`);
         try {
           const imageBytes = await extractEntry(bytes, entry);
-          const imageFile = new File([imageBytes], descriptor.baseName, { type: descriptor.mimeType });
+          const imageFile = new File([ownedArrayBuffer(imageBytes)], descriptor.baseName, { type: descriptor.mimeType });
           const formData = new FormData();
           formData.set('cardId', String(descriptor.cardId));
           formData.set('variant', 'static');
