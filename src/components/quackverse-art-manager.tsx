@@ -14,7 +14,13 @@ type ArtEntry = { static?: ArtAsset | null; hover?: ArtAsset | null };
 type ManifestResponse = { cards?: Record<string, ArtEntry> };
 
 type ProviderKey = 'eden' | 'cloudflare' | 'seaart';
-type ModelOption = { value: string; label: string; hint?: string; resolutions?: readonly string[] };
+type ModelOption = {
+  value: string;
+  label: string;
+  hint?: string;
+  resolutions?: readonly string[];
+  metadata?: string;
+};
 
 const providers: Array<{ value: ProviderKey; label: string }> = [
   { value: 'eden', label: 'Eden AI' },
@@ -22,62 +28,200 @@ const providers: Array<{ value: ProviderKey; label: string }> = [
   { value: 'seaart', label: 'SeaArt' },
 ];
 
+const SEAART_SEEDREAM_5 = 'd6eqbble878c73dhco9g::1ad9c231-1945-4e50-a24d-d2c7570338ad';
 const SEAART_SEEDREAM_45 = 'd4pbgg5e878c73fengf0::53c0eaf0-7de3-4e9c-a906-9499df061661';
+const SEAART_SEEDREAM_4 = 'd534afde878c73drik20::60099fa2-8f31-4f42-8e7f-5ea4c2784220';
+const SEAART_NANO_BANANA = '0e21cbf906b5b39c2f9863f4b9ff059edbd0b399::e651aa45c8ed746bcd2546d46a3cdf3bf83feb67';
+const SEAART_NANO_BANANA_2 = 'd6ggttle878c739bpf50::547ebf19-577f-4614-9ef7-f9ece0aebf80';
 const SEAART_NANO_BANANA_PRO = 'd49btu5e878c73avuqfg::49a838b1-0ef7-4442-999d-71e10cb2feab';
 const SEAART_GROK_IMAGINE = 'd6sih8le878c73a7cbtg::0e7eaf79-5702-4387-bcaa-ce3b79a36889';
+const SEAART_Z_IMAGE_TURBO = 'd4kssode878c7387fae0::ef24b47a8d618127c9342fd0635aedb9';
+const SEAART_FILM = '26058e019e3a0c026e1ad2bfa69e2b75::91b19145-a436-4bbc-ace4-62399e71336b';
+const SEAART_WAI_ANI_PONYXL = '24231feb2db47b663ff5b3123f01fab6::6e2e976db9a8e83312a0c91b852f876c';
 const SEAART_INFINITY_LEGACY = 'f8172af6747ec762bcf847bd60fdf7cd::2c39fe1f-f5d6-4b50-a273-499677f2f7a9';
+
+const SEAART_HD_RESOLUTIONS = ['2432x1664', '2688x1536', '2304x1792', '2048x2048'] as const;
+const SEAART_SD_RESOLUTIONS = ['1216x832', '1344x768', '1024x1024', '832x1216'] as const;
+const OPENAI_GPT_IMAGE_RESOLUTIONS = ['1536x1024', '1024x1024', '1024x1536'] as const;
+const SDXL_RESOLUTIONS = ['1216x832', '1344x768', '1024x1024'] as const;
 
 const providerModels: Record<ProviderKey, ModelOption[]> = {
   eden: [
-    { value: 'image/generation/bytedance', label: 'ByteDance Image', hint: 'Recommended for prompt adherence' },
-    { value: 'image/generation/openai/dall-e-3', label: 'OpenAI DALL-E 3', hint: 'Strong natural-language following' },
-    { value: 'image/generation/stabilityai/stable-diffusion-xl-1024-v1-0', label: 'Stability AI SDXL', hint: 'General illustration' },
-    { value: 'image/generation/leonardo/SDXL 0.9', label: 'Leonardo SDXL 0.9', hint: 'Legacy reliable default' },
-    { value: '__custom__', label: 'Custom Eden model ID', hint: 'Use any model ID available to your Eden account' },
+    {
+      value: 'image/generation/bytedance/seedream-5-0-260128',
+      label: 'Seedream 5.0',
+      hint: 'Newest ByteDance still model on Eden; strong prompt following and high-res output',
+      resolutions: ['2496x1664', '2848x1600', '2304x1728', '3136x1344', '3072x3072'],
+      metadata: 'Eden AI · ByteDance · about $0.035/image · 2K/3K generation',
+    },
+    {
+      value: 'image/generation/bytedance/seedream-4-5-251128',
+      label: 'Seedream 4.5',
+      hint: 'Production-grade cinematic stills with strong instruction following',
+      resolutions: ['2496x1664', '2560x1440', '2048x2048', '3840x2160'],
+      metadata: 'Eden AI · ByteDance · about $0.03/request · 2K/4K capable',
+    },
+    {
+      value: 'image/generation/bytedance/seedream-4-0-250828',
+      label: 'Seedream 4.0',
+      hint: 'Reliable ByteDance high-resolution image model',
+      resolutions: ['2496x1664', '2560x1440', '2048x2048', '1024x1024'],
+      metadata: 'Eden AI · ByteDance · about $0.03/request · 1K/2K/4K capable',
+    },
+    {
+      value: 'image/generation/openai/gpt-image-2',
+      label: 'OpenAI GPT Image 2',
+      hint: 'Current high-end OpenAI image generation model through Eden',
+      resolutions: OPENAI_GPT_IMAGE_RESOLUTIONS,
+      metadata: 'Eden AI · OpenAI · about $0.053/image',
+    },
+    {
+      value: 'image/generation/openai/gpt-image-1.5',
+      label: 'OpenAI GPT Image 1.5',
+      hint: 'Strong instruction following at a lower price than GPT Image 2',
+      resolutions: OPENAI_GPT_IMAGE_RESOLUTIONS,
+      metadata: 'Eden AI · OpenAI · about $0.034/image',
+    },
+    {
+      value: 'image/generation/openai/gpt-image-1',
+      label: 'OpenAI GPT Image 1',
+      hint: 'General-purpose high-quality OpenAI image generation',
+      resolutions: OPENAI_GPT_IMAGE_RESOLUTIONS,
+      metadata: 'Eden AI · OpenAI · about $0.042/image',
+    },
+    {
+      value: 'image/generation/openai/gpt-image-1-mini',
+      label: 'OpenAI GPT Image 1 Mini',
+      hint: 'Lower-cost OpenAI image model for fast comparison runs',
+      resolutions: OPENAI_GPT_IMAGE_RESOLUTIONS,
+      metadata: 'Eden AI · OpenAI · about $0.011/image',
+    },
+    {
+      value: 'image/generation/leonardo/Leonardo Phoenix',
+      label: 'Leonardo Phoenix',
+      hint: 'Cinematic illustration and prompt adherence',
+      resolutions: ['1024x1024'],
+      metadata: 'Eden AI · Leonardo · about $0.014/image',
+    },
+    {
+      value: 'image/generation/leonardo/Leonardo Kino XL',
+      label: 'Leonardo Kino XL',
+      hint: 'Cinematic and photographic composition',
+      resolutions: ['1024x1024'],
+      metadata: 'Eden AI · Leonardo · about $0.014/image',
+    },
+    {
+      value: 'image/generation/leonardo/Leonardo Anime XL',
+      label: 'Leonardo Anime XL',
+      hint: 'Stylized/anime alternative for character cards',
+      resolutions: ['1024x1024'],
+      metadata: 'Eden AI · Leonardo · about $0.011/image',
+    },
+    {
+      value: 'image/generation/stabilityai/stable-diffusion-xl-1024-v1-0',
+      label: 'Stability AI SDXL',
+      hint: 'Dependable SDXL baseline for comparison',
+      resolutions: SDXL_RESOLUTIONS,
+      metadata: 'Eden AI · Stability AI · about $0.015/image',
+    },
+    { value: '__custom__', label: 'Custom Eden model ID', hint: 'Use any current image/generation/... model ID from Eden AI' },
   ],
   cloudflare: [
-    { value: '@cf/leonardo/phoenix-1.0', label: 'Leonardo Phoenix 1.0', hint: 'Best Cloudflare prompt adherence' },
-    { value: '@cf/leonardo/lucid-origin', label: 'Leonardo Lucid Origin', hint: 'Polished illustration' },
-    { value: '@cf/black-forest-labs/flux-2-klein-4b', label: 'FLUX.2 Klein 4B', hint: 'Fast and reference-friendly' },
-    { value: '@cf/black-forest-labs/flux-1-schnell', label: 'FLUX.1 Schnell', hint: 'Fast draft model' },
+    { value: '@cf/leonardo/phoenix-1.0', label: 'Leonardo Phoenix 1.0', hint: 'Best Cloudflare prompt adherence', resolutions: ['1024x640'] },
+    { value: '@cf/leonardo/lucid-origin', label: 'Leonardo Lucid Origin', hint: 'Polished illustration', resolutions: ['1024x640'] },
+    { value: '@cf/black-forest-labs/flux-2-klein-4b', label: 'FLUX.2 Klein 4B', hint: 'Fast and reference-friendly', resolutions: ['1024x640'] },
+    { value: '@cf/black-forest-labs/flux-1-schnell', label: 'FLUX.1 Schnell', hint: 'Fast draft model', resolutions: ['1024x640'] },
   ],
   seaart: [
     {
+      value: SEAART_SEEDREAM_5,
+      label: 'Seedream 5.0',
+      hint: 'Newest Seedream still model; strong high-res prompt adherence',
+      resolutions: SEAART_HD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · HD size family',
+    },
+    {
       value: SEAART_SEEDREAM_45,
       label: 'Seedream 4.5',
-      hint: 'Current high-res default; sizes verified from live SeaArt CLI',
+      hint: 'Current high-res default; exact sizes verified from live SeaArt CLI',
       resolutions: ['2496x1664', '2560x1440', '2304x1728', '3024x1296'],
+      metadata: 'SeaArt CLI · live-verified model/version + resolution schema',
+    },
+    {
+      value: SEAART_SEEDREAM_4,
+      label: 'Seedream 4.0',
+      hint: 'High-quality Seedream alternative with broad HD aspect support',
+      resolutions: SEAART_HD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · HD size family',
     },
     {
       value: SEAART_NANO_BANANA_PRO,
       label: 'Nano Banana Pro Image',
-      hint: 'High-res; sizes verified from live SeaArt CLI',
+      hint: 'High-fidelity generation/editing; exact sizes verified from live SeaArt CLI',
       resolutions: ['2528x1696', '2752x1536', '2400x1792', '2304x1856', '3168x1344'],
+      metadata: 'SeaArt CLI · live-verified model/version + resolution schema',
+    },
+    {
+      value: SEAART_NANO_BANANA_2,
+      label: 'Nano Banana 2',
+      hint: 'Current Nano Banana generation/editing alternative',
+      resolutions: SEAART_HD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · HD size family',
+    },
+    {
+      value: SEAART_NANO_BANANA,
+      label: 'Nano Banana',
+      hint: 'Fast image generation/editing baseline',
+      resolutions: SEAART_HD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · HD size family',
+    },
+    {
+      value: SEAART_Z_IMAGE_TURBO,
+      label: 'Z Image Turbo',
+      hint: 'Very fast modern model with strong realism and prompt handling',
+      resolutions: SEAART_HD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · HD size family',
     },
     {
       value: SEAART_GROK_IMAGINE,
       label: 'Grok Imagine Image',
-      hint: 'Lower-cost/lower-res; sizes verified from live SeaArt CLI',
+      hint: 'Fast alternative; exact lower-resolution sizes verified from live SeaArt CLI',
       resolutions: ['1296x864', '1408x768', '1280x896'],
+      metadata: 'SeaArt CLI · live-verified model/version + resolution schema',
+    },
+    {
+      value: SEAART_FILM,
+      label: 'SeaArt Film',
+      hint: 'SeaArt cinematic house model',
+      resolutions: SEAART_HD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · cinematic stills',
+    },
+    {
+      value: SEAART_WAI_ANI_PONYXL,
+      label: 'WAI-ANI PonyXL',
+      hint: 'Stylized/anime model using the standard SDXL-size family',
+      resolutions: SEAART_SD_RESOLUTIONS,
+      metadata: 'SeaArt CLI · official model pair · SD-size family',
     },
     {
       value: SEAART_INFINITY_LEGACY,
       label: 'SeaArt Infinity (legacy)',
-      hint: 'Legacy model; exact accepted sizes only',
+      hint: 'Legacy SeaArt model; exact accepted sizes only',
       resolutions: ['1024x688', '1024x592', '1024x768', '960x768', '1024x512'],
+      metadata: 'SeaArt CLI · live-verified legacy model/version + sizes',
     },
   ],
 };
 
 const providerDefaults: Record<ProviderKey, string> = {
-  eden: 'image/generation/bytedance',
+  eden: 'image/generation/bytedance/seedream-5-0-260128',
   cloudflare: '@cf/leonardo/phoenix-1.0',
   seaart: SEAART_SEEDREAM_45,
 };
 
 const providerFallbackResolutions: Record<ProviderKey, readonly string[]> = {
-  eden: ['2048x1280', '1536x960', '1024x640'],
-  cloudflare: ['1024x640', '1024x1024'],
+  eden: ['1536x1024', '1024x1024'],
+  cloudflare: ['1024x640'],
   seaart: ['2496x1664'],
 };
 
@@ -116,8 +260,9 @@ export function QuackverseArtManager() {
     [manifest],
   );
   const modelOptions = providerModels[provider];
+  const activeModelOption = modelOptions.find((item) => item.value === model);
   const activeModel = model === '__custom__' ? customModel.trim() : model;
-  const activeModelLabel = modelOptions.find((item) => item.value === model)?.label || activeModel || 'Default model';
+  const activeModelLabel = activeModelOption?.label || activeModel || 'Default model';
   const resolutionOptions = useMemo(() => resolutionOptionsFor(provider, model), [provider, model]);
 
   const refresh = useCallback(async () => {
@@ -309,9 +454,15 @@ export function QuackverseArtManager() {
           </Select>
 
           <div className="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-slate-300">
-            Using <span className="font-semibold text-white">{activeModelLabel}</span>. {provider === 'seaart'
-              ? 'The size list is locked to resolutions verified from the live SeaArt CLI for this exact model. The Quackverse pipeline still targets a 2048x1280 final card master.'
-              : 'Choose from the provider-safe sizes available for this model/provider.'}
+            <div>Using <span className="font-semibold text-white">{activeModelLabel}</span> at <span className="font-semibold text-white">{resolution}</span>.</div>
+            {activeModelOption?.metadata && <div className="mt-1 text-slate-400">{activeModelOption.metadata}</div>}
+            <div className="mt-1 text-slate-400">{provider === 'seaart'
+              ? 'The size list is model-specific. Live-probed models use their exact CLI schema; the remaining SeaArt presets use SeaArt’s documented HD/SD aspect-size families.'
+              : 'The size list is model/provider-specific rather than one global Quackverse resolution list.'}</div>
+          </div>
+
+          <div className="rounded-md border border-violet-400/20 bg-violet-500/5 p-2 text-xs text-violet-100">
+            Video models are intentionally separate from still models. Wan 2.2 I2V is the target SeaArt animation model for the 5-second source clip; final hover delivery remains 640x400 at 10fps with the ping-pong GIF export.
           </div>
 
           <Button type="button" className="w-full" disabled={working || !activeModel} onClick={() => void run([selected.id], true)}>Generate + Animate Selected Card</Button>
