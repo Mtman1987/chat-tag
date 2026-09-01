@@ -13,13 +13,43 @@ type ArtAsset = { url: string; fileName: string; updatedAt: string };
 type ArtEntry = { static?: ArtAsset | null; hover?: ArtAsset | null };
 type ManifestResponse = { cards?: Record<string, ArtEntry> };
 
-const providers = [
-  ['seaart', 'SeaArt'],
-  ['eden', 'Eden / Leonardo'],
-  ['cloudflare', 'Cloudflare FLUX'],
-  ['pollinations', 'Pollinations'],
-  ['perchance', 'Perchance'],
-] as const;
+type ProviderKey = 'eden' | 'cloudflare' | 'seaart';
+type ModelOption = { value: string; label: string; hint?: string };
+
+const providers: Array<{ value: ProviderKey; label: string }> = [
+  { value: 'eden', label: 'Eden AI' },
+  { value: 'cloudflare', label: 'Cloudflare Workers AI' },
+  { value: 'seaart', label: 'SeaArt' },
+];
+
+const providerModels: Record<ProviderKey, ModelOption[]> = {
+  eden: [
+    { value: 'image/generation/bytedance', label: 'ByteDance Image', hint: 'Recommended for prompt adherence' },
+    { value: 'image/generation/openai/dall-e-3', label: 'OpenAI DALL-E 3', hint: 'Strong natural-language following' },
+    { value: 'image/generation/stabilityai/stable-diffusion-xl-1024-v1-0', label: 'Stability AI SDXL', hint: 'General illustration' },
+    { value: 'image/generation/leonardo/SDXL 0.9', label: 'Leonardo SDXL 0.9', hint: 'Legacy reliable default' },
+    { value: '__custom__', label: 'Custom Eden model ID', hint: 'Use any model ID available to your Eden account' },
+  ],
+  cloudflare: [
+    { value: '@cf/leonardo/phoenix-1.0', label: 'Leonardo Phoenix 1.0', hint: 'Best Cloudflare prompt adherence' },
+    { value: '@cf/leonardo/lucid-origin', label: 'Leonardo Lucid Origin', hint: 'Polished illustration' },
+    { value: '@cf/black-forest-labs/flux-2-klein-4b', label: 'FLUX.2 Klein 4B', hint: 'Fast and reference-friendly' },
+    { value: '@cf/black-forest-labs/flux-1-schnell', label: 'FLUX.1 Schnell', hint: 'Fast draft model' },
+  ],
+  seaart: [
+    { value: 'seaart-infinity', label: 'SeaArt Infinity', hint: 'High-detail general model' },
+    { value: 'seaart-film', label: 'SeaArt Film', hint: 'Cinematic style' },
+    { value: 'wai-ani-ponyxl', label: 'WAI-ANI PonyXL', hint: 'Stylized/anime' },
+    { value: 'seaart-realistic', label: 'SeaArt Realistic', hint: 'Realistic profile' },
+  ],
+};
+
+const providerDefaults: Record<ProviderKey, string> = {
+  eden: 'image/generation/bytedance',
+  cloudflare: '@cf/leonardo/phoenix-1.0',
+  seaart: 'seaart-infinity',
+};
+
 const resolutions = ['2048x1280', '1536x960', '1024x640'] as const;
 
 function status(entry?: ArtEntry) {
@@ -31,7 +61,9 @@ function status(entry?: ArtEntry) {
 export function QuackverseArtManager() {
   const [manifest, setManifest] = useState<Record<string, ArtEntry>>({});
   const [selectedId, setSelectedId] = useState(String(quackverseCards[0]?.id ?? 1));
-  const [provider, setProvider] = useState('seaart');
+  const [provider, setProvider] = useState<ProviderKey>('eden');
+  const [model, setModel] = useState(providerDefaults.eden);
+  const [customModel, setCustomModel] = useState('');
   const [resolution, setResolution] = useState('2048x1280');
   const [rangeStart, setRangeStart] = useState('1');
   const [rangeCount, setRangeCount] = useState('5');
@@ -49,6 +81,9 @@ export function QuackverseArtManager() {
     () => quackverseCards.filter((card) => manifest[String(card.id)]?.static && manifest[String(card.id)]?.hover).length,
     [manifest],
   );
+  const modelOptions = providerModels[provider];
+  const activeModel = model === '__custom__' ? customModel.trim() : model;
+  const activeModelLabel = modelOptions.find((item) => item.value === model)?.label || activeModel || 'Default model';
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/quackverse/art', { cache: 'no-store' });
@@ -58,6 +93,14 @@ export function QuackverseArtManager() {
   }, []);
 
   useEffect(() => { void refresh().catch((error) => setMessage(error.message)); }, [refresh]);
+
+  const changeProvider = useCallback((value: string) => {
+    const next = value as ProviderKey;
+    setProvider(next);
+    setModel(providerDefaults[next]);
+    setCustomModel('');
+    setMessage('');
+  }, []);
 
   const request = useCallback(async (url: string, method: string, body: unknown) => {
     const response = await fetch(url, {
@@ -73,6 +116,7 @@ export function QuackverseArtManager() {
   const rebuildOne = useCallback(async (cardId: number, replace = true) => {
     const card = quackverseCards.find((item) => item.id === cardId);
     if (!card) throw new Error(`Unknown card #${cardId}`);
+    if (!activeModel) throw new Error('Choose an image model before generating.');
     const current = manifest[String(cardId)] || {};
 
     if (replace) {
@@ -81,10 +125,10 @@ export function QuackverseArtManager() {
     }
 
     if (replace || !current.static) {
-      setMessage(`#${cardId} ${card.name}: generating ${resolution} static master...`);
+      setMessage(`#${cardId} ${card.name}: generating ${resolution} with ${activeModelLabel}...`);
       const generated = await request('/api/quackverse/art/generate', 'POST', {
         variant: 'static', cardIds: [cardId], limit: 1, missingOnly: false,
-        providerOverride: provider, resolution, useReferences: false,
+        providerOverride: provider, model: activeModel, resolution, useReferences: false,
       });
       const result = generated?.results?.[0];
       if (!result?.success) throw new Error(result?.error || `Card #${cardId} generation failed`);
@@ -98,10 +142,14 @@ export function QuackverseArtManager() {
 
     await refresh();
     setMessage(`#${cardId} ${card.name}: generated, animated, saved, verified.`);
-  }, [manifest, provider, refresh, request, resolution]);
+  }, [activeModel, activeModelLabel, manifest, provider, refresh, request, resolution]);
 
   const run = useCallback(async (ids: number[], replace = true) => {
     if (!ids.length || working) return;
+    if (!activeModel) {
+      setMessage('Choose an image model before generating.');
+      return;
+    }
     setWorking(true);
     stopRef.current = false;
     try {
@@ -118,7 +166,7 @@ export function QuackverseArtManager() {
       setWorking(false);
       await refresh().catch(() => {});
     }
-  }, [rebuildOne, refresh, working]);
+  }, [activeModel, rebuildOne, refresh, working]);
 
   const nextMissing = useCallback(() => {
     const next = quackverseCards.find((card) => {
@@ -182,17 +230,43 @@ export function QuackverseArtManager() {
 
         <div data-quackverse-art-actions className="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
           <div className="text-sm font-semibold text-white">Generation Settings</div>
-          <Select value={provider} disabled={working} onValueChange={setProvider}>
+          <Select value={provider} disabled={working} onValueChange={changeProvider}>
             <SelectTrigger className="bg-slate-950 text-white"><SelectValue /></SelectTrigger>
-            <SelectContent>{providers.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+            <SelectContent>
+              {providers.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+            </SelectContent>
           </Select>
+
+          <Select value={model} disabled={working} onValueChange={setModel}>
+            <SelectTrigger className="bg-slate-950 text-white"><SelectValue placeholder="Choose model" /></SelectTrigger>
+            <SelectContent>
+              {modelOptions.map((item) => (
+                <SelectItem key={item.value} value={item.value}>{item.label}{item.hint ? ` · ${item.hint}` : ''}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {provider === 'eden' && model === '__custom__' && (
+            <Input
+              value={customModel}
+              disabled={working}
+              onChange={(event) => setCustomModel(event.target.value)}
+              placeholder="image/generation/provider/model-id"
+              className="bg-slate-950 text-white"
+            />
+          )}
+
           <Select value={resolution} disabled={working} onValueChange={setResolution}>
             <SelectTrigger className="bg-slate-950 text-white"><SelectValue /></SelectTrigger>
             <SelectContent>{resolutions.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
           </Select>
 
-          <Button type="button" className="w-full" disabled={working} onClick={() => void run([selected.id], true)}>Generate + Animate Selected Card</Button>
-          <Button type="button" variant="secondary" className="w-full" disabled={working} onClick={nextMissing}>Generate Next Missing Card</Button>
+          <div className="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-slate-300">
+            Using <span className="font-semibold text-white">{activeModelLabel}</span>. Eden now exposes several useful choices plus a custom model ID so you are not locked to one model.
+          </div>
+
+          <Button type="button" className="w-full" disabled={working || !activeModel} onClick={() => void run([selected.id], true)}>Generate + Animate Selected Card</Button>
+          <Button type="button" variant="secondary" className="w-full" disabled={working || !activeModel} onClick={nextMissing}>Generate Next Missing Card</Button>
 
           <div className="rounded-md border border-white/10 p-3">
             <div className="mb-2 text-sm font-semibold text-white">Range</div>
@@ -200,15 +274,15 @@ export function QuackverseArtManager() {
               <Input value={rangeStart} disabled={working} onChange={(event) => setRangeStart(event.target.value)} inputMode="numeric" placeholder="Start ID" />
               <Input value={rangeCount} disabled={working} onChange={(event) => setRangeCount(event.target.value)} inputMode="numeric" placeholder="Count" />
             </div>
-            <Button type="button" variant="secondary" className="mt-2 w-full" disabled={working} onClick={runRange}>Rebuild Range</Button>
+            <Button type="button" variant="secondary" className="mt-2 w-full" disabled={working || !activeModel} onClick={runRange}>Rebuild Range</Button>
           </div>
 
-          <Button type="button" variant="secondary" className="w-full bg-red-950/70 text-red-50 hover:bg-red-900/80" disabled={working} onClick={runAll}>Rebuild All Cards</Button>
+          <Button type="button" variant="secondary" className="w-full bg-red-950/70 text-red-50 hover:bg-red-900/80" disabled={working || !activeModel} onClick={runAll}>Rebuild All Cards</Button>
 
           {working && <Button type="button" variant="outline" className="w-full" onClick={() => { stopRef.current = true; setMessage('Stop requested; current card will finish first.'); }}>Stop After Current Card</Button>}
           {progress && <div className="text-xs text-amber-100">{progress}</div>}
           {message && <div className="rounded-md border border-white/10 bg-slate-950 p-2 text-xs text-cyan-100">{message}</div>}
-          <div className="text-xs text-slate-400">Duck cards alternate feminine/masculine presentation automatically. Equipment stays non-gendered. Rebuilds replace old static + GIF only for the cards being processed.</div>
+          <div className="text-xs text-slate-400">Pollinations and Perchance are hidden from this Quackverse tool because they were not producing dependable card art. Duck cards alternate feminine/masculine presentation automatically; equipment stays non-gendered.</div>
         </div>
       </div>
     </section>
