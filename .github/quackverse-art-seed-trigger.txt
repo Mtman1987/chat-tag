@@ -1,5 +1,5 @@
 One-shot Quackverse AI art seed trigger.
-UTC: 2026-09-01T09:29:00Z
-Batch policy: fill all 100 static cards with SeaArt in batches of five, then inspect live SeaArt image-to-video capabilities for the animated GIF pass.
-Target: 100 persisted static assets and 100 persisted hover GIFs on the live chat-tag-new volume.
-Provider: SeaArt.
+UTC: 2026-09-01T10:41:00Z
+Purpose: probe live SeaArt text2image model parameter schemas and supported resolutions before resuming Quackverse generation.
+Models: Seedream 4.5, Nano Banana Pro, Grok Imagine Image, legacy SeaArt Infinity.
+Target UI request: 2048x1280.
