@@ -146,7 +146,7 @@ export function QuackverseArtManager() {
   const previewUrl = selectedEntry.static?.url || selected.artUrl || '';
 
   return (
-    <section data-quackverse-art-manager className="rounded-xl border border-white/10 bg-black/20 p-4">
+    <section data-quackverse-art-manager className="relative z-[60] isolate rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-headline text-lg text-white">Quackverse Art Rebuilder</h3>
