@@ -38,8 +38,8 @@ patchFile('bot.js', [
   },
   {
     before: `              },\n              ...cardEmbeds,\n            ],`,
-    after: `              },\n            ],`,
-    already: '              },\n            ],\n          }),',
+    after: `              },\n              // PACK_DISCORD_SINGLE_EMBED: no per-card image embeds.\n            ],`,
+    already: 'PACK_DISCORD_SINGLE_EMBED',
   },
 ]);
 
