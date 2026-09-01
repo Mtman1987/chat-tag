@@ -122,7 +122,7 @@ jobs:
           main().catch((error) => { console.error(error); process.exit(1); });
           '"'"''
 
-      - name: Inspect live SeaArt image-to-video support
+      - name: Inspect live SeaArt model parameters
         if: always()
         shell: bash
         run: |
@@ -137,6 +137,16 @@ jobs:
           seaart login --token "$token" >/dev/null 2>&1 || true
           echo "=== SEAART VERSION ==="
           seaart version || true
+          echo "=== TEXT2IMAGE HELP ==="
+          seaart text2image --help || true
+          echo "=== SEEDREAM 4.5 PARAMS ==="
+          seaart models params d4pbgg5e878c73fengf0 || true
+          echo "=== NANO BANANA PRO PARAMS ==="
+          seaart models params d49btu5e878c73avuqfg || true
+          echo "=== GROK IMAGINE IMAGE PARAMS ==="
+          seaart models params d6sih8le878c73a7cbtg || true
+          echo "=== LEGACY SEAART INFINITY PARAMS ==="
+          seaart models params f8172af6747ec762bcf847bd60fdf7cd || true
           echo "=== IMAGE2VIDEO HELP ==="
           seaart image2video --help || true
           echo "=== SEAART MODELS ==="
