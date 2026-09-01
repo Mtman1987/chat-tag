@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const ALLOWED_MIME_TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -155,7 +156,7 @@ export async function POST(req: NextRequest) {
   if (!file) return NextResponse.json({ error: 'file is required.' }, { status: 400 });
   if (!ALLOWED_MIME_TYPES[file.mimeType]) return NextResponse.json({ error: 'Unsupported file type.' }, { status: 400 });
   if (file.bytes.length <= 0) return NextResponse.json({ error: 'File is empty. Please upload the image again.' }, { status: 400 });
-  if (file.bytes.length > 20 * 1024 * 1024) return NextResponse.json({ error: 'File too large. Max 20MB.' }, { status: 413 });
+  if (file.bytes.length > MAX_UPLOAD_BYTES) return NextResponse.json({ error: 'File too large. Max 50MB.' }, { status: 413 });
 
   await fs.mkdir(path.join(ART_ROOT, String(cardId)), { recursive: true });
   const fileName = `${variant}.${ALLOWED_MIME_TYPES[file.mimeType]}`;
@@ -184,7 +185,6 @@ export async function POST(req: NextRequest) {
   });
   return NextResponse.json({ success: true, cardId, variant, asset: { ...asset, url: quackverseArtFileUrl(cardId, variant, asset.updatedAt) } });
 }
-
 
 export async function DELETE(req: NextRequest) {
   const auth = requireAdminRequest(req);
