@@ -180,7 +180,7 @@ export function QuackverseArtManager() {
           )}
         </div>
 
-        <div className="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+        <div data-quackverse-art-actions className="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
           <div className="text-sm font-semibold text-white">Generation Settings</div>
           <Select value={provider} disabled={working} onValueChange={setProvider}>
             <SelectTrigger className="bg-slate-950 text-white"><SelectValue /></SelectTrigger>
