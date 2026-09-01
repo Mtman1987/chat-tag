@@ -43,7 +43,7 @@ export default function GuardedGameControlsPage() {
             </div>
             <CardTitle className="font-headline text-xl">Card Art Rebuilder</CardTitle>
             <CardDescription>
-              Generate one finished card at a time, build its triggered animation from the same static master, and save both directly to the live Quackverse volume.
+              Generate one finished card at a time, build its triggered animation from the same static master, and save both directly to the live Quackverse volume. The public Cards tab remains read-only.
             </CardDescription>
           </CardHeader>
           <CardContent>
