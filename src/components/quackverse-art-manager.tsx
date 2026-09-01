@@ -14,13 +14,18 @@ type ArtEntry = { static?: ArtAsset | null; hover?: ArtAsset | null };
 type ManifestResponse = { cards?: Record<string, ArtEntry> };
 
 type ProviderKey = 'eden' | 'cloudflare' | 'seaart';
-type ModelOption = { value: string; label: string; hint?: string };
+type ModelOption = { value: string; label: string; hint?: string; resolutions?: readonly string[] };
 
 const providers: Array<{ value: ProviderKey; label: string }> = [
   { value: 'eden', label: 'Eden AI' },
   { value: 'cloudflare', label: 'Cloudflare Workers AI' },
   { value: 'seaart', label: 'SeaArt' },
 ];
+
+const SEAART_SEEDREAM_45 = 'd4pbgg5e878c73fengf0::53c0eaf0-7de3-4e9c-a906-9499df061661';
+const SEAART_NANO_BANANA_PRO = 'd49btu5e878c73avuqfg::49a838b1-0ef7-4442-999d-71e10cb2feab';
+const SEAART_GROK_IMAGINE = 'd6sih8le878c73a7cbtg::0e7eaf79-5702-4387-bcaa-ce3b79a36889';
+const SEAART_INFINITY_LEGACY = 'f8172af6747ec762bcf847bd60fdf7cd::2c39fe1f-f5d6-4b50-a273-499677f2f7a9';
 
 const providerModels: Record<ProviderKey, ModelOption[]> = {
   eden: [
@@ -37,20 +42,49 @@ const providerModels: Record<ProviderKey, ModelOption[]> = {
     { value: '@cf/black-forest-labs/flux-1-schnell', label: 'FLUX.1 Schnell', hint: 'Fast draft model' },
   ],
   seaart: [
-    { value: 'seaart-infinity', label: 'SeaArt Infinity', hint: 'High-detail general model' },
-    { value: 'seaart-film', label: 'SeaArt Film', hint: 'Cinematic style' },
-    { value: 'wai-ani-ponyxl', label: 'WAI-ANI PonyXL', hint: 'Stylized/anime' },
-    { value: 'seaart-realistic', label: 'SeaArt Realistic', hint: 'Realistic profile' },
+    {
+      value: SEAART_SEEDREAM_45,
+      label: 'Seedream 4.5',
+      hint: 'Current high-res default; sizes verified from live SeaArt CLI',
+      resolutions: ['2496x1664', '2560x1440', '2304x1728', '3024x1296'],
+    },
+    {
+      value: SEAART_NANO_BANANA_PRO,
+      label: 'Nano Banana Pro Image',
+      hint: 'High-res; sizes verified from live SeaArt CLI',
+      resolutions: ['2528x1696', '2752x1536', '2400x1792', '2304x1856', '3168x1344'],
+    },
+    {
+      value: SEAART_GROK_IMAGINE,
+      label: 'Grok Imagine Image',
+      hint: 'Lower-cost/lower-res; sizes verified from live SeaArt CLI',
+      resolutions: ['1296x864', '1408x768', '1280x896'],
+    },
+    {
+      value: SEAART_INFINITY_LEGACY,
+      label: 'SeaArt Infinity (legacy)',
+      hint: 'Legacy model; exact accepted sizes only',
+      resolutions: ['1024x688', '1024x592', '1024x768', '960x768', '1024x512'],
+    },
   ],
 };
 
 const providerDefaults: Record<ProviderKey, string> = {
   eden: 'image/generation/bytedance',
   cloudflare: '@cf/leonardo/phoenix-1.0',
-  seaart: 'seaart-infinity',
+  seaart: SEAART_SEEDREAM_45,
 };
 
-const resolutions = ['2048x1280', '1536x960', '1024x640'] as const;
+const providerFallbackResolutions: Record<ProviderKey, readonly string[]> = {
+  eden: ['2048x1280', '1536x960', '1024x640'],
+  cloudflare: ['1024x640', '1024x1024'],
+  seaart: ['2496x1664'],
+};
+
+function resolutionOptionsFor(provider: ProviderKey, model: string) {
+  const option = providerModels[provider].find((item) => item.value === model);
+  return option?.resolutions?.length ? option.resolutions : providerFallbackResolutions[provider];
+}
 
 function status(entry?: ArtEntry) {
   if (entry?.static && entry?.hover) return 'ready';
@@ -61,10 +95,10 @@ function status(entry?: ArtEntry) {
 export function QuackverseArtManager() {
   const [manifest, setManifest] = useState<Record<string, ArtEntry>>({});
   const [selectedId, setSelectedId] = useState(String(quackverseCards[0]?.id ?? 1));
-  const [provider, setProvider] = useState<ProviderKey>('eden');
-  const [model, setModel] = useState(providerDefaults.eden);
+  const [provider, setProvider] = useState<ProviderKey>('seaart');
+  const [model, setModel] = useState(providerDefaults.seaart);
   const [customModel, setCustomModel] = useState('');
-  const [resolution, setResolution] = useState('2048x1280');
+  const [resolution, setResolution] = useState('2496x1664');
   const [rangeStart, setRangeStart] = useState('1');
   const [rangeCount, setRangeCount] = useState('5');
   const [working, setWorking] = useState(false);
@@ -84,6 +118,7 @@ export function QuackverseArtManager() {
   const modelOptions = providerModels[provider];
   const activeModel = model === '__custom__' ? customModel.trim() : model;
   const activeModelLabel = modelOptions.find((item) => item.value === model)?.label || activeModel || 'Default model';
+  const resolutionOptions = useMemo(() => resolutionOptionsFor(provider, model), [provider, model]);
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/quackverse/art', { cache: 'no-store' });
@@ -93,14 +128,26 @@ export function QuackverseArtManager() {
   }, []);
 
   useEffect(() => { void refresh().catch((error) => setMessage(error.message)); }, [refresh]);
+  useEffect(() => {
+    if (!resolutionOptions.includes(resolution)) setResolution(resolutionOptions[0]);
+  }, [resolution, resolutionOptions]);
 
   const changeProvider = useCallback((value: string) => {
     const next = value as ProviderKey;
+    const nextModel = providerDefaults[next];
     setProvider(next);
-    setModel(providerDefaults[next]);
+    setModel(nextModel);
+    setResolution(resolutionOptionsFor(next, nextModel)[0]);
     setCustomModel('');
     setMessage('');
   }, []);
+
+  const changeModel = useCallback((value: string) => {
+    setModel(value);
+    const nextResolutions = resolutionOptionsFor(provider, value);
+    setResolution(nextResolutions[0]);
+    setMessage('');
+  }, [provider]);
 
   const request = useCallback(async (url: string, method: string, body: unknown) => {
     const response = await fetch(url, {
@@ -237,7 +284,7 @@ export function QuackverseArtManager() {
             </SelectContent>
           </Select>
 
-          <Select value={model} disabled={working} onValueChange={setModel}>
+          <Select value={model} disabled={working} onValueChange={changeModel}>
             <SelectTrigger className="bg-slate-950 text-white"><SelectValue placeholder="Choose model" /></SelectTrigger>
             <SelectContent>
               {modelOptions.map((item) => (
@@ -258,11 +305,13 @@ export function QuackverseArtManager() {
 
           <Select value={resolution} disabled={working} onValueChange={setResolution}>
             <SelectTrigger className="bg-slate-950 text-white"><SelectValue /></SelectTrigger>
-            <SelectContent>{resolutions.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+            <SelectContent>{resolutionOptions.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
           </Select>
 
           <div className="rounded-md border border-white/10 bg-black/20 p-2 text-xs text-slate-300">
-            Using <span className="font-semibold text-white">{activeModelLabel}</span>. Eden now exposes several useful choices plus a custom model ID so you are not locked to one model.
+            Using <span className="font-semibold text-white">{activeModelLabel}</span>. {provider === 'seaart'
+              ? 'The size list is locked to resolutions verified from the live SeaArt CLI for this exact model. The Quackverse pipeline still targets a 2048x1280 final card master.'
+              : 'Choose from the provider-safe sizes available for this model/provider.'}
           </div>
 
           <Button type="button" className="w-full" disabled={working || !activeModel} onClick={() => void run([selected.id], true)}>Generate + Animate Selected Card</Button>
