@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChatTagGame } from '@/components/chat-tag-game';
 import { QuackverseArtManager } from '@/components/quackverse-art-manager';
-import { QuackverseArtZipImport } from '@/components/quackverse-art-zip-import';
-import { QuackverseArtEnhanceAnimate } from '@/components/quackverse-art-enhance-animate';
 
 export default function GuardedGameControlsPage() {
   return (
@@ -43,14 +41,12 @@ export default function GuardedGameControlsPage() {
               <ImageIcon className="h-4 w-4" />
               Quackverse content
             </div>
-            <CardTitle className="font-headline text-xl">Card Art Manager</CardTitle>
+            <CardTitle className="font-headline text-xl">Card Art Rebuilder</CardTitle>
             <CardDescription>
-              Upload and manage Quackverse card artwork from this guarded admin surface. The public Cards tab remains read-only.
+              Generate one finished card at a time, build its triggered animation from the same static master, and save both directly to the live Quackverse volume.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <QuackverseArtZipImport />
-            <QuackverseArtEnhanceAnimate />
+          <CardContent>
             <QuackverseArtManager />
           </CardContent>
         </Card>
