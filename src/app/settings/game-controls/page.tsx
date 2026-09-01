@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChatTagGame } from '@/components/chat-tag-game';
 import { QuackverseArtManager } from '@/components/quackverse-art-manager';
 import { QuackverseArtZipImport } from '@/components/quackverse-art-zip-import';
+import { QuackverseArtEnhanceAnimate } from '@/components/quackverse-art-enhance-animate';
 
 export default function GuardedGameControlsPage() {
   return (
@@ -49,6 +50,7 @@ export default function GuardedGameControlsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <QuackverseArtZipImport />
+            <QuackverseArtEnhanceAnimate />
             <QuackverseArtManager />
           </CardContent>
         </Card>
