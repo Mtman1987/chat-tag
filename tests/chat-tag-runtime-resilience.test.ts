@@ -7,17 +7,20 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
-test('bot throttles volume-backed chat heartbeats without throttling DSH events', () => {
-  const bot = read('bot.js');
-  const dshForward = bot.indexOf("forwardToDSH({ type: 'chat'");
-  const throttle = bot.indexOf('if (shouldForwardChatActivity(senderUserId, resolvedChannel))');
-  const gameHubWrite = bot.indexOf("apiCall('/api/game-hub/chat'", throttle);
-  const tagWrite = bot.indexOf("apiCall('/api/tag'", throttle);
+test('bot keeps Games Hub events realtime while throttling Chat Tag persistence', () => {
+  const patch = read('scripts/patch-live-chat-pressure.mjs');
+  const dockerfile = read('Dockerfile.bot');
 
-  assert.ok(dshForward >= 0, 'DSH chat forwarding must remain present');
-  assert.ok(throttle > dshForward, 'only volume-backed API writes should be throttled');
-  assert.ok(gameHubWrite > throttle && tagWrite > throttle, 'both volume-backed writes must share the throttle');
-  assert.match(bot, /CHAT_ACTIVITY_THROTTLE_MS \|\| '15000'/);
+  assert.match(patch, /Games Hub gameplay events stay realtime; Chat Tag persistence stays throttled/);
+  assert.match(patch, /CHAT_ACTIVITY_THROTTLE_MS \|\| '60000'/);
+  assert.match(patch, /api\/game-hub\/chat/);
+  assert.match(patch, /if \(shouldForwardChatActivity\(senderUserId, resolvedChannel\)\)/);
+  assert.match(patch, /action: 'chat-activity'/);
+  assert.match(dockerfile, /patch-live-chat-pressure\.mjs/);
+  assert.ok(
+    dockerfile.indexOf('patch-live-chat-pressure.mjs') > dockerfile.indexOf('patch-game-hub-bot.mjs'),
+    'pressure patch must run after the Games Hub compatibility patch',
+  );
 });
 
 test('Games Hub chat skips the volume write when no game is running', () => {
