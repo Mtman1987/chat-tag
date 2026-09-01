@@ -39,7 +39,7 @@ function timeoutSignal(milliseconds: number) {
   return controller.signal;
 }
 
-function scheduleDiscordMessageCleanup(
+export function scheduleDiscordMessageCleanup(
   channelId: string,
   result: Extract<DiscordSendResult, { ok: true }>,
   botToken: string,
