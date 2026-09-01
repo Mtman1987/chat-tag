@@ -21,16 +21,17 @@ const STREAMWEAVER_URL = (process.env.STREAMWEAVER_URL || process.env.STREAMWEAV
 const STREAMWEAVER_TENANT_ID = String(process.env.QUACKVERSE_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive').trim();
 const IMAGE_PROMPT_MAX_CHARS = 1450;
 const QUACKVERSE_CARD_ART_ASPECT = '16:10 landscape';
-const QUACKVERSE_CARD_ART_TARGET_RESOLUTION = '1024x640';
+const QUACKVERSE_CARD_ART_TARGET_RESOLUTION = '2048x1280';
+const QUACKVERSE_CARD_ART_FALLBACK_RESOLUTION = '1536x960';
 const QUACKVERSE_PROVIDER_SAFE_RESOLUTION = '1024x1024';
 const PROMPT_SAFETY_SUFFIX = ' ARTWORK ONLY. No card frame, stats, captions, written text, logo, watermark or UI.';
-const QUACKVERSE_NEGATIVE_PROMPT = 'concept sheet, model sheet, reference sheet, turnaround, multiple angles, duplicate character, panels, vignettes, anatomy study, weapon study, diagram, callouts, labels, text, watermark, logo, white background, cropped head, cropped bill, cropped limbs, cropped weapon';
-const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaart']);
+const QUACKVERSE_NEGATIVE_PROMPT = 'concept sheet, model sheet, reference sheet, turnaround, multiple angles, duplicate character, panels, vignettes, anatomy study, weapon study, diagram, callouts, labels, text, watermark, logo, white background, cropped head, cropped bill, cropped limbs, cropped weapon, contact sheet, collage, split panel';
+const QUACKVERSE_IMAGE_PROVIDER_OVERRIDES = new Set(['cloudflare', 'eden', 'seaart', 'pollinations', 'perchance']);
 
 const FINISHED_CARD_ART_RULES = [
   'FINAL CARD ART ONLY: one polished collectible-card illustration, not a concept sheet, not a model sheet and not a reference sheet.',
   'Exactly one primary subject, one camera angle and one pose; no duplicate character, no multiple angles, no turnaround, no panels and no white sketch-sheet background.',
-  `Exact composition target: ${QUACKVERSE_CARD_ART_ASPECT} (${QUACKVERSE_CARD_ART_TARGET_RESOLUTION}), matching the visible Quackverse card art window; if a provider returns a square canvas, keep the complete subject inside the center 16:10 crop with extra environmental bleed outside it.`,
+  `Exact composition target: ${QUACKVERSE_CARD_ART_ASPECT} (${QUACKVERSE_CARD_ART_TARGET_RESOLUTION}), matching the visible Quackverse card art window.`,
   'Card-crop safe: keep the face, bill, chest, silhouette, signature weapon/focus and key VFX readable inside the central 70% with no cropped-off head, bill, arms, wings, legs, weapon or equipment.',
   'Cinematic environmental background with depth and finished production card-art lighting.',
 ].join(' ');
@@ -78,8 +79,21 @@ function quackverseProviderOverride(value: unknown) {
   return QUACKVERSE_IMAGE_PROVIDER_OVERRIDES.has(requested) ? requested : 'seaart';
 }
 
-function quackverseProviderRequestResolution(provider: string) {
-  return provider === 'cloudflare' ? QUACKVERSE_CARD_ART_TARGET_RESOLUTION : QUACKVERSE_PROVIDER_SAFE_RESOLUTION;
+function normalizeResolution(value: unknown, fallback: string) {
+  const requested = String(value || '').trim().toLowerCase();
+  const match = requested.match(/^(\d{3,4})x(\d{3,4})$/);
+  if (!match) return fallback;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (width < 512 || height < 512 || width > 4096 || height > 4096) return fallback;
+  return `${width}x${height}`;
+}
+
+function quackverseProviderRequestResolutions(provider: string, body: any) {
+  const preferred = normalizeResolution(body?.resolution, QUACKVERSE_CARD_ART_TARGET_RESOLUTION);
+  const fallback = normalizeResolution(body?.fallbackResolution, QUACKVERSE_CARD_ART_FALLBACK_RESOLUTION);
+  const providerSafe = provider === 'cloudflare' ? '1024x640' : QUACKVERSE_PROVIDER_SAFE_RESOLUTION;
+  return [...new Set([preferred, fallback, providerSafe])];
 }
 
 function canShareReferenceOrigin(origin: string) {
@@ -107,6 +121,14 @@ function clampImagePrompt(prompt: string) {
 
 function promptControl(value: unknown, maxLength: number) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function genderPresentationForCard(card: any) {
+  if (String(card?.type || '').toLowerCase() !== 'duck') return '';
+  const ducks = quackverseCards.filter((item) => String(item.type || '').toLowerCase() === 'duck').sort((a, b) => a.id - b.id);
+  const index = ducks.findIndex((item) => item.id === card.id);
+  const presentation = index >= 0 && index % 2 === 0 ? 'feminine-presenting' : 'masculine-presenting';
+  return `Character presentation: ${presentation} adult anthropomorphic waterfowl person. Keep the presentation readable through face, silhouette, posture and styling while preserving species-correct avian anatomy and the card's canonical class identity.`;
 }
 
 function canonCommonThreadDirection(card: any, canon: ReturnType<typeof visualCanonForCard>, family: ArtFamily) {
@@ -158,6 +180,7 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
     'QUACKVERSE FINAL DUCK CHARACTER CARD ART.',
     FINISHED_CARD_ART_RULES,
     `Character: "${card.name}". Exactly one anthropomorphic upright ${canon.species} waterfowl person, never a human and never a human in a bird mask.`,
+    genderPresentationForCard(card),
     canonCommonThreadDirection(card, canon, family),
     `Species identity: unmistakable species-correct bill, expressive avian eyes, visible feathers, two arms and two legs. Plumage: ${canon.plumage}.`,
     `Class/subclass: ${canon.className} / ${ownerSubclass || canon.subclass}. Body: ${canon.build}.`,
@@ -182,13 +205,6 @@ async function assetExists(asset?: QuackverseArtAsset | null) {
   } catch {
     return false;
   }
-}
-
-function absoluteArtUrl(value: unknown, origin: string): string | null {
-  const raw = String(value || '').trim();
-  if (!raw || /\.gif(?:$|\?)/i.test(raw) || /\/api\/quackverse\/art\/canon(?:\?|$)/i.test(raw)) return null;
-  try { return new URL(raw, origin).toString(); }
-  catch { return null; }
 }
 
 async function referenceImagesFor(card: any, origin: string, manifest: ReturnType<typeof normalizeQuackverseArtManifest>): Promise<string[]> {
@@ -220,42 +236,56 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
   const tenantId = String(body.tenantId || body.streamweaverTenantId || STREAMWEAVER_TENANT_ID).trim();
   if (!tenantId) throw new Error('Quackverse StreamWeaver tenant is not configured.');
   const providerOverride = quackverseProviderOverride(body.providerOverride);
-  const requestResolution = quackverseProviderRequestResolution(providerOverride);
-  const requestBody: Record<string, unknown> = {
-    prompt,
-    scope: 'public',
-    tenantId,
-    resolution: requestResolution,
-    numImages: 1,
-    model: body.model || undefined,
-    providerParams: {
-      referenceImages,
-      negativePrompt: QUACKVERSE_NEGATIVE_PROMPT,
-      seed: Number(body.seed || 0) || undefined,
-    },
-  };
-  requestBody.providerOverride = providerOverride;
+  const requestResolutions = quackverseProviderRequestResolutions(providerOverride, body);
+  let lastError: Error | null = null;
 
-  const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-mountainview-bridge': '1' },
-    body: JSON.stringify(requestBody),
-  });
-  const raw = await response.json().catch(() => null);
-  const data = normalizeStreamWeaverPayload(raw);
-  if (!response.ok || raw?.ok === false) {
-    throw new Error(raw?.error || data?.error || raw?.message || data?.message || `StreamWeaver image generation failed (${response.status})`);
+  for (const requestResolution of requestResolutions) {
+    try {
+      const requestBody: Record<string, unknown> = {
+        prompt,
+        scope: 'public',
+        tenantId,
+        resolution: requestResolution,
+        numImages: 1,
+        model: body.model || undefined,
+        providerParams: {
+          referenceImages,
+          negativePrompt: QUACKVERSE_NEGATIVE_PROMPT,
+          seed: Number(body.seed || 0) || undefined,
+        },
+        providerOverride,
+      };
+
+      const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-mountainview-bridge': '1' },
+        body: JSON.stringify(requestBody),
+      });
+      const raw = await response.json().catch(() => null);
+      const data = normalizeStreamWeaverPayload(raw);
+      if (!response.ok || raw?.ok === false) {
+        throw new Error(raw?.error || data?.error || raw?.message || data?.message || `StreamWeaver image generation failed (${response.status})`);
+      }
+      const imageUrl = [
+        ...(Array.isArray(data?.persistedImageUrls) ? data.persistedImageUrls : []),
+        ...(Array.isArray(data?.images) ? data.images : []),
+        data?.persistedImageUrl,
+        data?.image,
+        data?.imageResourceUrl,
+      ].map((value) => String(value || '').trim()).find(Boolean);
+      if (!imageUrl) throw new Error('StreamWeaver did not return an image URL.');
+      return {
+        imageUrl: new URL(imageUrl, STREAMWEAVER_URL).toString(),
+        provider: String(data?.provider || providerOverride),
+        tenantId,
+        resolution: requestResolution,
+      };
+    } catch (error: any) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
   }
-  const imageUrl = [
-    ...(Array.isArray(data?.persistedImageUrls) ? data.persistedImageUrls : []),
-    ...(Array.isArray(data?.images) ? data.images : []),
-    data?.persistedImageUrl,
-    data?.image,
-    data?.imageResourceUrl,
-  ].map((value) => String(value || '').trim()).find(Boolean);
-  if (!imageUrl) throw new Error('StreamWeaver did not return an image URL.');
-  const absoluteImageUrl = new URL(imageUrl, STREAMWEAVER_URL).toString();
-  return { imageUrl: absoluteImageUrl, provider: String(data?.provider || 'streamweaver'), tenantId, resolution: requestResolution };
+
+  throw lastError || new Error('StreamWeaver image generation failed at every requested resolution.');
 }
 
 async function fetchGeneratedImage(imageUrl: string) {
@@ -265,6 +295,7 @@ async function fetchGeneratedImage(imageUrl: string) {
   if (!mimeType.startsWith('image/')) throw new Error(`Generated asset was not an image (${mimeType}).`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!bytes.length) throw new Error('Generated image was empty.');
+  if (bytes.length > 20 * 1024 * 1024) throw new Error('Generated image exceeded the 20MB Quackverse art limit.');
   return { bytes, mimeType };
 }
 
@@ -303,6 +334,7 @@ export async function POST(req: NextRequest) {
   const limit = Math.max(1, Math.min(20, Number(body?.limit || 5) || 5));
   const missingOnly = body?.missingOnly !== false;
   const previewOnly = body?.previewOnly === true;
+  const useReferences = body?.useReferences === true;
   const promptControls = {
     family: body?.familyOverride,
     subclass: body?.subclassOverride,
@@ -322,7 +354,7 @@ export async function POST(req: NextRequest) {
   }
 
   const referenceOrigin = getPublicAppOrigin(req);
-  const shareReferences = canShareReferenceOrigin(referenceOrigin);
+  const shareReferences = useReferences && canShareReferenceOrigin(referenceOrigin);
   const results: any[] = [];
   for (const card of candidates) {
     try {
@@ -338,6 +370,7 @@ export async function POST(req: NextRequest) {
           variant,
           family,
           trunk: card.trunk || card.role,
+          genderPresentation: genderPresentationForCard(card) || null,
           prompt,
           success: true,
           preview: true,
@@ -354,6 +387,7 @@ export async function POST(req: NextRequest) {
         variant,
         family,
         trunk: card.trunk,
+        genderPresentation: genderPresentationForCard(card) || null,
         canon: canon ? {
           species: canon.species,
           affinity: canon.affinity,
@@ -389,6 +423,8 @@ export async function POST(req: NextRequest) {
     complete: remaining === 0,
     nextRecommendedLimit: Math.min(5, remaining),
     previewOnly,
-    note: previewOnly ? 'Prompt preview only; no image was generated or saved.' : 'AI artwork is generated once, persisted per card, and skipped on future missing-only runs after the physical file is verified.',
+    note: previewOnly
+      ? 'Prompt preview only; no image was generated or saved.'
+      : 'One finished image is generated per card at the requested native resolution, persisted to the live Quackverse art volume, and can then be animated from that same static master.',
   });
 }
