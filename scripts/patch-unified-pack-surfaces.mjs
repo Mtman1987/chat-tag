@@ -39,7 +39,7 @@ patchFile('bot.js', [
   {
     before: `              },\n              ...cardEmbeds,\n            ],`,
     after: `              },\n            ],`,
-    already: "single recorded pack-opening GIF instead of five separate embeds",
+    already: '              },\n            ],\n          }),',
   },
 ]);
 
