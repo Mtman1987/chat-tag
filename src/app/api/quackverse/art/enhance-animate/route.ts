@@ -12,7 +12,7 @@ export const runtime = 'nodejs';
 
 const ART_ROOT = path.join(dataDirPath(), 'quackverse-card-art');
 const DSH_URL = (process.env.DISCORD_STREAM_HUB_URL || process.env.DSH_URL || 'https://discord-stream-hub-new.fly.dev').replace(/\/$/, '');
-const MAX_RENDERED_BYTES = 20 * 1024 * 1024;
+const MAX_RENDERED_BYTES = 50 * 1024 * 1024;
 
 function artPath(fileName: string) {
   const root = path.resolve(ART_ROOT);
@@ -26,7 +26,7 @@ function decodeRenderedAsset(value: unknown, label: string) {
   if (!encoded) throw new Error(`${label} renderer output was empty`);
   const bytes = Buffer.from(encoded, 'base64');
   if (!bytes.length) throw new Error(`${label} renderer output was empty`);
-  if (bytes.length > MAX_RENDERED_BYTES) throw new Error(`${label} renderer output exceeded 20MB`);
+  if (bytes.length > MAX_RENDERED_BYTES) throw new Error(`${label} renderer output exceeded 50MB`);
   return bytes;
 }
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const source = await fs.readFile(artPath(entry.static.fileName));
     if (!source.length) throw new Error('Static art file is empty');
-    if (source.length > MAX_RENDERED_BYTES) throw new Error('Static art file exceeds 20MB');
+    if (source.length > MAX_RENDERED_BYTES) throw new Error('Static art file exceeds 50MB');
 
     const renderResponse = await fetch(`${DSH_URL}/api/internal/quackverse/art-render`, {
       method: 'POST',
