@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChatTagGame } from '@/components/chat-tag-game';
 import { QuackverseArtManager } from '@/components/quackverse-art-manager';
+import { QuackverseArtZipImport } from '@/components/quackverse-art-zip-import';
 
 export default function GuardedGameControlsPage() {
   return (
@@ -46,7 +47,8 @@ export default function GuardedGameControlsPage() {
               Upload and manage Quackverse card artwork from this guarded admin surface. The public Cards tab remains read-only.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <QuackverseArtZipImport />
             <QuackverseArtManager />
           </CardContent>
         </Card>
