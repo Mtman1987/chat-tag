@@ -14,10 +14,12 @@ RUN npm ci --only=production
 COPY bot.js ./
 COPY scripts/patch-game-hub-bot.mjs ./scripts/patch-game-hub-bot.mjs
 COPY scripts/patch-live-chat-pressure.mjs ./scripts/patch-live-chat-pressure.mjs
+COPY scripts/patch-quackverse-pack-bot.mjs ./scripts/patch-quackverse-pack-bot.mjs
 COPY src/lib/chat-tag-command-text.js ./src/lib/chat-tag-command-text.js
 COPY src/lib/chat-tag-player-lookup.js ./src/lib/chat-tag-player-lookup.js
 COPY src/lib/chat-tag-crowns.js ./src/lib/chat-tag-crowns.js
 RUN node scripts/patch-game-hub-bot.mjs
 RUN node scripts/patch-live-chat-pressure.mjs
+RUN node scripts/patch-quackverse-pack-bot.mjs
 RUN node -e "require('./src/lib/chat-tag-crowns')"
 CMD ["node", "bot.js"]
