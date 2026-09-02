@@ -26,6 +26,14 @@ export type QuackversePackMediaEvent = {
   openedAt: string;
 };
 
+export type QuackversePackRenderResult = {
+  gifUrl: string | null;
+  status: string;
+  attempts: number;
+  error: string;
+  timedOut: boolean;
+};
+
 const DSH_URL = String(
   process.env.DISCORD_STREAM_HUB_URL
     || process.env.NEXT_PUBLIC_DISCORD_STREAM_HUB_URL
@@ -94,14 +102,46 @@ export async function queueQuackversePackGif(event: QuackversePackMediaEvent) {
   });
 }
 
-export async function waitForQuackversePackGif(eventId: string, timeoutMs = 120_000): Promise<string | null> {
+export async function waitForQuackversePackGifResult(
+  eventId: string,
+  timeoutMs = 120_000,
+): Promise<QuackversePackRenderResult> {
   const startedAt = Date.now();
+  let lastJob: any = null;
   while (Date.now() - startedAt < timeoutMs) {
     const data = await dshRequest(`/api/internal/card-pack/render?id=${encodeURIComponent(eventId)}`, { method: 'GET' });
     const job = data?.job;
-    if (job?.status === 'ready' && /^https?:\/\//i.test(String(job.gifUrl || ''))) return String(job.gifUrl);
-    if (job?.status === 'failed') return null;
+    if (job) lastJob = job;
+    if (job?.status === 'ready' && /^https?:\/\//i.test(String(job.gifUrl || ''))) {
+      return {
+        gifUrl: String(job.gifUrl),
+        status: 'ready',
+        attempts: Number(job.attempts || 0),
+        error: '',
+        timedOut: false,
+      };
+    }
+    if (job?.status === 'failed') {
+      return {
+        gifUrl: null,
+        status: 'failed',
+        attempts: Number(job.attempts || 0),
+        error: String(job.error || 'render failed'),
+        timedOut: false,
+      };
+    }
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
-  return null;
+  return {
+    gifUrl: null,
+    status: String(lastJob?.status || 'timeout'),
+    attempts: Number(lastJob?.attempts || 0),
+    error: String(lastJob?.error || 'render timed out before a GIF was ready'),
+    timedOut: true,
+  };
+}
+
+export async function waitForQuackversePackGif(eventId: string, timeoutMs = 120_000): Promise<string | null> {
+  const result = await waitForQuackversePackGifResult(eventId, timeoutMs);
+  return result.gifUrl;
 }
