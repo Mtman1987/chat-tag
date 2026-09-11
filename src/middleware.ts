@@ -134,6 +134,15 @@ async function refreshSpmtSession(request: NextRequest) {
   return identity ? { identity, tokens } : null;
 }
 
+function withRefresh(response: NextResponse, refreshed: Awaited<ReturnType<typeof refreshSpmtSession>>, request: NextRequest) {
+  if (refreshed) {
+    const secure = process.env.NODE_ENV === 'production' || request.nextUrl.protocol === 'https:';
+    response.cookies.set(SPMT_COOKIE, refreshed.tokens.access_token, { path: '/', maxAge: Number(refreshed.tokens.expires_in) || 7 * 24 * 60 * 60, httpOnly: true, sameSite: secure ? 'none' : 'lax', secure });
+    response.cookies.set(SPMT_REFRESH_COOKIE, refreshed.tokens.refresh_token, { path: '/', maxAge: Number(refreshed.tokens.refresh_expires_in) || 30 * 24 * 60 * 60, httpOnly: true, sameSite: secure ? 'none' : 'lax', secure });
+  }
+  return response;
+}
+
 async function verifyLegacySession(request: NextRequest) {
   const token = request.cookies.get('session')?.value || '';
   const secret = process.env.NEXTAUTH_SECRET || process.env.BOT_SECRET_KEY || '';
@@ -242,10 +251,14 @@ export async function middleware(request: NextRequest) {
 
   const admin = isAdmin(identity);
   if (ADMIN_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) && !admin) {
-    if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'SPMT admin required' }, { status: 403 });
-    return NextResponse.redirect(new URL('/', request.url));
+    if (pathname.startsWith('/api/')) return withRefresh(NextResponse.json({ error: 'SPMT admin required' }, { status: 403 }), refreshed, request);
+    return withRefresh(NextResponse.redirect(new URL('/', request.url)), refreshed, request);
   }
 
+  if (refreshed) {
+    request.cookies.set(SPMT_COOKIE, accessToken);
+    request.cookies.set(SPMT_REFRESH_COOKIE, refreshed.tokens.refresh_token);
+  }
   const headers = new Headers(request.headers);
   if (identity) {
     const appUserId = resolveChatTagAppUserId(identity, legacySession) || String(identity.id);
@@ -257,12 +270,7 @@ export async function middleware(request: NextRequest) {
     headers.set('x-spmt-is-admin', admin ? '1' : '0');
   }
   const response = NextResponse.next({ request: { headers } });
-  if (refreshed) {
-    const secure = request.nextUrl.protocol === 'https:';
-    response.cookies.set(SPMT_COOKIE, accessToken, { path: '/', maxAge: Number(refreshed.tokens.expires_in) || 7 * 24 * 60 * 60, httpOnly: true, sameSite: 'lax', secure });
-    response.cookies.set(SPMT_REFRESH_COOKIE, refreshed.tokens.refresh_token, { path: '/', maxAge: Number(refreshed.tokens.refresh_expires_in) || 30 * 24 * 60 * 60, httpOnly: true, sameSite: 'lax', secure });
-  }
-  return response;
+  return withRefresh(response, refreshed, request);
 }
 
 export const config = {

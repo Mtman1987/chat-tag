@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(finishUrl);
   const secure = appOrigin.startsWith('https://');
-  response.cookies.set('chat_tag_spmt_session', tokens.access_token, { path: '/', maxAge: Number(tokens.expires_in) || 7 * 24 * 60 * 60, httpOnly: true, sameSite: 'lax', secure });
-  response.cookies.set('chat_tag_spmt_refresh', tokens.refresh_token, { path: '/', maxAge: Number(tokens.refresh_expires_in) || 30 * 24 * 60 * 60, httpOnly: true, sameSite: 'lax', secure });
+  response.cookies.set('chat_tag_spmt_session', tokens.access_token, { path: '/', maxAge: Number(tokens.expires_in) || 7 * 24 * 60 * 60, httpOnly: true, sameSite: secure ? 'none' : 'lax', secure });
+  response.cookies.set('chat_tag_spmt_refresh', tokens.refresh_token, { path: '/', maxAge: Number(tokens.refresh_expires_in) || 30 * 24 * 60 * 60, httpOnly: true, sameSite: secure ? 'none' : 'lax', secure });
   response.cookies.set('chat_tag_spmt_oauth_state', '', { path: '/', maxAge: 0 });
 
   // ChatTag historically owns Quackverse collections under immutable Twitch IDs.
