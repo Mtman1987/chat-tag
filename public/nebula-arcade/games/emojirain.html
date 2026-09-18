@@ -39,6 +39,20 @@
         body.darkmode {
             background: #000000;
         }
+
+        /* Browser-source embeds must reveal the stream while idle. The game
+           effects remain visible because they are appended to #game-container
+           when chat events arrive. */
+        body.embedded {
+            background: transparent !important;
+        }
+
+        body.embedded > #game-container > #stats,
+        body.embedded > #game-container > #emoji-counter,
+        body.embedded > #game-container > #rain-intensity,
+        body.embedded > #game-container > #instructions {
+            display: none;
+        }
         
         #game-container {
             position: relative;
@@ -236,6 +250,10 @@
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session') || urlParams.get('room') || 'test';
         const password = urlParams.get('password') || 'false';
+
+        if (urlParams.get('embedded') === '1') {
+            document.body.classList.add('embedded');
+        }
 
         // Apply theme settings
         if (urlParams.has('chroma')) {
