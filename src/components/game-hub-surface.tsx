@@ -21,11 +21,13 @@ export function GameHubSurface({
   events,
   channel,
   ownerUserId,
+  chrome = true,
 }: {
   game: GameHubGame;
   events: GameHubChatEvent[];
   channel: string;
   ownerUserId: string;
+  chrome?: boolean;
 }) {
   let content: React.ReactNode;
 
@@ -41,6 +43,10 @@ export function GameHubSurface({
     content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} />;
   } else {
     content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} />;
+  }
+
+  if (!chrome) {
+    return <div className="h-full min-h-0 w-full overflow-hidden bg-transparent" data-game-hub-surface={game.id}>{content}</div>;
   }
 
   return (
