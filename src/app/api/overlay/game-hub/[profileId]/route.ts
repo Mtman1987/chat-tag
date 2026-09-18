@@ -15,8 +15,37 @@ export async function GET(
   if (!id) return NextResponse.json({ error: 'Overlay id is required.' }, { status: 400 });
 
   const state = await readAppState();
+  const systemProfiles: Record<string, { name: string; gameIds: string[]; layout: 'focus' }> = {
+    'system-spacemountainlive-main': {
+      name: 'SpaceMountainLive Nebula Stage',
+      gameIds: ['quackverse', 'bingo', 'chickenroyale', 'phraseguess', 'wordchain'],
+      layout: 'focus',
+    },
+    'system-spacemountainlive-rain': {
+      name: 'SpaceMountainLive Emoji Rain',
+      gameIds: ['emojirain'],
+      layout: 'focus',
+    },
+    'system-spacemountainlive-parade': {
+      name: 'SpaceMountainLive Dancing Parade',
+      gameIds: ['dancingparade'],
+      layout: 'focus',
+    },
+  };
+
+  const system = systemProfiles[id];
   const store = (state.gameSettings.default?.gameHubOverlayProfiles || {}) as Record<string, any>;
-  const profile = normalizeGameOverlayProfile(store[id]);
+  const profile = system ? {
+    id,
+    ownerUserId: 'spacemountainlive',
+    ownerLogin: 'spacemountainlive',
+    name: system.name,
+    gameIds: system.gameIds,
+    layout: system.layout,
+    transparent: true,
+    createdAt: 'system',
+    updatedAt: 'system',
+  } : normalizeGameOverlayProfile(store[id]);
   if (!profile) return NextResponse.json({ error: 'Overlay was not found.' }, { status: 404 });
 
   const games = profile.gameIds
