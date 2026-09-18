@@ -29,6 +29,22 @@ interface OverlayMessage {
   payload?: any;
   timestamp?: number;
 }
+
+const EMPTY_OVERLAY_STATE: OverlayState = {
+  me: null,
+  myRank: null,
+  it: null,
+  isFFA: false,
+  lastTagTime: null,
+  liveCount: 0,
+  liveUsers: [],
+  playerCount: 0,
+  leaderboard: [],
+  recentHistory: [],
+  overlayMessages: [],
+  monthlyWinners: [],
+  timestamp: 0,
+};
 interface ConfettiPiece {
   id: string;
   left: number;
@@ -74,13 +90,19 @@ export default function OverlayPage() {
   const searchParams = useSearchParams();
   const userId = params.userId as string;
   const isPreview = userId === 'preview';
-  const historyInterval = parseInt(searchParams.get('cycle') || '240') * 1000;
+  const historyInterval = Math.max(300, parseInt(searchParams.get('cycle') || '420', 10) || 420) * 1000;
+  const hudOnMs = Math.max(5, parseInt(searchParams.get('hudOn') || '45', 10) || 45) * 1000;
+  const hudOffMs = Math.max(0, parseInt(searchParams.get('hudOff') || '120', 10) || 0) * 1000;
   const idleBarOpacity = Math.min(1, Math.max(0.2, Number(searchParams.get('idleOpacity') || '1')));
   const announcementBarOpacity = Math.min(1, Math.max(0.05, Number(searchParams.get('announcementOpacity') || '0.12')));
 
-  const [data, setData] = useState<OverlayState | null>(null);
+  // Keep the status bar mounted while the polling endpoint is starting or
+  // briefly unavailable. Announcements still dim this bar through dimBar;
+  // polling must never make the whole browser source disappear.
+  const [data, setData] = useState<OverlayState>(EMPTY_OVERLAY_STATE);
   const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
   const [dimBar, setDimBar] = useState(false);
+  const [hudVisible, setHudVisible] = useState(true);
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
   const activeBroadcastRef = useRef(false);
   const broadcastTimer = useRef<NodeJS.Timeout | null>(null);
@@ -107,6 +129,33 @@ export default function OverlayPage() {
   useEffect(() => {
     winnersRef.current = data?.monthlyWinners || [];
   }, [data?.monthlyWinners]);
+
+  useEffect(() => {
+    if (hudOffMs <= 0) {
+      setHudVisible(true);
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+    const show = () => {
+      if (cancelled) return;
+      setHudVisible(true);
+      timer = setTimeout(hide, hudOnMs);
+    };
+    const hide = () => {
+      if (cancelled) return;
+      setHudVisible(false);
+      timer = setTimeout(show, hudOffMs);
+    };
+
+    setHudVisible(true);
+    timer = setTimeout(hide, hudOnMs);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [hudOffMs, hudOnMs]);
 
   useEffect(() => {
     const unlockAudio = () => {
@@ -582,7 +631,6 @@ export default function OverlayPage() {
     return () => { if (historyTimer.current) clearInterval(historyTimer.current); };
   }, [fireHistoryBroadcast, fireLeaderboardBroadcast, fireLiveBroadcast, historyInterval, isPreview]);
 
-  if (!data) return null;
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
 
   return (

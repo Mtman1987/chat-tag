@@ -35,8 +35,12 @@ if (!source.includes('timer = setTimeout(hide, hudOnMs);')) {
 const oldHudStyle = "        transition: 'opacity 0.4s ease, transform 0.4s ease',\n        opacity: dimBar ? 0.12 : 1, transform: dimBar ? 'translateY(5%)' : 'translateY(0)',";
 const newHudStyle = "        transition: 'opacity 0.8s ease, transform 0.8s ease',\n        opacity: dimBar ? 0.12 : (hudVisible ? 1 : 0),\n        transform: dimBar ? 'translateY(5%)' : (hudVisible ? 'translateY(0)' : 'translateY(100%)'),\n        pointerEvents: hudVisible ? 'auto' : 'none',";
 if (!source.includes("opacity: dimBar ? 0.12 : (hudVisible ? 1 : 0)")) {
-  if (!source.includes(oldHudStyle)) throw new Error('ChatTag overlay timing patch: HUD style marker missing');
-  source = source.replace(oldHudStyle, newHudStyle);
+  // The persistent status-bar variant owns its idle/announcement opacity and
+  // must not be replaced with the legacy hide-after-timer behavior.
+  if (!source.includes('idleBarOpacity')) {
+    if (!source.includes(oldHudStyle)) throw new Error('ChatTag overlay timing patch: HUD style marker missing');
+    source = source.replace(oldHudStyle, newHudStyle);
+  }
 }
 
 for (const marker of [
@@ -44,7 +48,7 @@ for (const marker of [
   "searchParams.get('hudOn') || '45'",
   "searchParams.get('hudOff') || '120'",
   'const [hudVisible, setHudVisible] = useState(true);',
-  "opacity: dimBar ? 0.12 : (hudVisible ? 1 : 0)",
+  ...(source.includes('idleBarOpacity') ? [] : ["opacity: dimBar ? 0.12 : (hudVisible ? 1 : 0)"]),
 ]) {
   if (!source.includes(marker)) throw new Error(`ChatTag overlay timing patch incomplete: ${marker}`);
 }
