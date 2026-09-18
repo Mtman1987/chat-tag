@@ -21,7 +21,10 @@ export default async function ChannelChatTagOverlay({
     normalize(entry?.twitchUsername || entry?.username) === login
   ) as any;
 
-  if (!player?.id) return <main className="h-screen w-screen bg-transparent" aria-hidden="true" />;
+  // System channels are valid overlay identities even when they are not present
+  // in the legacy tagPlayers registry. Resolve directly instead of silently
+  // returning an invisible page.
+  const targetId = String(player?.id || login);
 
   const forwarded = new URLSearchParams();
   for (const [key, value] of Object.entries(query || {})) {
@@ -31,7 +34,7 @@ export default async function ChannelChatTagOverlay({
   const suffix = forwarded.toString() ? `?${forwarded.toString()}` : '';
   return (
     <iframe
-      src={`/overlay/${encodeURIComponent(String(player.id))}${suffix}`}
+      src={`/overlay/${encodeURIComponent(targetId)}${suffix}`}
       title={`Chat Tag · ${login}`}
       className="h-screen w-screen border-0 bg-transparent"
     />
