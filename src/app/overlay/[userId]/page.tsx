@@ -75,6 +75,8 @@ export default function OverlayPage() {
   const userId = params.userId as string;
   const isPreview = userId === 'preview';
   const historyInterval = parseInt(searchParams.get('cycle') || '240') * 1000;
+  const idleBarOpacity = Math.min(1, Math.max(0.2, Number(searchParams.get('idleOpacity') || '1')));
+  const announcementBarOpacity = Math.min(1, Math.max(0.05, Number(searchParams.get('announcementOpacity') || '0.12')));
 
   const [data, setData] = useState<OverlayState | null>(null);
   const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
@@ -646,7 +648,10 @@ export default function OverlayPage() {
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         transition: 'opacity 0.4s ease, transform 0.4s ease',
-        opacity: dimBar ? 0.12 : 1, transform: dimBar ? 'translateY(5%)' : 'translateY(0)',
+        // Keep the game-status bar present between announcements. It only
+        // dims while an announcement is active; it never fades to zero.
+        opacity: dimBar ? announcementBarOpacity : idleBarOpacity,
+        transform: dimBar ? 'translateY(5%)' : 'translateY(0)',
         zIndex: 20, display: 'flex', flexDirection: 'column',
         paddingBottom: 'max(1.25vh, env(safe-area-inset-bottom))',
         boxSizing: 'border-box',
