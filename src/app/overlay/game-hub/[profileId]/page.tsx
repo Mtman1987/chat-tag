@@ -184,9 +184,10 @@ export default function GameHubOverlayPage() {
             events={events}
             channel={profile.ownerLogin || 'chat'}
             ownerUserId={profile.ownerUserId}
+            chrome={!profile.id.startsWith('system-')}
           />
         ))}
-        {!visibleGames.length && <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-slate-950/70 text-sm text-white/50">No games in this profile are currently ACTIVE.</div>}
+        {!visibleGames.length && !profile.transparent && <div className="grid h-full place-items-center rounded-2xl border border-white/10 bg-slate-950/70 text-sm text-white/50">No games in this profile are currently ACTIVE.</div>}
       </div>
     </main>
   );
