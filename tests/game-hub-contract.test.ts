@@ -415,6 +415,6 @@ test('Quackverse launches as a browser room while the community overlay stays pa
   assert.match(command, /overlayMode: 'pack-only'/);
   assert.match(command, /setChannelGameRunning\(state, channel, game\.id, false\)/);
   assert.match(commands, /joinTrigger: 'spmt quackverse'/);
-  assert.match(commands, /spmt pack.*reveal appears on stream/s);
+  assert.match(commands, /spmt pack[\s\S]*reveal appears on stream/);
   assert.doesNotMatch(profile, /gameIds: \['quackverse', 'bingo'/);
 });
