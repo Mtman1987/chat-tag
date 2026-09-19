@@ -18,7 +18,7 @@ export async function GET(
   const systemProfiles: Record<string, { name: string; gameIds: string[]; layout: 'focus' }> = {
     'system-spacemountainlive-main': {
       name: 'SpaceMountainLive Nebula Stage',
-      gameIds: ['quackverse', 'bingo', 'chickenroyale', 'phraseguess', 'wordchain'],
+      gameIds: ['bingo', 'chickenroyale', 'phraseguess', 'wordchain'],
       layout: 'focus',
     },
     'system-spacemountainlive-rain': {
