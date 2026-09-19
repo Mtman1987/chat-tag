@@ -33,6 +33,14 @@ import {
   setPersonalBingoCenter,
 } from '@/lib/bingo-game';
 import { readAppState, updateAppState } from '@/lib/volume-store';
+import { lookupTwitchUser } from '@/lib/twitch';
+import {
+  addDancingParadeEmojis,
+  addDancingParadeParticipant,
+  extractParadeEmojis,
+  getDancingParadeSnapshot,
+  triggerDancingParadeDance,
+} from '@/lib/dancing-parade';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,11 +114,48 @@ export async function POST(req: NextRequest) {
   if (!channel || !username) return NextResponse.json({ handled: false });
 
   let command = parts[0].toLowerCase();
+  const directState = await readAppState();
+
+  const paradeSnapshot = getDancingParadeSnapshot(directState, channel);
+  if (paradeSnapshot.active) {
+    const emojiSource = command === 'join' || command === 'dance' || command === 'leave'
+      ? ''
+      : [parts[0], ...parts.slice(1)].join(' ');
+    const paradeEmojis = extractParadeEmojis(emojiSource);
+    if (command === 'join' || command === 'dance' || paradeEmojis.length) {
+      let avatarUrl = '';
+      if (command === 'join') {
+        const twitch = await lookupTwitchUser(username).catch(() => null);
+        avatarUrl = twitch?.profile_image_url || '';
+      }
+      await updateAppState((draft) => {
+        const participant = addDancingParadeParticipant(draft, {
+          channel,
+          userId,
+          username,
+          displayName,
+          avatarUrl,
+          joinedAvatar: command === 'join',
+        });
+        if (paradeEmojis.length) addDancingParadeEmojis(draft, { channel, emojis: paradeEmojis });
+        if (command === 'dance') triggerDancingParadeDance(draft, channel);
+        return participant;
+      });
+      if (command === 'join') {
+        return NextResponse.json({ handled: true, reply: `@${displayName} joined the cosmic conga line!` });
+      }
+      if (command === 'dance') {
+        return NextResponse.json({ handled: true, reply: `@${displayName} triggered the seismic wiggle!` });
+      }
+      if (paradeEmojis.length) {
+        return NextResponse.json({ handled: true, reply: `@${displayName} added ${paradeEmojis.join(' ')} to the dance party!` });
+      }
+    }
+  }
 
   // Player-facing Nebula Arcade commands are short ("spmt explode",
   // "spmt pet dog", "spmt dig B5"). Namespaced forms remain an internal
   // compatibility transport so old links and bot rewrites keep working.
-  const directState = await readAppState();
   const activeForDirectRouting = resolveChannelGameIds(directState, channel);
   const direct = resolveDirectGameCommand(parts, activeForDirectRouting);
   if (direct.recognized) {

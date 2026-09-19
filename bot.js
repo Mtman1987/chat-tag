@@ -1059,6 +1059,22 @@ console.log = (...args) => {
     return data.data?.[0] || null;
   }
 
+  async function settleDanceParties() {
+    const result = await apiCall('/api/game-hub/parade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'finish-due' }),
+    }).catch(() => null);
+    for (const ended of Array.isArray(result?.ended) ? result.ended : []) {
+      const names = Array.isArray(ended?.participantNames) ? ended.participantNames.filter(Boolean) : [];
+      const shown = names.slice(0, 20);
+      const more = Math.max(0, names.length - shown.length);
+      const roster = shown.length ? shown.join(', ') + (more ? ` +${more} more` : '') : 'No registered dancers';
+      const message = `🌌 Cosmic Conga Line complete! ${roster}. Everyone who participated earned +100 SPMT XP! 🎉`.slice(0, 480);
+      await sendChatWithSharedFallback(client, ended.channel, message, { warnOnFallback: true }).catch(() => {});
+    }
+  }
+
   const client = new tmi.Client({
     options: { debug: false },
     connection: {
@@ -1084,6 +1100,15 @@ console.log = (...args) => {
   client.on('connected', () => {
     isIrcConnected = true;
   });
+
+  client.on('notice', (channel, msgId, message) => {
+    const target = String(channel || '').replace(/^#/, '') || 'unknown';
+    console.warn(`[Bot] Twitch NOTICE channel=${target} msg-id=${msgId || 'unknown'}: ${message || ''}`);
+  });
+
+  setInterval(() => {
+    settleDanceParties().catch((error) => console.error('[DancingParade] Settlement failed:', error?.message || error));
+  }, 5000);
 
   // Catch unhandled errors to prevent crashes
   process.on('unhandledRejection', (reason, promise) => {
@@ -1551,6 +1576,16 @@ console.log = (...args) => {
       : { granted: false, reason: 'not-a-player' };
 
     await announceRaidSupport(targetChannel, login, pointsResult, passResult);
+    await apiCall('/api/game-hub/parade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'start',
+        channel: targetChannel,
+        trigger: 'raid',
+        triggerUser: login,
+      }),
+    }).catch((error) => console.error('[DancingParade] Raid trigger failed:', error?.message || error));
   }
 
   // ── TMI.js fallback event handlers (kept as backup, EventSub is primary) ──

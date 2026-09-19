@@ -1,604 +1,215 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dancing Parade - Social Stream Ninja</title>
-    <link rel="icon" href="../favicon.ico" />
-    <style>
-        /* Hide scrollbars */
-        ::-webkit-scrollbar {
-            display: none;
-        }
-
-        * {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-        }
-
-        body {
-            margin: 0;
-            padding: 0;
-            background: transparent;
-            overflow: hidden;
-            font-family: 'Arial', sans-serif;
-        }
-        
-        #parade-container {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 200px;
-            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
-        }
-        
-        #parade-track {
-            position: absolute;
-            bottom: 20px;
-            left: 0;
-            width: 100%;
-            height: 100px;
-            background: linear-gradient(to bottom,
-                transparent 0%,
-                rgba(255,255,255,0.1) 45%,
-                rgba(255,255,255,0.2) 50%,
-                rgba(255,255,255,0.1) 55%,
-                transparent 100%);
-        }
-        
-        .dancer {
-            position: absolute;
-            bottom: 30px;
-            font-size: 60px;
-            transition: bottom 0.3s ease;
-            animation: walk 1s ease-in-out infinite;
-            filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));
-        }
-        
-        @keyframes walk {
-            0%, 100% { transform: translateY(0) rotate(-5deg); }
-            50% { transform: translateY(-10px) rotate(5deg); }
-        }
-        
-        .dancing {
-            animation: dance 0.5s ease-in-out infinite;
-        }
-        
-        @keyframes dance {
-            0%, 100% { transform: translateY(0) rotate(-15deg) scale(1); }
-            25% { transform: translateY(-20px) rotate(15deg) scale(1.1); }
-            50% { transform: translateY(0) rotate(-15deg) scale(1); }
-            75% { transform: translateY(-20px) rotate(15deg) scale(1.1); }
-        }
-        
-        .username-label {
-            position: absolute;
-            bottom: -25px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 14px;
-            white-space: nowrap;
-            font-weight: bold;
-            border: 1px solid rgba(255,255,255,0.3);
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-        }
-        
-        .sparkle {
-            position: absolute;
-            color: #FFD700;
-            font-size: 20px;
-            animation: sparkle 1s ease-out forwards;
-            pointer-events: none;
-        }
-        
-        @keyframes sparkle {
-            0% { 
-                transform: translateY(0) scale(0);
-                opacity: 1;
-            }
-            100% { 
-                transform: translateY(-50px) scale(1.5);
-                opacity: 0;
-            }
-        }
-        
-        #music-note-display {
-            position: absolute;
-            top: 10px;
-            right: 20px;
-            font-size: 24px;
-            animation: musicPulse 1s ease-in-out infinite;
-        }
-        
-        @keyframes musicPulse {
-            0%, 100% { transform: scale(1); opacity: 0.7; }
-            50% { transform: scale(1.2); opacity: 1; }
-        }
-        
-        #parade-info {
-            position: absolute;
-            top: 10px;
-            left: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px 20px;
-            border-radius: 10px;
-            color: white;
-            font-size: 16px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background: #FFD700;
-            top: -10px;
-            animation: confettiFall 3s linear infinite;
-        }
-        
-        @keyframes confettiFall {
-            0% { 
-                transform: translateY(0) rotate(0deg);
-                opacity: 1;
-            }
-            100% { 
-                transform: translateY(220px) rotate(720deg);
-                opacity: 0;
-            }
-        }
-        
-        .rainbow-trail {
-            position: absolute;
-            height: 3px;
-            background: linear-gradient(90deg, 
-                #ff0000 0%, 
-                #ff7f00 14%, 
-                #ffff00 28%, 
-                #00ff00 42%, 
-                #0000ff 56%, 
-                #4b0082 70%, 
-                #9400d3 84%,
-                transparent 100%);
-            pointer-events: none;
-            opacity: 0.8;
-        }
-        
-        #conga-line-bonus {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 48px;
-            font-weight: bold;
-            color: #FFD700;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            display: none;
-            animation: bonusFlash 2s ease-out forwards;
-        }
-        
-        @keyframes bonusFlash {
-            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-            50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
-            100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
-        }
-        
-        .dance-battle-zone {
-            position: absolute;
-            bottom: 0;
-            width: 200px;
-            height: 150px;
-            background: radial-gradient(ellipse at bottom, rgba(255,215,0,0.3) 0%, transparent 70%);
-            display: none;
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpaceMountain Cosmic Conga Line</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  body{pointer-events:none}
+  #party{position:fixed;inset:0;display:none;overflow:hidden;background:transparent}
+  #party.active{display:block}
+  #fx,#cards,#parade{position:absolute;inset:0;overflow:hidden}
+  #fx{z-index:5}
+  #cards{z-index:20}
+  #parade{z-index:15}
+  #groundGlow{position:absolute;left:-5%;right:-5%;bottom:-7%;height:30%;background:radial-gradient(ellipse at center,rgba(78,222,255,.16),transparent 68%);filter:blur(10px)}
+  #avatarLane,#emojiLane{position:absolute;left:0;right:0;bottom:8px;height:118px;overflow:visible}
+  #emojiLane{bottom:104px;height:82px}
+  .marcher,.partyEmoji{position:absolute;left:-150px;will-change:transform;animation-name:march;animation-timing-function:linear;animation-iteration-count:infinite}
+  .marcher{bottom:0;width:82px;text-align:center;filter:drop-shadow(0 4px 10px rgba(0,0,0,.55))}
+  .avatar{width:62px;height:62px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.92);background:rgba(17,24,39,.8);box-shadow:0 0 18px rgba(94,234,212,.65)}
+  .fallbackAvatar{display:grid;place-items:center;margin:0 auto;width:62px;height:62px;border-radius:50%;border:3px solid rgba(255,255,255,.92);background:linear-gradient(135deg,#7c3aed,#06b6d4);font-size:24px;font-weight:900}
+  .name{margin-top:3px;max-width:82px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 5px;border-radius:999px;background:rgba(2,6,23,.72);font-size:10px;font-weight:900;color:white;text-shadow:0 1px 2px #000}
+  .partyEmoji{bottom:0;font-size:34px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.5));animation-duration:18s}
+  @keyframes march{0%{transform:translateX(0) translateY(0)}25%{transform:translateX(calc(25vw + 70px)) translateY(-5px)}50%{transform:translateX(calc(50vw + 140px)) translateY(0)}75%{transform:translateX(calc(75vw + 210px)) translateY(-5px)}100%{transform:translateX(calc(100vw + 300px)) translateY(0)}}
+  .wiggle{animation:seismic .16s ease-in-out infinite!important}
+  @keyframes seismic{0%,100%{transform:translateY(0) rotate(-8deg) scale(1)}50%{transform:translateY(-22px) rotate(8deg) scale(1.08)}}
+  .confetti{position:absolute;top:-20px;width:9px;height:18px;border-radius:2px;animation:fall linear forwards}
+  @keyframes fall{to{transform:translate3d(var(--drift),115vh,0) rotate(900deg);opacity:.15}}
+  .spark{position:absolute;width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 12px currentColor;animation:spark 1.1s ease-out forwards}
+  @keyframes spark{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
+  .cash{position:absolute;font-size:28px;animation:cash 1.8s ease-out forwards;filter:drop-shadow(0 0 9px rgba(34,197,94,.8))}
+  @keyframes cash{0%{transform:translate(-50%,-50%) scale(.2) rotate(0);opacity:0}18%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1.25) rotate(var(--rot));opacity:0}}
+  .commandCard{position:absolute;padding:10px 16px;border:1px solid rgba(255,255,255,.3);border-radius:16px;background:linear-gradient(135deg,rgba(15,23,42,.88),rgba(76,29,149,.78));box-shadow:0 8px 28px rgba(0,0,0,.38),0 0 20px rgba(34,211,238,.2);color:white;font-size:18px;font-weight:950;letter-spacing:.02em;text-shadow:0 2px 4px #000;animation:cardPop 3.7s ease-in-out forwards;transform-origin:center}
+  @keyframes cardPop{0%{opacity:0;transform:translateY(18px) scale(.72) rotate(-7deg)}14%{opacity:1;transform:translateY(0) scale(1.04) rotate(4deg)}35%{transform:translateY(-5px) scale(1) rotate(-3deg)}70%{opacity:1;transform:translateY(4px) rotate(3deg)}100%{opacity:0;transform:translateY(-22px) scale(.86) rotate(-6deg)}}
+  #banner{position:absolute;top:5%;left:50%;z-index:25;transform:translateX(-50%);padding:9px 18px;border-radius:999px;background:rgba(15,23,42,.74);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;opacity:0;transition:opacity .3s}
+  #party.active #banner{opacity:.88}
+</style>
 </head>
 <body>
-    <div id="parade-container">
-        <div id="parade-track"></div>
-        <div id="dance-battle-zone" class="dance-battle-zone"></div>
-        
-        <div id="parade-info">
-            <div>🎉 Dancing Parade</div>
-            <div style="font-size: 12px; opacity: 0.8;">Type spmt parade to join and spmt dance to dance!</div>
-        </div>
-        
-        <div id="music-note-display">🎵🎶</div>
-        
-        <div id="conga-line-bonus"></div>
-    </div>
-    
-    <script>
-    // Game state
-    const dancers = new Map();
-    const MAX_DANCERS = 30;
-    const availableCharacters = ['🕺', '💃', '🦜', '🦄', '🐸', '🤖', '👻', '🦋', '🐙', '🦊'];
-    const danceEmotes = ['🎵', '🎶', '🎤', '🎸', '🥁', '🎹', '🎺', '🎷'];
-    let congaLineActive = false;
-    let lastDanceCommand = Date.now();
-    
-    // URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session') || 'test';
-    const password = urlParams.get('password') || 'false';
-    
-    class Dancer {
-        constructor(username, character) {
-            this.username = username;
-            this.character = character;
-            this.position = -100;
-            this.isDancing = false;
-            this.element = this.createElement();
-            this.speed = 1 + Math.random() * 0.5;
-            this.danceTimer = 0;
-            this.sparkleTimer = 0;
-        }
-        
-        createElement() {
-            const dancer = document.createElement('div');
-            dancer.className = 'dancer';
-            dancer.textContent = this.character;
-            dancer.style.left = this.position + 'px';
-            
-            const label = document.createElement('div');
-            label.className = 'username-label';
-            label.textContent = this.username;
-            dancer.appendChild(label);
-            
-            document.getElementById('parade-track').appendChild(dancer);
-            return dancer;
-        }
-        
-        update() {
-            // Move across screen
-            this.position += this.speed;
-            
-            // Wrap around
-            if (this.position > window.innerWidth + 100) {
-                this.position = -100;
-            }
-            
-            this.element.style.left = this.position + 'px';
-            
-            // Update dance state
-            if (this.isDancing) {
-                this.danceTimer--;
-                if (this.danceTimer <= 0) {
-                    this.isDancing = false;
-                    this.element.classList.remove('dancing');
-                }
-                
-                // Create sparkles while dancing
-                this.sparkleTimer++;
-                if (this.sparkleTimer % 20 === 0) {
-                    this.createSparkle();
-                }
-            }
-            
-            // Create rainbow trail if in conga line
-            if (congaLineActive && this.isDancing) {
-                this.createRainbowTrail();
-            }
-        }
-        
-        dance() {
-            this.isDancing = true;
-            this.danceTimer = 180; // 3 seconds at 60fps
-            this.element.classList.add('dancing');
-            
-            // Jump animation
-            this.element.style.bottom = '50px';
-            setTimeout(() => {
-                this.element.style.bottom = '30px';
-            }, 300);
-        }
-        
-        createSparkle() {
-            const sparkle = document.createElement('div');
-            sparkle.className = 'sparkle';
-            sparkle.textContent = '✨';
-            sparkle.style.left = (this.position + 30) + 'px';
-            sparkle.style.bottom = '80px';
-            document.getElementById('parade-container').appendChild(sparkle);
-            
-            setTimeout(() => sparkle.remove(), 1000);
-        }
-        
-        createRainbowTrail() {
-            const trail = document.createElement('div');
-            trail.className = 'rainbow-trail';
-            trail.style.left = (this.position - 50) + 'px';
-            trail.style.bottom = '50px';
-            trail.style.width = '100px';
-            document.getElementById('parade-container').appendChild(trail);
-            
-            setTimeout(() => trail.remove(), 1000);
-        }
-        
-        remove() {
-            this.element.remove();
-        }
-    }
-    
-    function addDancer(username) {
-        if (dancers.has(username)) {
-            // Make existing dancer dance
-            dancers.get(username).dance();
-            return;
-        }
-        
-        if (dancers.size >= MAX_DANCERS) {
-            const oldestUsername = dancers.keys().next().value;
-            dancers.get(oldestUsername).remove();
-            dancers.delete(oldestUsername);
-        }
-        
-        // Pick random character
-        const character = availableCharacters[Math.floor(Math.random() * availableCharacters.length)];
-        const dancer = new Dancer(username, character);
-        dancers.set(username, dancer);
-        
-        // Create join effect
-        createConfetti();
-        
-        // Check for conga line
-        checkCongaLine();
-        
-        sendResponse(`${character} ${username} joined the parade!`);
-    }
-    
-    function makeDance(username) {
-        const dancer = dancers.get(username);
-        if (dancer) {
-            dancer.dance();
-            
-            // Show random dance emote
-            const emote = danceEmotes[Math.floor(Math.random() * danceEmotes.length)];
-            showDanceEmote(dancer.position, emote);
-            
-            // Update last dance time
-            lastDanceCommand = Date.now();
-            
-            // Check for dance battle
-            checkDanceBattle(dancer);
-        } else {
-            sendResponse(`@${username}, join the parade first with spmt parade`);
-        }
-    }
-    
-    function showDanceEmote(x, emote) {
-        const emoteDiv = document.createElement('div');
-        emoteDiv.className = 'sparkle';
-        emoteDiv.textContent = emote;
-        emoteDiv.style.left = (x + 30) + 'px';
-        emoteDiv.style.bottom = '120px';
-        emoteDiv.style.fontSize = '30px';
-        document.getElementById('parade-container').appendChild(emoteDiv);
-        
-        setTimeout(() => emoteDiv.remove(), 1000);
-    }
-    
-    function checkCongaLine() {
-        const activeDancers = Array.from(dancers.values()).filter(d => d.isDancing);
-        
-        if (activeDancers.length >= 3) {
-            if (!congaLineActive) {
-                congaLineActive = true;
-                showCongaLineBonus();
-                
-                setTimeout(() => {
-                    congaLineActive = false;
-                }, 5000);
-            }
-        }
-    }
-    
-    function showCongaLineBonus() {
-        const bonus = document.getElementById('conga-line-bonus');
-        bonus.textContent = '🎉 CONGA LINE! 🎉';
-        bonus.style.display = 'block';
-        
-        setTimeout(() => {
-            bonus.style.display = 'none';
-        }, 2000);
-    }
-    
-    function checkDanceBattle(dancer) {
-        // Check if another dancer is nearby and dancing
-        const nearbyDancers = Array.from(dancers.values()).filter(d => 
-            d !== dancer && 
-            d.isDancing && 
-            Math.abs(d.position - dancer.position) < 100
-        );
-        
-        if (nearbyDancers.length > 0) {
-            // Start dance battle
-            const battleZone = document.getElementById('dance-battle-zone');
-            battleZone.style.left = dancer.position + 'px';
-            battleZone.style.display = 'block';
-            
-            sendResponse(`⚡ DANCE BATTLE between ${dancer.username} and ${nearbyDancers[0].username}! ⚡`);
-            
-            setTimeout(() => {
-                battleZone.style.display = 'none';
-            }, 3000);
-        }
-    }
-    
-    function createConfetti() {
-        for (let i = 0; i < 10; i++) {
-            setTimeout(() => {
-                const confetti = document.createElement('div');
-                confetti.className = 'confetti';
-                confetti.style.left = Math.random() * window.innerWidth + 'px';
-                confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
-                confetti.style.animationDelay = Math.random() + 's';
-                document.getElementById('parade-container').appendChild(confetti);
-                
-                setTimeout(() => confetti.remove(), 3000);
-            }, i * 100);
-        }
-    }
-    
-    function sendResponse(message) {
-        const response = {
-            chatname: 'ParadeBot',
-            chatmessage: message,
-            type: 'bot',
-            timestamp: Date.now()
-        };
-        
-        if (window.parent !== window) {
-            window.parent.postMessage({
-                overlay: 'dancingparade',
-                response: response
-            }, '*');
-        }
-        
-        console.log('Bot response:', message);
-    }
-    
-    function stripHtml(html) {
-        return new DOMParser().parseFromString(String(html), 'text/html').body.textContent || '';
-    }
+<div id="party" aria-hidden="true">
+  <div id="groundGlow"></div>
+  <div id="fx"></div>
+  <div id="cards"></div>
+  <div id="parade">
+    <div id="emojiLane"></div>
+    <div id="avatarLane"></div>
+  </div>
+  <div id="banner">COSMIC CONGA LINE · +100 XP FOR PARTICIPATING</div>
+</div>
+<script>
+(() => {
+  const params=new URLSearchParams(location.search);
+  const embedded=params.has('embedded');
+  const channel=(params.get('channel')||'spacemountainlive').replace(/^#/,'').toLowerCase();
+  if(embedded&&window.parent!==window){
+    window.parent.postMessage({nebulaArcade:{type:'dancing-parade-ready',channel}},location.origin);
+  }
+  const party=document.getElementById('party');
+  const avatarLane=document.getElementById('avatarLane');
+  const emojiLane=document.getElementById('emojiLane');
+  const fx=document.getElementById('fx');
+  const cards=document.getElementById('cards');
+  const commands=['spmt join','spmt dance','spmt <emoji>'];
+  let sessionId='',danceSeq=-1,lastEmojiCount=0,cardTimer=null,fxTimer=null,pollTimer=null,audioCtx=null,musicTimer=null,beat=0;
 
-    function processData(data) {
-        if (!data || typeof data !== 'object') return;
+  const esc=(value)=>String(value||'').replace(/[&<>"']/g,(m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const hash=(value)=>{let h=2166136261;for(const ch of String(value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
 
-        if (data.content) {
-            data = data.content;
-        }
-
-        if (!data.chatmessage || !data.chatname) return;
-
-        let rawMessage = data.chatmessage;
-        if (!data.textonly) {
-            rawMessage = stripHtml(rawMessage);
-        }
-        const message = rawMessage.trim().toLowerCase();
-        const username = stripHtml(data.chatname);
-
-        if (message === '!join') {
-            addDancer(username);
-        } else if (message === '!dance') {
-            makeDance(username);
-        } else if (message === '!leave') {
-            const dancer = dancers.get(username);
-            if (dancer) {
-                dancer.remove();
-                dancers.delete(username);
-                sendResponse(`${username} left the parade 👋`);
-            }
-        }
+  function confetti(count=30){
+    const palette=['#22d3ee','#a78bfa','#f472b6','#facc15','#34d399','#fb7185','#ffffff'];
+    for(let i=0;i<count;i++){
+      const el=document.createElement('i');el.className='confetti';
+      el.style.left=(Math.random()*100)+'vw';el.style.background=palette[i%palette.length];
+      el.style.setProperty('--drift',((Math.random()-.5)*180)+'px');
+      el.style.animationDuration=(2.7+Math.random()*2.4)+'s';
+      fx.appendChild(el);setTimeout(()=>el.remove(),5500);
     }
-    
-    // Game loop
-    function update() {
-        dancers.forEach(dancer => dancer.update());
-        
-        // Random music notes
-        if (Math.random() < 0.02) {
-            const note = document.createElement('div');
-            note.className = 'sparkle';
-            note.textContent = '🎵';
-            note.style.left = Math.random() * window.innerWidth + 'px';
-            note.style.bottom = '150px';
-            document.getElementById('parade-container').appendChild(note);
-            setTimeout(() => note.remove(), 2000);
-        }
-        
-        requestAnimationFrame(update);
+  }
+  function fireworks(){
+    const x=12+Math.random()*76,y=12+Math.random()*46;
+    const palette=['#67e8f9','#c4b5fd','#fde047','#f9a8d4','#86efac'];
+    for(let i=0;i<24;i++){
+      const a=Math.PI*2*i/24,dist=45+Math.random()*95,el=document.createElement('i');
+      el.className='spark';el.style.left=x+'vw';el.style.top=y+'vh';el.style.color=palette[i%palette.length];
+      el.style.setProperty('--dx',(Math.cos(a)*dist)+'px');el.style.setProperty('--dy',(Math.sin(a)*dist)+'px');
+      fx.appendChild(el);setTimeout(()=>el.remove(),1300);
     }
-    
-    update();
-    
-    // Setup iframe communication
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://vdo.socialstream.ninja/?ln&salt=vdo.ninja&notmobile&password=${encodeURIComponent(password)}&solo&view=${encodeURIComponent(sessionId)}&novideo&noaudio&label=dock&cleanoutput&room=${encodeURIComponent(sessionId)}`;
-    iframe.style.width = "0px";
-    iframe.style.height = "0px";
-    iframe.style.position = "fixed";
-    iframe.style.left = "-100px";
-    iframe.style.top = "-100px";
-    iframe.id = "frame1";
-    if (!urlParams.has('embedded')) document.body.appendChild(iframe);
-    
-    window.addEventListener("message", function(e) {
-        if (e.source !== iframe.contentWindow && e.source !== window.parent) return;
-        
-        if (e.data && typeof e.data === "object" && e.data.dataReceived && typeof e.data.dataReceived === "object") {
-            if ("overlayNinja" in e.data.dataReceived) {
-                processData(e.data.dataReceived.overlayNinja);
-            }
-        }
+    if(Math.random()>.35) cashBurst(x,y);
+  }
+  function cashBurst(x=50,y=35){
+    const money=['💸','💵','🪙','💰'];
+    for(let i=0;i<12;i++){
+      const el=document.createElement('span');el.className='cash';el.textContent=money[i%money.length];
+      el.style.left=x+'vw';el.style.top=y+'vh';
+      el.style.setProperty('--dx',((Math.random()-.5)*320)+'px');
+      el.style.setProperty('--dy',((-80-Math.random()*260))+'px');
+      el.style.setProperty('--rot',((Math.random()-.5)*720)+'deg');
+      fx.appendChild(el);setTimeout(()=>el.remove(),2100);
+    }
+  }
+  function commandCard(){
+    if(!party.classList.contains('active')) return;
+    const el=document.createElement('div');el.className='commandCard';el.textContent=commands[Math.floor(Math.random()*commands.length)];
+    el.style.left=(8+Math.random()*68)+'%';el.style.top=(9+Math.random()*52)+'%';
+    cards.appendChild(el);setTimeout(()=>el.remove(),3900);
+  }
+  function startAmbientFx(){
+    stopAmbientFx();
+    confetti(45);fireworks();setTimeout(fireworks,550);
+    cardTimer=setInterval(commandCard,2600);
+    fxTimer=setInterval(()=>{Math.random()>.45?fireworks():confetti(14)},2100);
+  }
+  function stopAmbientFx(){
+    if(cardTimer)clearInterval(cardTimer);if(fxTimer)clearInterval(fxTimer);cardTimer=fxTimer=null;
+  }
+
+  function renderAvatars(session){
+    const order=Array.isArray(session.participantOrder)?session.participantOrder:[];
+    const people=order.map((name)=>session.participants?.[name]).filter((p)=>p&&p.joinedAvatar);
+    const keep=new Set(people.map((p)=>p.username));
+    [...avatarLane.children].forEach((node)=>{if(!keep.has(node.dataset.user))node.remove()});
+    people.forEach((p,index)=>{
+      let el=avatarLane.querySelector('[data-user="'+CSS.escape(p.username)+'"]');
+      if(!el){
+        el=document.createElement('div');el.className='marcher';el.dataset.user=p.username;
+        el.style.animationDuration=(18+(hash(p.username)%8))+'s';
+        el.style.animationDelay=(-((hash(p.username+session.id)%18000)/1000))+'s';
+        const initial=esc((p.displayName||p.username||'?').slice(0,1).toUpperCase());
+        el.innerHTML=(p.avatarUrl
+          ? '<img class="avatar" alt="" src="'+esc(p.avatarUrl)+'">'
+          : '<div class="fallbackAvatar">'+initial+'</div>')
+          +'<div class="name">'+esc(p.displayName||p.username)+'</div>';
+        avatarLane.appendChild(el);
+      }
     });
-    
-    // Handle WebSocket if server parameter provided
-    if (urlParams.has('server')) {
-        const serverUrl = urlParams.get('server') || 'wss://io.socialstream.ninja';
-        let socketserver = null;
-        let reconnectTimeout = null;
+  }
+  function renderEmojis(session){
+    const items=Array.isArray(session.emojis)?session.emojis:[];
+    if(items.length===lastEmojiCount)return;
+    lastEmojiCount=items.length;emojiLane.innerHTML='';
+    items.slice(-80).forEach((emoji,index)=>{
+      const el=document.createElement('span');el.className='partyEmoji';el.textContent=emoji;
+      el.style.bottom=((index%3)*20)+'px';
+      el.style.animationDuration=(15+(index%9))+'s';
+      el.style.animationDelay=(-((index*1.37)%18))+'s';
+      emojiLane.appendChild(el);
+    });
+  }
+  function seismicWiggle(){
+    [...avatarLane.children,...emojiLane.children].forEach((el)=>el.classList.add('wiggle'));
+    fireworks();cashBurst(50,46);
+    setTimeout(()=>[...avatarLane.children,...emojiLane.children].forEach((el)=>el.classList.remove('wiggle')),2100);
+  }
 
-        function connectWebSocket() {
-            socketserver = new WebSocket(serverUrl);
-
-            socketserver.onopen = function() {
-                socketserver.send(JSON.stringify({
-                    join: sessionId.split(",")[0],
-                    out: 2,
-                    in: 1
-                }));
-            };
-
-            socketserver.onclose = function() {
-                clearTimeout(reconnectTimeout);
-                reconnectTimeout = setTimeout(connectWebSocket, 5000);
-            };
-
-            socketserver.onerror = function() {
-                try { socketserver.close(); } catch (e) {}
-            };
-
-            socketserver.onmessage = function(event) {
-                if (event.data) {
-                    try {
-                        const data = JSON.parse(event.data);
-                        processData(data);
-                    } catch (e) {
-                        console.error('WebSocket parse error:', e);
-                    }
-                }
-            };
+  const themes=[
+    [0,4,7,9,7,4,2,4],[0,7,5,9,7,12,9,5],[0,3,7,10,7,3,5,7],[0,5,9,12,9,5,7,10],[0,4,9,7,12,9,7,4]
+  ];
+  function stopMusic(){if(musicTimer)clearInterval(musicTimer);musicTimer=null;beat=0}
+  function startMusic(themeIndex=0){
+    stopMusic();
+    try{
+      audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+      audioCtx.resume?.();
+      const pattern=themes[Math.abs(Number(themeIndex)||0)%themes.length];
+      musicTimer=setInterval(()=>{
+        if(!audioCtx||audioCtx.state==='closed')return;
+        const now=audioCtx.currentTime,root=110*Math.pow(2,(pattern[beat%pattern.length])/12);
+        const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+        osc.type=(beat%4===0?'square':'triangle');osc.frequency.value=root*(beat%2?2:1);
+        gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.035,now+.015);gain.gain.exponentialRampToValueAtTime(.0001,now+.18);
+        osc.connect(gain);gain.connect(audioCtx.destination);osc.start(now);osc.stop(now+.2);
+        if(beat%4===0){
+          const kick=audioCtx.createOscillator(),kg=audioCtx.createGain();kick.frequency.setValueAtTime(90,now);kick.frequency.exponentialRampToValueAtTime(40,now+.11);
+          kg.gain.setValueAtTime(.06,now);kg.gain.exponentialRampToValueAtTime(.0001,now+.12);kick.connect(kg);kg.connect(audioCtx.destination);kick.start(now);kick.stop(now+.13);
         }
+        beat++;
+      },250);
+    }catch{}
+  }
 
-        connectWebSocket();
-    }
-
-    // Demo mode
-    if (urlParams.has('demo')) {
-        const demoUsers = ['Dancer1', 'Dancer2', 'Dancer3', 'Groover', 'PartyAnimal'];
-        
-        // Add some dancers
-        setTimeout(() => {
-            demoUsers.forEach((user, index) => {
-                setTimeout(() => addDancer(user), index * 1000);
-            });
-        }, 1000);
-        
-        // Make them dance randomly
-        setInterval(() => {
-            if (Math.random() < 0.3) {
-                const user = demoUsers[Math.floor(Math.random() * demoUsers.length)];
-                if (dancers.has(user)) {
-                    makeDance(user);
-                }
-            }
-        }, 2000);
-    }
-    </script>
+  function begin(session){
+    sessionId=session.id;danceSeq=Number(session.danceSeq||0);lastEmojiCount=-1;
+    party.classList.add('active');party.setAttribute('aria-hidden','false');
+    avatarLane.innerHTML='';emojiLane.innerHTML='';cards.innerHTML='';fx.innerHTML='';
+    renderAvatars(session);renderEmojis(session);startAmbientFx();startMusic(session.themeIndex);
+    commandCard();
+  }
+  function end(){
+    sessionId='';danceSeq=-1;lastEmojiCount=0;
+    party.classList.remove('active');party.setAttribute('aria-hidden','true');
+    stopAmbientFx();stopMusic();avatarLane.innerHTML='';emojiLane.innerHTML='';cards.innerHTML='';fx.innerHTML='';
+  }
+  function sync(payload){
+    if(!payload?.active||!payload?.session){if(sessionId)end();return}
+    const session=payload.session;
+    if(session.id!==sessionId)begin(session);
+    renderAvatars(session);renderEmojis(session);
+    const nextDance=Number(session.danceSeq||0);
+    if(danceSeq>=0&&nextDance>danceSeq)seismicWiggle();
+    danceSeq=nextDance;
+  }
+  async function poll(){
+    try{
+      const res=await fetch('/api/game-hub/parade?channel='+encodeURIComponent(channel),{cache:'no-store'});
+      if(res.ok)sync(await res.json());
+    }catch{}
+  }
+  poll();pollTimer=setInterval(poll,700);
+})();
+</script>
 </body>
 </html>

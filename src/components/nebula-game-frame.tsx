@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameHubGame } from '@/lib/game-hub-registry';
 import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 
-function prototypePath(game: GameHubGame, demo: boolean) {
+function prototypePath(game: GameHubGame, demo: boolean, channel: string) {
   const filename = String(game.sourcePrototype || '').split('/').pop();
   if (!filename) return '';
   const query = new URLSearchParams({ embedded: '1', room: 'nebula-arcade' });
+  if (channel) query.set('channel', channel);
   if (demo) query.set('demo', '1');
   return `/nebula-arcade/games/${encodeURIComponent(filename)}?${query.toString()}`;
 }
@@ -41,16 +42,18 @@ export function NebulaGameFrame({
   events = [],
   demo = false,
   title,
+  channel = '',
 }: {
   game: GameHubGame;
   events?: GameHubChatEvent[];
   demo?: boolean;
   title?: string;
+  channel?: string;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const deliveredRef = useRef(new Set<string>());
   const [ready, setReady] = useState(false);
-  const src = useMemo(() => prototypePath(game, demo), [demo, game]);
+  const src = useMemo(() => prototypePath(game, demo, channel), [channel, demo, game]);
 
   useEffect(() => {
     deliveredRef.current.clear();

@@ -206,6 +206,7 @@ export async function middleware(request: NextRequest) {
   const isPublicLiveMembersRead = request.method === 'GET' && pathname === '/api/discord/live-members';
   const isPublicGameScopeRead = request.method === 'GET' && pathname === '/api/game-hub/channel';
   const isPublicShowcaseManifestRead = request.method === 'GET' && pathname === '/api/game-hub/showcase-manifest';
+  const isPublicParadeStateRead = request.method === 'GET' && pathname === '/api/game-hub/parade';
   const isPublicBingoStateRead = request.method === 'GET' && pathname === '/api/bingo/state';
   // Generated artwork is public to view. Generation itself is never public.
   const isPublicQuackverseArtRead = request.method === 'GET'
@@ -217,6 +218,7 @@ export async function middleware(request: NextRequest) {
     || isPublicLiveMembersRead
     || isPublicGameScopeRead
     || isPublicShowcaseManifestRead
+    || isPublicParadeStateRead
     || isPublicBingoStateRead
     || isPublicQuackverseArtRead
     || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))

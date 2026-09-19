@@ -40,7 +40,7 @@ export function GameHubSurface({
   } else if (game.id === 'bingo') {
     content = <GameHubBingoSurface />;
   } else if (game.sourcePrototype) {
-    content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} />;
+    content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} channel={channel} />;
   } else {
     content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} />;
   }
