@@ -93,6 +93,11 @@ function pointsLeaderboardUrl(req: NextRequest) {
   return `${publicOrigin(req)}/games/leaderboard`;
 }
 
+function quackversePlayUrl(req: NextRequest, channel: string) {
+  const query = new URLSearchParams({ tenant: channel, roomId: channel });
+  return `${publicOrigin(req)}/quackverse?${query.toString()}`;
+}
+
 function legacyChatTagRewrite(actionArgs: string[]) {
   if (!actionArgs.length) return 'spmt join';
   if (actionArgs[0] === 'leave') return 'spmt leave';
@@ -332,6 +337,24 @@ export async function POST(req: NextRequest) {
     if (!canControl) {
       return NextResponse.json({ handled: true, reply: `@${displayName} Only the streamer or a moderator can ${action} ${game.name}.` });
     }
+
+    // Quackverse is a two-player browser game, not a persistent stream stage.
+    // Starting it publishes the shared room URL while explicitly keeping it off
+    // the Games Hub overlay. Packs remain a separate event overlay.
+    if (game.id === 'quackverse' && action === 'start') {
+      const activeIds = await updateAppState((state) => {
+        setChannelGameRunning(state, channel, game.id, false);
+        return resolveChannelGameIds(state, channel);
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `🦆 Quackverse is ready! Play, open packs, build decks, and manage your collection here: ${quackversePlayUrl(req, channel)}`.slice(0, 480),
+        activeGameIds: activeIds,
+        launchUrl: quackversePlayUrl(req, channel),
+        overlayMode: 'pack-only',
+      });
+    }
+
     const activeIds = await updateAppState((state) => {
       setChannelGameRunning(state, channel, game.id, action === 'start');
       recordGameHubRuntimeAction(state, {
@@ -350,6 +373,15 @@ export async function POST(req: NextRequest) {
       handled: true,
       reply: `${game.name} is now ${action === 'start' ? 'ACTIVE' : 'STOPPED'} in #${channel}.`,
       activeGameIds: activeIds,
+    });
+  }
+
+  if (game.id === 'quackverse' && !actionArgs.length) {
+    return NextResponse.json({
+      handled: true,
+      reply: `🦆 @${displayName} Quackverse plays in a browser popout: ${quackversePlayUrl(req, channel)}`.slice(0, 480),
+      launchUrl: quackversePlayUrl(req, channel),
+      overlayMode: 'pack-only',
     });
   }
 

@@ -404,3 +404,17 @@ test('composite game overlays remain shell-free while the editor stays in the no
   assert.match(overlay, /GameHubSurface/);
   assert.match(studio, /app\/overlay\/games\/page/);
 });
+
+
+test('Quackverse launches as a browser room while the community overlay stays pack-only', () => {
+  const command = read('src/app/api/game-hub/command/route.ts');
+  const profile = read('src/app/api/overlay/game-hub/[profileId]/route.ts');
+  const commands = read('src/lib/game-hub-commands.ts');
+
+  assert.match(command, /function quackversePlayUrl/);
+  assert.match(command, /overlayMode: 'pack-only'/);
+  assert.match(command, /setChannelGameRunning\(state, channel, game\.id, false\)/);
+  assert.match(commands, /joinTrigger: 'spmt quackverse'/);
+  assert.match(commands, /spmt pack[\s\S]*reveal appears on stream/);
+  assert.doesNotMatch(profile, /gameIds: \['quackverse', 'bingo'/);
+});
