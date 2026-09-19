@@ -4,10 +4,11 @@ import { getBotSecret } from '@/lib/runtime-secrets';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
 import { buildXpIdempotencyKey } from '@spmt/sdk';
 import { lookupTwitchUser } from '@/lib/twitch';
-import { updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppState } from '@/lib/volume-store';
 import { setChannelGameRunning } from '@/lib/game-hub-state';
 import {
   finishDueDancingParades,
+  getDancingParadeSnapshot,
   startDancingParade,
   type DancingParadeParticipant,
   type DancingParadeSession,
@@ -107,6 +108,15 @@ async function awardParadeXp(session: DancingParadeSession) {
     count: participants.length,
     awarded,
   };
+}
+
+export async function GET(req: NextRequest) {
+  const channel = normalizeChannel(req.nextUrl.searchParams.get('channel'));
+  if (!channel) return NextResponse.json({ error: 'channel is required' }, { status: 400 });
+  const state = await readAppState();
+  return NextResponse.json(getDancingParadeSnapshot(state, channel), {
+    headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+  });
 }
 
 export async function POST(req: NextRequest) {
