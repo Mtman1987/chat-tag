@@ -26,8 +26,9 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt score', description: 'Show your Chat Tag score.' },
     { trigger: 'spmt status', description: 'Show the current Chat Tag state.' },
   ] },
-  { gameId: 'quackverse', key: 'quackverse', aliases: ['quack'], joinDescription: 'Open a Quackverse pack.', joinTrigger: 'spmt pack', commands: [
-    { trigger: 'spmt quackpack', description: 'Open a Quackverse pack.' },
+  { gameId: 'quackverse', key: 'quackverse', aliases: ['quack'], joinDescription: 'Open the shared Quackverse browser room.', joinTrigger: 'spmt quackverse', commands: [
+    { trigger: 'spmt pack', description: 'Open a Quackverse booster pack; the reveal appears on stream.' },
+    { trigger: 'spmt quackpack', description: 'Open a Quackverse booster pack; the reveal appears on stream.' },
   ] },
   { gameId: 'bingo', key: 'bingo', aliases: [], joinDescription: 'Open your Bingo card.', joinTrigger: 'spmt card', commands: [
     { trigger: 'spmt claim 12', description: 'Claim a Bingo square.' },
