@@ -1101,6 +1101,11 @@ console.log = (...args) => {
     isIrcConnected = true;
   });
 
+  client.on('notice', (channel, msgId, message) => {
+    const target = String(channel || '').replace(/^#/, '') || 'unknown';
+    console.warn(`[Bot] Twitch NOTICE channel=${target} msg-id=${msgId || 'unknown'}: ${message || ''}`);
+  });
+
   setInterval(() => {
     settleDanceParties().catch((error) => console.error('[DancingParade] Settlement failed:', error?.message || error));
   }, 5000);
