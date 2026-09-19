@@ -144,19 +144,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { status: result.reason === 'redeem-cooldown' ? 429 : 200 });
     }
 
+    const session = result.session;
+    if (!session) return NextResponse.json({ error: 'Parade start did not return a session.' }, { status: 500 });
     void publishSpmtEvent({
       type: 'dancing-parade.started',
       visibility: 'community',
       payload: {
         summary: `Dance party started in #${channel}`,
         channel,
-        sessionId: result.session.id,
-        trigger: result.session.trigger,
-        triggerUser: result.session.triggerUser,
+        sessionId: session.id,
+        trigger: session.trigger,
+        triggerUser: session.triggerUser,
       },
     });
     const stellaQueued = await queueStellaIntro();
-    return NextResponse.json({ ...result, stellaQueued });
+    return NextResponse.json({ ...result, session, stellaQueued });
   }
 
   if (action === 'finish-due') {
