@@ -61,8 +61,9 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt green', description: 'Paint for green.' },
     { trigger: 'spmt yellow', description: 'Paint for yellow.' },
   ] },
-  { gameId: 'dancingparade', key: 'parade', aliases: ['dancingparade'], joinDescription: 'Join Dancing Parade.', joinTrigger: 'spmt parade', commands: [
-    { trigger: 'spmt dance', description: 'Trigger your dancer animation.' },
+  { gameId: 'dancingparade', key: 'parade', aliases: ['dancingparade'], joinDescription: 'Join the active Cosmic Conga Line.', joinTrigger: 'spmt join', commands: [
+    { trigger: 'spmt <emoji>', description: 'Add up to five emoji to the shared parade.' },
+    { trigger: 'spmt dance', description: 'Make the entire parade do the seismic wiggle.' },
   ] },
   { gameId: 'emojirain', key: 'rain', aliases: ['emojirain'], joinDescription: 'Join Emoji Rain.', joinTrigger: 'spmt rain', commands: [] },
   { gameId: 'emojitower', key: 'tower', aliases: ['emojitower'], joinDescription: 'Join Emoji Tower.', joinTrigger: 'spmt tower', commands: [
