@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
   if (!channel || !username) return NextResponse.json({ handled: false });
 
   let command = parts[0].toLowerCase();
+  const directState = await readAppState();
 
   const paradeSnapshot = getDancingParadeSnapshot(directState, channel);
   if (paradeSnapshot.active) {
@@ -156,7 +157,6 @@ export async function POST(req: NextRequest) {
   // Player-facing Nebula Arcade commands are short ("spmt explode",
   // "spmt pet dog", "spmt dig B5"). Namespaced forms remain an internal
   // compatibility transport so old links and bot rewrites keep working.
-  const directState = await readAppState();
   const activeForDirectRouting = resolveChannelGameIds(directState, channel);
   const direct = resolveDirectGameCommand(parts, activeForDirectRouting);
   if (direct.recognized) {
