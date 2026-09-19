@@ -118,7 +118,6 @@ export async function POST(req: NextRequest) {
 
   const paradeSnapshot = getDancingParadeSnapshot(directState, channel);
   if (paradeSnapshot.active) {
-    const rawTail = parts.slice(1).join(' ');
     const emojiSource = command === 'join' || command === 'dance' || command === 'leave'
       ? ''
       : [parts[0], ...parts.slice(1)].join(' ');
@@ -129,7 +128,7 @@ export async function POST(req: NextRequest) {
         const twitch = await lookupTwitchUser(username).catch(() => null);
         avatarUrl = twitch?.profile_image_url || '';
       }
-      const paradeResult = await updateAppState((draft) => {
+      await updateAppState((draft) => {
         const participant = addDancingParadeParticipant(draft, {
           channel,
           userId,
