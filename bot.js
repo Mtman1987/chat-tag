@@ -2758,7 +2758,9 @@ console.log = (...args) => {
     }
 
     else if (cmd === 'pack' || cmd === 'quackpack') {
-      const streamweaverTenantId = String(isMirroredSharedMessage ? sourceRoomId : roomId || '').trim();
+      // StreamWeaver overlay sockets are tenant/login scoped, not Twitch numeric room-id scoped.
+      // channelName is already resolved back to the source broadcaster for mirrored shared-chat messages.
+      const streamweaverTenantId = String(channelName || '').trim().toLowerCase();
       const res = await apiCall('/api/quackverse/pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
