@@ -2050,6 +2050,14 @@ console.log = (...args) => {
       }
       if (gamesHubCommand?.handled) {
         if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);
+        if (gamesHubCommand.mosaicGenerationQueued) {
+          void apiCall('/api/game-hub/mosaic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: channelName }),
+            signal: AbortSignal.timeout(5 * 60 * 1000),
+          });
+        }
         return;
       }
     }

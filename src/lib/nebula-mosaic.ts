@@ -15,6 +15,12 @@ export const MOSAIC_IDLE_MS = 30 * 60_000;
 export const MOSAIC_OVERVIEW_MS = 15_000;
 export const MOSAIC_GENERATION_MAX_ATTEMPTS = 3;
 export const MOSAIC_GENERATION_RETRY_MS = 10_000;
+
+function isRecoverableExhaustedMosaicRequest(item: { status?: unknown; attempts?: unknown; recoveryVersion?: unknown }) {
+  return item.status === 'failed'
+    && Math.max(0, Number(item.attempts || 0)) >= MOSAIC_GENERATION_MAX_ATTEMPTS
+    && Math.max(0, Number(item.recoveryVersion || 0)) < 1;
+}
 export const MOSAIC_GENERATION_STALE_MS = 3 * 60_000;
 // Theme requests stay free while the SPMT XP economy and redemption rules are
 // being finalized. A positive deployment override can re-enable charging later.
@@ -49,6 +55,7 @@ export type MosaicThemeRequest = {
   attempts?: number;
   lastAttemptAt?: string;
   retryAt?: string;
+  recoveryVersion?: number;
 };
 
 export type NebulaMosaicArtwork = {
@@ -186,6 +193,18 @@ export function queueMosaicTheme(
 export function claimNextMosaicRequest(state: any, channelValue: unknown, now = Date.now()) {
   const mosaic = getMosaicChannelState(state, channelValue);
   if (mosaic.current && !['completed', 'archived'].includes(mosaic.current.status)) return null;
+  // Give an already-requested, exhausted artwork one recovery cycle after the
+  // production generator fix. Persist the marker so a real provider outage
+  // cannot create an infinite retry loop.
+  for (const item of mosaic.queue) {
+    if (!isRecoverableExhaustedMosaicRequest(item)) continue;
+    item.status = 'pending';
+    item.attempts = 0;
+    item.recoveryVersion = 1;
+    delete item.retryAt;
+    delete item.error;
+    break;
+  }
   const request = mosaic.queue.find((item) => {
     const attempts = Math.max(0, Number(item.attempts || 0));
     if (attempts >= MOSAIC_GENERATION_MAX_ATTEMPTS) return false;
@@ -435,7 +454,8 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     : { queue: [], saves: [] };
   const artwork = mosaic.current;
   const queueLength = mosaic.queue.filter((item) => item.status !== 'failed'
-    || Math.max(0, Number(item.attempts || 0)) < MOSAIC_GENERATION_MAX_ATTEMPTS).length;
+    || Math.max(0, Number(item.attempts || 0)) < MOSAIC_GENERATION_MAX_ATTEMPTS
+    || isRecoverableExhaustedMosaicRequest(item)).length;
   const latestRequest = mosaic.queue.at(-1);
   const generation = latestRequest ? {
     theme: latestRequest.theme,

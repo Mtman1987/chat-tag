@@ -42,6 +42,23 @@ test('Mosaic retries failed generation instead of silently dropping the theme', 
   assert.equal(claimNextMosaicRequest(draft, 'spacemountainlive', 10_003)?.attempts, 2);
 });
 
+test('Mosaic revives the already-requested artwork after the legacy unsupported size failure', () => {
+  const draft = state();
+  queueMosaicTheme(draft, {
+    channel: 'spacemountainlive', userId: '42', username: 'viewer', displayName: 'Viewer', theme: 'kitten', now: 1,
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const at = 2 + attempt * 10_001;
+    const request = claimNextMosaicRequest(draft, 'spacemountainlive', at)!;
+    failMosaicRequest(draft, 'spacemountainlive', request.id, 'SeaArt rejects resolution 1024x1536', at + 1);
+  }
+  assert.equal(mosaicPublicSnapshot(draft, 'spacemountainlive', 30_100).queueLength, 1);
+  const recovered = claimNextMosaicRequest(draft, 'spacemountainlive', 30_101)!;
+  assert.equal(recovered.theme, 'kitten');
+  assert.equal(recovered.attempts, 1);
+  assert.equal(recovered.recoveryVersion, 1);
+});
+
 function state() {
   return { gameSettings: { default: {} } } as any;
 }

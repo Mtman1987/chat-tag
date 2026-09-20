@@ -84,6 +84,10 @@ commandReplacement = commandReplacement
   .replace(
     '      if (gamesHubCommand?.handled) {',
     "      if (gamesHubCommand?.overlayEvent?.type) {\n        await sendRichOverlayEvent(channelName, gamesHubCommand.overlayEvent.type, gamesHubCommand.overlayEvent.message || '', gamesHubCommand.overlayEvent.payload || {});\n      }\n      if (gamesHubCommand?.handled) {",
+  )
+  .replace(
+    "        if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);\n        return;",
+    "        if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);\n        if (gamesHubCommand.mosaicGenerationQueued) {\n          void apiCall('/api/game-hub/mosaic', {\n            method: 'POST',\n            headers: { 'Content-Type': 'application/json' },\n            body: JSON.stringify({ channel: channelName }),\n            signal: AbortSignal.timeout(5 * 60 * 1000),\n          });\n        }\n        return;",
   );
 
 if (!source.includes('const legacyChatTagCommands = new Set(')) {

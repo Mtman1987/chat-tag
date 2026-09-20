@@ -83,6 +83,17 @@ test('activity stage reports active games and system surfaces use every availabl
   assert.match(prototype, /Array\.from\(\{ length: 25 \}/);
   assert.match(prototype, /repeat\(20,minmax\(0,1fr\)\)/);
   assert.match(prototype, /repeat\(25,minmax\(0,1fr\)\)/);
+  assert.match(prototype, /broadcastOnly \? 'grid w-full p-0'/);
+});
+
+test('Mosaic chat requests wake saved boards and start generation without the overlay', () => {
+  const command = readFileSync(new URL('../src/app/api/game-hub/command/route.ts', import.meta.url), 'utf8');
+  const bot = readFileSync(new URL('../bot.js', import.meta.url), 'utf8');
+  const mosaic = readFileSync(new URL('../src/lib/nebula-mosaic.ts', import.meta.url), 'utf8');
+  assert.match(command, /resumeMosaicIfNeeded\(draft, channel\)/);
+  assert.match(bot, /mosaicGenerationQueued[\s\S]*\/api\/game-hub\/mosaic/);
+  assert.match(bot, /AbortSignal\.timeout\(5 \* 60 \* 1000\)/);
+  assert.match(mosaic, /recoveryVersion/);
 });
 
 test('system games release their panel after thirty minutes without play', () => {

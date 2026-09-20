@@ -570,7 +570,7 @@ test('all chat games separate broadcast visuals from full popout controls', () =
   assert.match(prototype, /TreasureBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
   assert.match(prototype, /fetch\(`\/api\/game-hub\/mosaic\?channel=/);
   assert.doesNotMatch(prototype, /<button[\s\S]*PixelBoard/);
-  assert.match(prototype, /broadcastOnly \? 'p-0' : 'p-4'/);
+  assert.match(prototype, /broadcastOnly \? 'grid w-full p-0' : 'p-4'/);
   assert.match(bingo, /!broadcastOnly &&[\s\S]*24 shared phrases/);
   assert.match(bingo, /aria-label="Bingo grid"/);
   assert.match(frame, /embedded: '1'/);

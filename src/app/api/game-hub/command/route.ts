@@ -187,6 +187,9 @@ export async function POST(req: NextRequest) {
     try {
       const queued = await updateAppState((draft) => {
         setChannelGameRunning(draft, channel, 'pixelbattle', true);
+        // A chat request also wakes the autosaved board. Core Mosaic startup
+        // must not depend on opening the admin popout or re-toggling the game.
+        resumeMosaicIfNeeded(draft, channel);
         const result = queueMosaicTheme(draft, { channel, userId, username, displayName, theme, xpCost: MOSAIC_XP_COST });
         recordGameHubRuntimeAction(draft, {
           channel, gameId: 'pixelbattle', actorId: userId, username, displayName,

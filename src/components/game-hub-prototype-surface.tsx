@@ -342,5 +342,5 @@ export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly =
     return broadcastOnly ? null : <div className="grid min-h-36 place-items-center text-sm text-white/45">Live chat runtime connected.</div>;
   }, [broadcastOnly, channel, game.id, passive, recent]);
 
-  return <section className={`h-full min-h-0 overflow-hidden text-white ${broadcastOnly ? 'p-0' : 'p-4'}`}>{content}</section>;
+  return <section className={`h-full min-h-0 overflow-hidden text-white ${broadcastOnly ? 'grid w-full p-0' : 'p-4'}`}>{content}</section>;
 }
