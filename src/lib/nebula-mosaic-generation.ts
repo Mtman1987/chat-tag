@@ -8,8 +8,8 @@ const STREAMWEAVER_URL = String(
 const STREAMWEAVER_TENANT_ID = String(
   process.env.MOSAIC_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive',
 ).trim();
-const MOSAIC_PROVIDER = String(process.env.MOSAIC_IMAGE_PROVIDER || 'seaart').trim().toLowerCase();
-const MOSAIC_FALLBACK_PROVIDERS = String(process.env.MOSAIC_IMAGE_FALLBACK_PROVIDERS || 'eden,pollinations')
+const MOSAIC_PROVIDER = String(process.env.MOSAIC_IMAGE_PROVIDER || 'openai').trim().toLowerCase();
+const MOSAIC_FALLBACK_PROVIDERS = String(process.env.MOSAIC_IMAGE_FALLBACK_PROVIDERS || 'pollinations')
   .split(',')
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
@@ -55,6 +55,7 @@ async function requestImage(theme: string) {
         numImages: 1,
         providerOverride: provider,
         providerParams: {
+          quality: 'low',
           negativePrompt: 'text, letters, numbers, words, UI, controls, grid labels, multiple subjects, collage, photo, gradients, blur, watermark, logo',
         },
       }),

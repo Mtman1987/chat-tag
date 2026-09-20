@@ -19,7 +19,7 @@ test('Mosaic theme requests are free by default during testing', () => {
   assert.equal(MOSAIC_XP_COST, 0);
 });
 
-test('Mosaic requests a SeaArt-supported source size through the authenticated StreamWeaver bridge', () => {
+test('Mosaic requests a low-cost square source through the authenticated StreamWeaver bridge', () => {
   const source = fs.readFileSync('src/lib/nebula-mosaic-generation.ts', 'utf8');
   assert.match(source, /resolution: '1024x1024'/);
   assert.doesNotMatch(source, /resolution: '1024x1536'/);
