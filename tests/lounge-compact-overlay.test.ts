@@ -13,3 +13,10 @@ test('Lounge compact mode prioritizes names over broadcast emotes', () => {
   assert.match(source, /opacity: loungeCompact \? 1 : \(dimBar/);
   assert.match(source, /transform: loungeCompact \? 'translateY\(0\)'/);
 });
+
+test('Lounge announcements keep the blue card but hide its idle contents', () => {
+  const source = fs.readFileSync('src/app/overlay/[userId]/page.tsx', 'utf8');
+  assert.match(source, /compactAnnouncementActive = loungeCompact && Boolean\(broadcast\)/);
+  assert.match(source, /opacity: compactAnnouncementActive \? 0 : 1/);
+  assert.match(source, /background: data\.isFFA/);
+});
