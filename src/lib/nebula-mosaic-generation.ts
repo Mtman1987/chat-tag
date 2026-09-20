@@ -9,6 +9,10 @@ const STREAMWEAVER_TENANT_ID = String(
   process.env.MOSAIC_STREAMWEAVER_TENANT_ID || process.env.STREAMWEAVER_TENANT_ID || 'spacemountainlive',
 ).trim();
 const MOSAIC_PROVIDER = String(process.env.MOSAIC_IMAGE_PROVIDER || 'seaart').trim().toLowerCase();
+const MOSAIC_FALLBACK_PROVIDERS = String(process.env.MOSAIC_IMAGE_FALLBACK_PROVIDERS || 'eden,pollinations')
+  .split(',')
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean);
 
 function promptForTheme(theme: string) {
   return [
@@ -28,45 +32,55 @@ function normalizeStreamWeaverPayload(data: any) {
 async function requestImage(theme: string) {
   if (!STREAMWEAVER_TENANT_ID) throw new Error('Nebula Mosaic image generation is not configured.');
   const serviceSecret = getStreamweaverSecret();
-  const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-mountainview-bridge': '1',
-      Authorization: `Bearer ${serviceSecret}`,
-      'x-bot-secret': serviceSecret,
-    },
-    body: JSON.stringify({
-      prompt: promptForTheme(theme),
-      scope: 'public',
-      tenantId: STREAMWEAVER_TENANT_ID,
-      // SeaArt's production CLI rejects 1024x1536. Generate at its supported
-      // square size, then let Sharp crop the centered art to the 40x50 board.
-      resolution: '1024x1024',
-      numImages: 1,
-      providerOverride: MOSAIC_PROVIDER,
-      providerParams: {
-        negativePrompt: 'text, letters, numbers, words, UI, controls, grid labels, multiple subjects, collage, photo, gradients, blur, watermark, logo',
+  const providers = [MOSAIC_PROVIDER, ...MOSAIC_FALLBACK_PROVIDERS]
+    .filter((provider, index, all) => provider && all.indexOf(provider) === index);
+  const failures: string[] = [];
+
+  for (const provider of providers) {
+    const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-mountainview-bridge': '1',
+        Authorization: `Bearer ${serviceSecret}`,
+        'x-bot-secret': serviceSecret,
       },
-    }),
-  });
-  const raw = await response.json().catch(() => null);
-  const data = normalizeStreamWeaverPayload(raw);
-  if (!response.ok || raw?.ok === false) {
-    throw new Error(raw?.error || data?.error || raw?.message || data?.message || `Mosaic image generation failed (${response.status}).`);
+      body: JSON.stringify({
+        prompt: promptForTheme(theme),
+        scope: 'public',
+        tenantId: STREAMWEAVER_TENANT_ID,
+        // All configured providers accept this square source. Sharp crops the
+        // centered artwork to the final 40-by-50 board after download.
+        resolution: '1024x1024',
+        numImages: 1,
+        providerOverride: provider,
+        providerParams: {
+          negativePrompt: 'text, letters, numbers, words, UI, controls, grid labels, multiple subjects, collage, photo, gradients, blur, watermark, logo',
+        },
+      }),
+    });
+    const raw = await response.json().catch(() => null);
+    const data = normalizeStreamWeaverPayload(raw);
+    const imageUrl = [
+      ...(Array.isArray(data?.persistedImageUrls) ? data.persistedImageUrls : []),
+      ...(Array.isArray(data?.images) ? data.images : []),
+      data?.persistedImageUrl,
+      data?.image,
+      data?.imageResourceUrl,
+    ].map((value) => String(value || '').trim()).find(Boolean);
+    if (response.ok && raw?.ok !== false && imageUrl) {
+      return {
+        imageUrl: new URL(imageUrl, STREAMWEAVER_URL).toString(),
+        provider: String(data?.provider || provider || 'streamweaver'),
+      };
+    }
+    const reason = raw?.error || data?.error || raw?.message || data?.message
+      || (imageUrl ? `invalid response (${response.status})` : `no artwork (${response.status})`);
+    failures.push(`${provider}: ${String(reason).slice(0, 300)}`);
+    console.warn(`[Nebula Mosaic] ${provider} generation failed; trying the next provider.`, reason);
   }
-  const imageUrl = [
-    ...(Array.isArray(data?.persistedImageUrls) ? data.persistedImageUrls : []),
-    ...(Array.isArray(data?.images) ? data.images : []),
-    data?.persistedImageUrl,
-    data?.image,
-    data?.imageResourceUrl,
-  ].map((value) => String(value || '').trim()).find(Boolean);
-  if (!imageUrl) throw new Error('Image generation returned no artwork.');
-  return {
-    imageUrl: new URL(imageUrl, STREAMWEAVER_URL).toString(),
-    provider: String(data?.provider || MOSAIC_PROVIDER || 'streamweaver'),
-  };
+
+  throw new Error(`Mosaic image generation failed across all providers: ${failures.join(' | ')}`);
 }
 
 function hexRgb(hex: string) {
