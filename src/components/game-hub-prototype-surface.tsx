@@ -111,7 +111,7 @@ function PixelBoard({ events, gridOnly = false }: { events: GameHubChatEvent[]; 
     }
     return next;
   }, [events]);
-  return <div className={gridOnly ? 'h-full w-full' : ''}><div aria-label="Pixel Battle grid" className={`grid gap-px overflow-hidden bg-white/10 p-px ${gridOnly ? 'h-full w-full' : 'aspect-[4/5] w-full max-w-[420px]'}`} style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))', gridTemplateRows: 'repeat(25, minmax(0, 1fr))' }}>{cells.map((color, index) => <span key={index} className="min-h-0 min-w-0 bg-slate-950/70" style={color ? { background: COLORS[color] } : undefined} />)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 20×25 board</div>}</div>;
+  return <div className={gridOnly ? 'h-full w-full' : ''}><div aria-label="Pixel Battle grid" className={`grid gap-px overflow-hidden bg-slate-700 p-px ${gridOnly ? 'h-full w-full' : 'aspect-[4/5] w-full max-w-[420px]'}`} style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))', gridTemplateRows: 'repeat(25, minmax(0, 1fr))' }}>{cells.map((color, index) => <span key={index} className="min-h-0 min-w-0 bg-slate-950" style={color ? { background: COLORS[color] } : undefined} />)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 20×25 board</div>}</div>;
 }
 
 function TreasureBoard({ events, channel, gridOnly = false }: { events: GameHubChatEvent[]; channel: string; gridOnly?: boolean }) {
