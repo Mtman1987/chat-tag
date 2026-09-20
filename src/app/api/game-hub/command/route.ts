@@ -14,6 +14,7 @@ import {
   leaveGameHubGame,
   normalizeGameHubChannel,
   normalizeGameHubPlayerId,
+  purchasePhraseGuessHint,
   resolveChannelGameIds,
   setChannelGameRunning,
 } from '@/lib/game-hub-state';
@@ -68,6 +69,7 @@ function knownAction(gameId: string, args: string[]): boolean {
   if (gameId === 'dancingparade') return first === 'dance' && args.length === 1;
   if (gameId === 'emojitower') return first === 'drop' && args.length === 1;
   if (gameId === 'petrace') return /^(dog|cat|rabbit|turtle|hamster)$/.test(first) && args.length === 1;
+  if (gameId === 'phraseguess') return first === 'hint' && args.length === 1;
   if (gameId === 'pixelbattle') return /^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)$/.test(first) && /^\d{1,2}$/.test(args[1] || '') && /^\d{1,2}$/.test(args[2] || '') && args.length === 3;
   if (gameId === 'treasurehunt') return /^[a-h][1-8]$/i.test(first) && args.length === 1;
   return false;
@@ -280,7 +282,15 @@ export async function POST(req: NextRequest) {
     const state = await readAppState();
     const leaders = gamesPointsStandings(state).slice(0, 5);
     if (!leaders.length) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} No Games Points have been recorded yet.` });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} No Games Points have been recorded yet.`,
+        overlayEvent: {
+          type: 'leaderboard-card',
+          message: 'Nebula Arcade leaderboard',
+          payload: { rows: [{ rank: '-', username: 'No ranked players yet', score: 0 }] },
+        },
+      });
     }
     const segments = leaders.map((entry) => `#${entry.rank} ${entry.displayName || entry.username} ${entry.balance.toLocaleString()}`);
     return NextResponse.json({
@@ -290,6 +300,17 @@ export async function POST(req: NextRequest) {
         segments,
         pointsLeaderboardUrl(req),
       ),
+      overlayEvent: {
+        type: 'leaderboard-card',
+        message: 'Nebula Arcade leaderboard',
+        payload: {
+          rows: leaders.map((entry) => ({
+            rank: entry.rank,
+            username: entry.displayName || entry.username,
+            score: entry.balance,
+          })),
+        },
+      },
     });
   }
 
@@ -480,6 +501,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ handled: true, reply: `@${displayName} your personal Bingo center is set to “${phrase.slice(0, 120)}”.` });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Your Bingo center phrase could not be saved.'}` });
+    }
+  }
+
+  if (game.id === 'phraseguess' && action === 'hint') {
+    try {
+      const purchase = await updateAppState((draft) => {
+        joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
+        const result = purchasePhraseGuessHint(draft, { channel, userId, username, displayName });
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: game.id, actorId: userId, username, displayName,
+          action: 'hint', args: [], message: String(body.message || ''),
+        });
+        return result;
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} unlocked Phrase Guess hint ${purchase.tier}/3 for ${purchase.cost} Games Points · ${purchase.balance} remaining.`,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That hint could not be unlocked.'}` });
     }
   }
 

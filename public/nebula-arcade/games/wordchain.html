@@ -170,6 +170,27 @@
             border-radius: 10px;
             backdrop-filter: blur(10px);
         }
+
+        body.embedded {
+            background: transparent;
+            overflow: hidden;
+        }
+
+        body.embedded #timer,
+        body.embedded #theme-indicator,
+        body.embedded #chain-container,
+        body.embedded #scoreboard,
+        body.embedded #instructions {
+            display: none;
+        }
+
+        body.embedded #word-display {
+            top: 50%;
+            width: 94vw;
+            font-size: clamp(64px, 13vw, 180px);
+            letter-spacing: .08em;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -202,7 +223,10 @@
     let usedWords = new Set(['HELLO']);
     let scores = new Map();
     let roundScores = new Map();
-    let timeLeft = 60;
+    const ROUND_SECONDS = 6 * 60;
+    const ROUNDS_PER_CYCLE = 5;
+    let timeLeft = ROUND_SECONDS;
+    let roundNumber = 0;
     let gameActive = true;
     let currentTheme = 'General';
     let comboMultiplier = 1;
@@ -210,17 +234,23 @@
     
     // Themes with starting words
     const themes = {
-        'General': ['HELLO', 'START', 'GAME', 'PLAY'],
-        'Animals': ['TIGER', 'ELEPHANT', 'MONKEY', 'ZEBRA'],
-        'Food': ['PIZZA', 'BURGER', 'SALAD', 'TACO'],
-        'Gaming': ['MARIO', 'ZELDA', 'SONIC', 'PACMAN'],
-        'Nature': ['TREE', 'OCEAN', 'MOUNTAIN', 'RIVER']
+        'Animals': ['TIGER', 'ELEPHANT', 'MONKEY', 'ZEBRA', 'ANTELOPE', 'EAGLE', 'EMU', 'OTTER', 'RABBIT', 'TURTLE', 'ELK', 'KANGAROO', 'OWL', 'LEMUR', 'RHINO', 'OCTOPUS', 'SNAKE', 'ECHIDNA', 'ALLIGATOR', 'RACCOON', 'NEWT', 'TOUCAN'],
+        'Food': ['PIZZA', 'BURGER', 'SALAD', 'TACO', 'ORANGE', 'EGG', 'GRAPE', 'ENCHILADA', 'APPLE', 'EDAMAME', 'ECLAIR', 'RICE', 'EMPANADA', 'AVOCADO', 'OLIVE', 'NOODLE', 'LASAGNA', 'ASPARAGUS', 'SOUP', 'POTATO'],
+        'Gaming': ['MARIO', 'ZELDA', 'SONIC', 'PACMAN', 'ARCADE', 'ESPORT', 'TETRIS', 'SIMULATOR', 'RACING', 'GAME', 'EMOTE', 'ENGINE', 'NPC', 'COMBO', 'ONLINE', 'ENEMY', 'YOSHI', 'ITEM', 'MULTIPLAYER', 'RESPAWN'],
+        'Nature': ['TREE', 'OCEAN', 'MOUNTAIN', 'RIVER', 'RAINFOREST', 'TORNADO', 'ORCHID', 'DESERT', 'THUNDER', 'REEF', 'FLOWER', 'ROCK', 'KOI', 'ISLAND', 'DAISY', 'YARROW', 'WILLOW', 'WATERFALL', 'LAKE', 'EARTH']
     };
     
     // URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session') || 'test';
     const password = urlParams.get('password') || 'false';
+    const embedded = urlParams.has('embedded');
+    if (embedded) document.body.classList.add('embedded');
+    const participants = new Set();
+    const verdictCacheKey = 'nebulaWordChainVerdicts';
+    let verdictCache = {};
+    const pendingNeutralWords = new Map();
+    try { verdictCache = JSON.parse(localStorage.getItem(verdictCacheKey) || '{}') || {}; } catch (_) {}
 
     function escapeHtml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -321,6 +351,37 @@
             sendResponse(`@${username}, '${word}' was already used!`);
             return;
         }
+
+        const verdictKey = `${currentTheme}:${word}`;
+        const themeWords = new Set(themes[currentTheme] || []);
+        if (!themeWords.has(word) && verdictCache[verdictKey] !== true) {
+            if (verdictCache[verdictKey] === false) {
+                sendResponse(`@${username}, '${word}' does not fit the ${currentTheme} theme.`);
+                return;
+            }
+            if (pendingNeutralWords.has(verdictKey)) return;
+            const pending = { username, word, expectedWord: currentWord };
+            pendingNeutralWords.set(verdictKey, pending);
+            window.parent.postMessage({
+                overlay: 'wordchain',
+                type: 'neutral-word-vote',
+                word,
+                theme: currentTheme,
+                username,
+                closesAt: Date.now() + 20_000
+            }, '*');
+            sendResponse(`@${username}, '${word}' is waiting for a quick ${currentTheme} theme vote in Nebula.`);
+            setTimeout(() => {
+                if (!pendingNeutralWords.has(verdictKey)) return;
+                pendingNeutralWords.delete(verdictKey);
+                // A missing popout vote must not deadlock the live game. Treat
+                // an unchallenged neutral word as accepted and cache it.
+                verdictCache[verdictKey] = true;
+                try { localStorage.setItem(verdictCacheKey, JSON.stringify(verdictCache)); } catch (_) {}
+                if (currentWord === pending.expectedWord) processWord(pending.username, pending.word);
+            }, 20_000);
+            return;
+        }
         
         // Valid word!
         currentWord = word;
@@ -352,12 +413,6 @@
         
         lastContributor = username;
         
-        // Add bonus time for good words
-        if (word.length >= 7) {
-            timeLeft += 5;
-            document.getElementById('timer').textContent = `Time: ${timeLeft}s`;
-            sendResponse(`⏰ +5 seconds! Nice long word, ${username}!`);
-        }
     }
     
     function showCombo(multiplier) {
@@ -373,6 +428,7 @@
     }
     
     function startNewRound() {
+        roundNumber = (roundNumber % ROUNDS_PER_CYCLE) + 1;
         // Pick random theme
         const themeNames = Object.keys(themes);
         currentTheme = themeNames[Math.floor(Math.random() * themeNames.length)];
@@ -386,7 +442,7 @@
         wordChain = [currentWord];
         usedWords = new Set([currentWord]);
         roundScores = new Map();
-        timeLeft = 60;
+        timeLeft = ROUND_SECONDS;
         gameActive = true;
         comboMultiplier = 1;
         lastContributor = null;
@@ -398,7 +454,7 @@
         document.getElementById('word-display').textContent = currentWord;
         addWordToChain(currentWord, 'System');
         
-        sendResponse(`🎮 New round! Theme: ${currentTheme} - Starting word: ${currentWord}`);
+        sendResponse(`🎮 Word Chain round ${roundNumber}/${ROUNDS_PER_CYCLE}! Theme: ${currentTheme} - Starting word: ${currentWord}`);
     }
     
     function updateTimer() {
@@ -463,14 +519,31 @@
             message = stripHtml(message);
         }
         message = message.trim();
+        const username = stripHtml(data.chatname);
+        const command = message.toLowerCase().match(/^!?@?spmt(?:\s+|$)(.*)$/i)?.[1]?.trim() || '';
+        if (/^(chain|wordchain)(?:\s+join)?$/.test(command)) {
+            participants.add(username.toLowerCase());
+            sendResponse(`@${username} joined Word Chain. Type one themed word at a time.`);
+            return;
+        }
+        if (/^(?:chain|wordchain)\s+leave$/.test(command)) {
+            participants.delete(username.toLowerCase());
+            sendResponse(`@${username} left Word Chain. Your ranking is preserved.`);
+            return;
+        }
+        if (!participants.has(username.toLowerCase())) return;
 
         // Check if it's a plausible word attempt (starts with the required letter)
         if (gameActive && message.length >= 3 && /^[a-zA-Z]+$/.test(message) &&
             message[0].toUpperCase() === currentWord[currentWord.length - 1]) {
-            processWord(stripHtml(data.chatname), message);
+            processWord(username, message);
         }
     }
     
+    // Begin immediately. Visibility rotates independently, so the game keeps
+    // its round while another surface is on screen.
+    startNewRound();
+
     // Timer
     setInterval(updateTimer, 1000);
     
@@ -491,6 +564,19 @@
         if (e.data && typeof e.data === "object" && e.data.dataReceived && typeof e.data.dataReceived === "object") {
             if ("overlayNinja" in e.data.dataReceived) {
                 processData(e.data.dataReceived.overlayNinja);
+            }
+        }
+        if (e.source === window.parent && e.data?.type === 'nebula-word-verdict') {
+            const theme = String(e.data.theme || '').trim();
+            const word = String(e.data.word || '').trim().toUpperCase();
+            if (theme && word && Object.prototype.hasOwnProperty.call(themes, theme)) {
+                verdictCache[`${theme}:${word}`] = Boolean(e.data.accepted);
+                try { localStorage.setItem(verdictCacheKey, JSON.stringify(verdictCache)); } catch (_) {}
+                const pending = pendingNeutralWords.get(`${theme}:${word}`);
+                pendingNeutralWords.delete(`${theme}:${word}`);
+                if (pending && e.data.accepted && currentWord === pending.expectedWord) {
+                    processWord(pending.username, pending.word);
+                }
             }
         }
     });
@@ -539,6 +625,8 @@
     // Demo mode
     if (urlParams.has('demo')) {
         setTimeout(() => {
+            participants.add('demoplayer1');
+            participants.add('demoplayer2');
             processWord('DemoPlayer1', 'ORANGE');
             setTimeout(() => {
                 processWord('DemoPlayer2', 'ELEPHANT');

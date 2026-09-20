@@ -15,11 +15,11 @@ export async function GET(
   if (!id) return NextResponse.json({ error: 'Overlay id is required.' }, { status: 400 });
 
   const state = await readAppState();
-  const systemProfiles: Record<string, { name: string; gameIds: string[]; layout: 'focus' }> = {
+  const systemProfiles: Record<string, { name: string; gameIds: string[]; layout: 'focus' | 'rotation' }> = {
     'system-spacemountainlive-main': {
       name: 'SpaceMountainLive Nebula Stage',
-      gameIds: ['bingo', 'chickenroyale', 'phraseguess', 'wordchain'],
-      layout: 'focus',
+      gameIds: ['wordchain', 'phraseguess'],
+      layout: 'rotation',
     },
     'system-spacemountainlive-rain': {
       name: 'SpaceMountainLive Emoji Rain',

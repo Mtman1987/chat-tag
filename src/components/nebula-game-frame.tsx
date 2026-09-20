@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameHubGame } from '@/lib/game-hub-registry';
 import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
+import { nebulaPrototypeMessage } from '@/lib/nebula-game-message';
 
 function prototypePath(game: GameHubGame, demo: boolean, channel: string) {
   const filename = String(game.sourcePrototype || '').split('/').pop();
@@ -11,30 +12,6 @@ function prototypePath(game: GameHubGame, demo: boolean, channel: string) {
   if (channel) query.set('channel', channel);
   if (demo) query.set('demo', '1');
   return `/nebula-arcade/games/${encodeURIComponent(filename)}?${query.toString()}`;
-}
-
-function originalGameMessage(gameId: string, messageValue: string) {
-  const message = String(messageValue || '').trim();
-  const command = message.match(/^!?@?spmt(?:\s+|$)(.*)$/i)?.[1]?.trim() || message;
-  const parts = command.toLowerCase().split(/\s+/).filter(Boolean);
-
-  if (gameId === 'chaosmode' && /^(explode|glitch|portal|shake)$/.test(parts[0] || '')) return `!${parts[0]}`;
-  if ((gameId === 'chatwars' || gameId === 'colorwars') && /^(red|blue|green|yellow)$/.test(parts[0] || '')) return `!${parts[0]}`;
-  if (gameId === 'chickenroyale') {
-    if (parts[0] === 'launch' || parts[0] === 'start') return '!start';
-    if (parts[0] === 'join' || parts[0] === 'chicken' || parts[0] === 'royale' || parts[0] === 'hatch') return '!join';
-  }
-  if (gameId === 'dancingparade' && /^(join|dance|leave|parade)$/.test(parts[0] || '')) {
-    return parts[0] === 'parade' ? '!join' : `!${parts[0]}`;
-  }
-  if (gameId === 'emojitower' && (parts[0] === 'drop' || parts[0] === 'tower')) return parts[0] === 'drop' ? '!drop' : message;
-  if (gameId === 'petrace' && (parts[0] === 'pet' || parts[0] === 'race' || parts[0] === 'join')) {
-    return `!join${parts[1] ? ` ${parts[1]}` : ''}`;
-  }
-  if (gameId === 'pixelbattle' && parts[0] === 'paint') return parts.join(' ');
-  if (gameId === 'treasurehunt' && parts[0] === 'dig') return `!dig${parts[1] ? ` ${parts[1]}` : ''}`;
-  if (gameId === 'emojitower' && parts[0] === 'drop') return '!drop';
-  return message;
 }
 
 export function NebulaGameFrame({
@@ -69,7 +46,7 @@ export function NebulaGameFrame({
         dataReceived: {
           overlayNinja: {
             chatname: event.displayName || event.username,
-            chatmessage: originalGameMessage(game.id, event.message),
+            chatmessage: nebulaPrototypeMessage(game.id, event.message),
             nameColor: event.color || '#67e8f9',
             chatbadges: event.badges || {},
             type: 'twitch',
