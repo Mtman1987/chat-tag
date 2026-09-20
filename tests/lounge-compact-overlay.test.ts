@@ -11,10 +11,13 @@ test('Lounge compact mode gives names and large stats dedicated halves', () => {
   assert.match(source, /top: loungeCompact \? '3%'/);
   assert.match(source, /right: loungeCompact \? '4%'/);
   assert.match(source, /<FitText min=\{13\} max=\{36\}>/);
-  assert.match(source, /compact \? '20px'/);
-  assert.match(source, /compact \? '9px'/);
-  assert.match(source, /loungeCompact \? '1 1 57%'/);
-  assert.match(source, /loungeCompact \? '0 0 43%'/);
+  assert.match(source, /compact \? '24px'/);
+  assert.match(source, /compact \? '10px'/);
+  assert.match(source, /loungeCompact \? '1 1 55%'/);
+  assert.match(source, /loungeCompact \? '0 0 45%'/);
+  assert.match(source, /align="left" compact=\{loungeCompact\}/);
+  assert.match(source, /align="center" compact=\{loungeCompact\}/);
+  assert.match(source, /align="right" compact=\{loungeCompact\}/);
   assert.match(source, /opacity: loungeCompact \? 1 : \(dimBar/);
   assert.match(source, /transform: loungeCompact \? 'translateY\(0\)'/);
 });

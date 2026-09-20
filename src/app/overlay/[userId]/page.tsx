@@ -97,17 +97,20 @@ function FitText({ children, min = 11, max = 36 }: { children: string; min?: num
   return <div ref={ref} title={children} style={{ width: '100%', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{children}</div>;
 }
 
-function StackStat({ value, label, align = 'right', compact = false }: { value: string | number; label: string; align?: 'left' | 'right'; compact?: boolean }) {
+function StackStat({ value, label, align = 'right', compact = false }: { value: string | number; label: string; align?: 'left' | 'center' | 'right'; compact?: boolean }) {
   return (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      alignItems: align === 'right' ? 'flex-end' : 'flex-start',
+      alignItems: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
+      justifyContent: 'center',
+      width: '100%',
+      height: '100%',
       lineHeight: 1,
       minWidth: 0,
     }}>
-      <span style={{ fontSize: compact ? '20px' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
-      <small style={{ fontSize: compact ? '9px' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.04em', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
+      <span style={{ fontSize: compact ? '24px' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
+      <small style={{ fontSize: compact ? '10px' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
     </div>
   );
 }
@@ -740,7 +743,7 @@ export default function OverlayPage() {
       }}>
         {/* IT / FFA Status */}
         <div style={{
-          padding: loungeCompact ? '0.7vh 1.6vw' : '2.2vh 2.6vw',
+          padding: loungeCompact ? '0.5vh 0.8vw' : '2.2vh 2.6vw',
           position: 'relative',
           display: 'flex',
           flexDirection: loungeCompact ? 'column' : 'row',
@@ -766,7 +769,7 @@ export default function OverlayPage() {
             display: 'flex',
             width: loungeCompact ? '100%' : undefined,
             minHeight: 0,
-            flex: loungeCompact ? '1 1 57%' : '1 1 auto',
+            flex: loungeCompact ? '1 1 55%' : '1 1 auto',
             flexDirection: 'column',
             justifyContent: 'center',
             overflow: 'hidden',
@@ -811,22 +814,22 @@ export default function OverlayPage() {
           <div style={{
             width: loungeCompact ? '100%' : undefined,
             marginLeft: loungeCompact ? 0 : 'auto',
-            flex: loungeCompact ? '0 0 43%' : '0 0 auto',
+            flex: loungeCompact ? '0 0 45%' : '0 0 auto',
             display: 'grid',
             gridTemplateColumns: loungeCompact ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, minmax(0, auto))',
             alignItems: 'center',
-            columnGap: loungeCompact ? '2vw' : '1.05vw',
+            columnGap: loungeCompact ? 0 : '1.05vw',
             rowGap: '0.3vh',
-            padding: loungeCompact ? '0.4vh 1.1vw' : '0.95vh 1.1vw 0.85vh',
+            padding: loungeCompact ? '0.2vh 0.7vw' : '0.95vh 1.1vw 0.85vh',
             background: 'linear-gradient(180deg, rgba(7, 16, 30, 0.72), rgba(6, 12, 24, 0.82))',
             border: '1px solid rgba(255,255,255,0.14)',
             borderRadius: loungeCompact ? '1.2vw' : '0.6vw',
             boxShadow: '0 0.4vh 1.4vh rgba(0,0,0,0.35)',
             opacity: compactAnnouncementActive ? 0 : 1,
           }}>
-            <StackStat value={data.liveCount || 0} label="live" compact={loungeCompact} />
-            <StackStat value={data.isFFA ? 'FFA' : `${elapsed}m`} label={data.isFFA ? 'mode' : 'it time'} compact={loungeCompact} />
-            <StackStat value={data.playerCount} label="players" compact={loungeCompact} />
+            <StackStat value={data.liveCount || 0} label="live" align="left" compact={loungeCompact} />
+            <StackStat value={data.isFFA ? 'FFA' : `${elapsed}m`} label={data.isFFA ? 'mode' : 'it time'} align="center" compact={loungeCompact} />
+            <StackStat value={data.playerCount} label="players" align="right" compact={loungeCompact} />
           </div>
         </div>
 
