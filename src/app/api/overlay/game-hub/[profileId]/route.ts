@@ -21,6 +21,11 @@ export async function GET(
       gameIds: ['wordchain', 'phraseguess'],
       layout: 'rotation',
     },
+    'system-spacemountainlive-activity': {
+      name: 'SpaceMountainLive Activity Games',
+      gameIds: ['chatwars', 'colorwars', 'memorylane', 'pixelbattle', 'treasurehunt', 'bingo'],
+      layout: 'rotation',
+    },
     'system-spacemountainlive-rain': {
       name: 'SpaceMountainLive Emoji Rain',
       gameIds: ['emojirain'],

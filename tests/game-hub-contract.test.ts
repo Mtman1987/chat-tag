@@ -238,6 +238,19 @@ test('overlay profiles default to one all-game rotating Nebula surface and remai
   assert.deepEqual(cloned.gameIds, ['wordstorm']);
 });
 
+test('SpaceMountain Lounge splits large word stages from compact activity games', () => {
+  const route = read('src/app/api/overlay/game-hub/[profileId]/route.ts');
+  assert.match(route, /'system-spacemountainlive-main'[\s\S]*gameIds: \['wordchain', 'phraseguess'\][\s\S]*layout: 'rotation'/);
+  assert.match(route, /'system-spacemountainlive-activity'/);
+  for (const gameId of ['chatwars', 'colorwars', 'memorylane', 'pixelbattle', 'treasurehunt', 'bingo']) {
+    assert.match(route, new RegExp(`['"]${gameId}['"]`));
+  }
+  for (const disabledGameId of ['chaosmode', 'chatgarden', 'chickenroyale', 'colorsymphony', 'emojitower', 'petrace', 'rhythmpulse', 'wordstorm']) {
+    const systemProfile = route.slice(route.indexOf("'system-spacemountainlive-main'"), route.indexOf("'system-spacemountainlive-rain'"));
+    assert.doesNotMatch(systemProfile, new RegExp(`['"]${disabledGameId}['"]`));
+  }
+});
+
 test('bot image patches resolved chat, canonical Games Hub commands and Chat Tag compatibility rewrite', () => {
   const patcher = read('scripts/patch-game-hub-bot.mjs');
   const dockerfile = read('Dockerfile.bot');
