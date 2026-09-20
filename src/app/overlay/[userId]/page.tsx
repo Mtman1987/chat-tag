@@ -70,7 +70,7 @@ function StatItem({ value, label, color }: { value: string | number; label: stri
   );
 }
 
-function StackStat({ value, label, align = 'right' }: { value: string | number; label: string; align?: 'left' | 'right' }) {
+function StackStat({ value, label, align = 'right', compact = false }: { value: string | number; label: string; align?: 'left' | 'right'; compact?: boolean }) {
   return (
     <div style={{
       display: 'flex',
@@ -79,8 +79,8 @@ function StackStat({ value, label, align = 'right' }: { value: string | number; 
       lineHeight: 1,
       minWidth: 0,
     }}>
-      <span style={{ fontSize: 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
-      <small style={{ fontSize: 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.04em', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
+      <span style={{ fontSize: compact ? '11px' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
+      <small style={{ fontSize: compact ? '6px' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.04em', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
     </div>
   );
 }
@@ -95,6 +95,7 @@ export default function OverlayPage() {
   const hudOffMs = Math.max(0, parseInt(searchParams.get('hudOff') || '120', 10) || 0) * 1000;
   const idleBarOpacity = Math.min(1, Math.max(0.2, Number(searchParams.get('idleOpacity') || '1')));
   const announcementBarOpacity = Math.min(1, Math.max(0.05, Number(searchParams.get('announcementOpacity') || '0.12')));
+  const loungeCompact = searchParams.get('compact') === 'lounge';
 
   // Keep the status bar mounted while the polling endpoint is starting or
   // briefly unavailable. Announcements still dim this bar through dimBar;
@@ -664,12 +665,15 @@ export default function OverlayPage() {
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          zIndex: 50, padding: '3%', animation: 'broadcastIn 0.3s ease-out',
+          zIndex: 50, padding: loungeCompact ? '4% 5%' : '3%', animation: 'broadcastIn 0.3s ease-out',
         }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: `radial-gradient(ellipse at center, ${broadcast.glow}22 0%, transparent 70%)`, pointerEvents: 'none' }} />
           <div style={{
-            fontSize: broadcast.type === 'history' ? 'min(18vw,18vh)' : 'min(21.6vw,21.6vh)',
-            marginBottom: '1vh',
+            fontSize: loungeCompact ? 'min(9vw,18vh)' : (broadcast.type === 'history' ? 'min(18vw,18vh)' : 'min(21.6vw,21.6vh)'),
+            marginBottom: loungeCompact ? 0 : '1vh',
+            position: loungeCompact ? 'absolute' : 'static',
+            top: loungeCompact ? '3%' : undefined,
+            right: loungeCompact ? '4%' : undefined,
             filter: `drop-shadow(0 0 3.6vw ${broadcast.glow})`,
             animation: broadcast.type === 'ffa' ? 'pulse 0.6s ease-in-out infinite alternate' : 'iconBounce 0.4s ease-out',
           }}>
@@ -677,8 +681,8 @@ export default function OverlayPage() {
           </div>
           {broadcast.lines.map((line, i) => (
             <div key={i} style={{
-              fontSize: broadcast.type === 'history' ? 'min(7.2vw,8.4vh)' : (i === 0 ? 'min(9.6vw,10.8vh)' : 'min(7.2vw,8.4vh)'),
-              fontWeight: i === 0 ? 900 : 700,
+              fontSize: loungeCompact ? 'min(9vw,14vh)' : (broadcast.type === 'history' ? 'min(7.2vw,8.4vh)' : (i === 0 ? 'min(9.6vw,10.8vh)' : 'min(7.2vw,8.4vh)')),
+              fontWeight: loungeCompact || i === 0 ? 900 : 700,
               textAlign: broadcast.type === 'history' ? 'left' : 'center',
               textShadow: `0 0 4.8vw ${broadcast.glow}, 0 0.4vh 1.2vh rgba(0,0,0,0.9)`,
               marginBottom: '0.3vh', width: '100%', wordWrap: 'break-word' as const, lineHeight: 1.1,
@@ -701,19 +705,22 @@ export default function OverlayPage() {
         opacity: dimBar ? announcementBarOpacity : idleBarOpacity,
         transform: dimBar ? 'translateY(5%)' : 'translateY(0)',
         zIndex: 20, display: 'flex', flexDirection: 'column',
+        height: loungeCompact ? '100%' : undefined,
+        justifyContent: loungeCompact ? 'center' : undefined,
         paddingBottom: 'max(1.25vh, env(safe-area-inset-bottom))',
         boxSizing: 'border-box',
       }}>
         {/* IT / FFA Status */}
         <div style={{
-          padding: '2.2vh 2.6vw', display: 'flex', alignItems: 'center', gap: '1.35vw',
+          padding: loungeCompact ? '1vh 1.6vw' : '2.2vh 2.6vw', display: 'flex', alignItems: 'center', gap: loungeCompact ? '1vw' : '1.35vw',
+          flex: loungeCompact ? '1 1 auto' : undefined,
           borderTop: `0.8vh solid ${data.isFFA ? '#ff4500' : '#00d9ff'}`,
           background: data.isFFA
             ? 'linear-gradient(180deg, rgba(255, 69, 0, 0.75), rgba(255, 100, 0, 0.75))'
             : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
           boxSizing: 'border-box',
         }}>
-          <span style={{ fontSize: 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
+          <span style={{ fontSize: loungeCompact ? 'min(8vw,18vh)' : 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
           <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0 }}>
             {data.isFFA ? (
               <>
@@ -724,7 +731,7 @@ export default function OverlayPage() {
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>IT</div>
                 <div style={{
-                  fontSize: 'min(7.4vw, 7.8vh)',
+                  fontSize: loungeCompact ? 'min(11vw,18vh)' : 'min(7.4vw, 7.8vh)',
                   fontWeight: 900,
                   lineHeight: 0.95,
                   whiteSpace: 'nowrap',
@@ -749,9 +756,9 @@ export default function OverlayPage() {
             borderRadius: '0.6vw',
             boxShadow: '0 0.4vh 1.4vh rgba(0,0,0,0.35)',
           }}>
-            <StackStat value={data.liveCount || 0} label="live" />
-            <StackStat value={data.isFFA ? 'FFA' : `${elapsed}m`} label={data.isFFA ? 'mode' : 'it time'} />
-            <StackStat value={data.playerCount} label="players" />
+            <StackStat value={data.liveCount || 0} label="live" compact={loungeCompact} />
+            <StackStat value={data.isFFA ? 'FFA' : `${elapsed}m`} label={data.isFFA ? 'mode' : 'it time'} compact={loungeCompact} />
+            <StackStat value={data.playerCount} label="players" compact={loungeCompact} />
           </div>
         </div>
 
