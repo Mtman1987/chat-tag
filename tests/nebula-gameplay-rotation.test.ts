@@ -84,6 +84,15 @@ test('activity stage reports active games and system surfaces use every availabl
   assert.match(prototype, /gridTemplateRows: 'repeat\(25, minmax\(0, 1fr\)\)'/);
 });
 
+test('system games release their panel after thirty minutes without play', () => {
+  const overlay = readFileSync(new URL('../src/app/overlay/game-hub/[profileId]/page.tsx', import.meta.url), 'utf8');
+  assert.match(overlay, /NEBULA_ACTIVITY_IDLE_MS = 30 \* 60_000/);
+  assert.match(overlay, /activityNow - at > NEBULA_ACTIVITY_IDLE_MS/);
+  assert.match(overlay, /profile\.id\.startsWith\('system-'\)/);
+  assert.match(overlay, /recentlyPlayed\.has\(gameId\)/);
+  assert.match(overlay, /setInterval\(\(\) => setActivityNow\(Date\.now\(\)\), 15_000\)/);
+});
+
 test('spmt leaderboard queues a main-display card and the overlay holds it for 15 seconds', () => {
   const command = readFileSync(new URL('../src/app/api/game-hub/command/route.ts', import.meta.url), 'utf8');
   const botPatch = readFileSync(new URL('../scripts/patch-game-hub-bot.mjs', import.meta.url), 'utf8');

@@ -32,6 +32,8 @@ type RuntimeAction = {
   message: string;
 };
 
+const NEBULA_ACTIVITY_IDLE_MS = 30 * 60_000;
+
 function isSpmtCommand(message: string) {
   return /^!?@?spmt(?:\s|$)/i.test(String(message || '').trim());
 }
@@ -44,6 +46,7 @@ export default function GameHubOverlayPage() {
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [error, setError] = useState('');
   const [rotationNow, setRotationNow] = useState(() => Date.now());
+  const [activityNow, setActivityNow] = useState(() => Date.now());
   const latestChatId = useRef('');
   const latestRuntimeId = useRef('');
   const hasLoadedProfile = useRef(false);
@@ -151,14 +154,27 @@ export default function GameHubOverlayPage() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [ownerLogin, profileGamesKey]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setActivityNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const games = useMemo(() => {
     if (!profile) return [];
     const active = new Set(activeGameIds);
+    const requireRecentPlay = profile.id.startsWith('system-');
+    const recentlyPlayed = new Set(events.flatMap((event) => {
+      const at = Date.parse(event.at);
+      if (!Number.isFinite(at) || activityNow - at > NEBULA_ACTIVITY_IDLE_MS) return [];
+      return Array.isArray((event as GameHubChatEvent & { gameIds?: string[] }).gameIds)
+        ? (event as GameHubChatEvent & { gameIds?: string[] }).gameIds!
+        : [];
+    }));
     return profile.gameIds
-      .filter((gameId) => active.has(gameId))
+      .filter((gameId) => active.has(gameId) && (!requireRecentPlay || recentlyPlayed.has(gameId)))
       .map((gameId) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
       .filter((game): game is GameHubGame => Boolean(game));
-  }, [activeGameIds, profile]);
+  }, [activeGameIds, activityNow, events, profile]);
 
   useEffect(() => {
     if (profileId !== 'system-spacemountainlive-activity') return;
