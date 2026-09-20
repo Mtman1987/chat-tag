@@ -8,4 +8,8 @@ test('Lounge compact mode prioritizes names over broadcast emotes', () => {
   assert.match(source, /loungeCompact \? 'absolute' : 'static'/);
   assert.match(source, /loungeCompact \? 'min\(9vw,14vh\)'/);
   assert.match(source, /height: loungeCompact \? '100%' : undefined/);
+  assert.match(source, /gridTemplateRows: loungeCompact \? 'minmax\(0, 1fr\) auto'/);
+  assert.match(source, /gridColumn: loungeCompact \? '1 \/ -1'/);
+  assert.match(source, /opacity: loungeCompact \? 1 : \(dimBar/);
+  assert.match(source, /transform: loungeCompact \? 'translateY\(0\)'/);
 });

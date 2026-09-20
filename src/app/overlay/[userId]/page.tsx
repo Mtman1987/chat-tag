@@ -702,8 +702,8 @@ export default function OverlayPage() {
         transition: 'opacity 0.4s ease, transform 0.4s ease',
         // Keep the game-status bar present between announcements. It only
         // dims while an announcement is active; it never fades to zero.
-        opacity: dimBar ? announcementBarOpacity : idleBarOpacity,
-        transform: dimBar ? 'translateY(5%)' : 'translateY(0)',
+        opacity: loungeCompact ? 1 : (dimBar ? announcementBarOpacity : idleBarOpacity),
+        transform: loungeCompact ? 'translateY(0)' : (dimBar ? 'translateY(5%)' : 'translateY(0)'),
         zIndex: 20, display: 'flex', flexDirection: 'column',
         height: loungeCompact ? '100%' : undefined,
         justifyContent: loungeCompact ? 'center' : undefined,
@@ -712,7 +712,12 @@ export default function OverlayPage() {
       }}>
         {/* IT / FFA Status */}
         <div style={{
-          padding: loungeCompact ? '1vh 1.6vw' : '2.2vh 2.6vw', display: 'flex', alignItems: 'center', gap: loungeCompact ? '1vw' : '1.35vw',
+          padding: loungeCompact ? '0.7vh 1.6vw' : '2.2vh 2.6vw',
+          display: loungeCompact ? 'grid' : 'flex',
+          gridTemplateColumns: loungeCompact ? 'auto minmax(0, 1fr)' : undefined,
+          gridTemplateRows: loungeCompact ? 'minmax(0, 1fr) auto' : undefined,
+          alignItems: 'center',
+          gap: loungeCompact ? '0.35vh 1.2vw' : '1.35vw',
           flex: loungeCompact ? '1 1 auto' : undefined,
           borderTop: `0.8vh solid ${data.isFFA ? '#ff4500' : '#00d9ff'}`,
           background: data.isFFA
@@ -720,7 +725,7 @@ export default function OverlayPage() {
             : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
           boxSizing: 'border-box',
         }}>
-          <span style={{ fontSize: loungeCompact ? 'min(8vw,18vh)' : 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
+          <span style={{ fontSize: loungeCompact ? 'min(9vw,20vh)' : 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
           <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0 }}>
             {data.isFFA ? (
               <>
@@ -731,7 +736,7 @@ export default function OverlayPage() {
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>IT</div>
                 <div style={{
-                  fontSize: loungeCompact ? 'min(11vw,18vh)' : 'min(7.4vw, 7.8vh)',
+                  fontSize: loungeCompact ? 'min(13vw,22vh)' : 'min(7.4vw, 7.8vh)',
                   fontWeight: 900,
                   lineHeight: 0.95,
                   whiteSpace: 'nowrap',
@@ -743,17 +748,18 @@ export default function OverlayPage() {
             )}
           </div>
           <div style={{
-            marginLeft: 'auto',
-            flex: '0 0 auto',
+            marginLeft: loungeCompact ? 0 : 'auto',
+            flex: loungeCompact ? undefined : '0 0 auto',
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, auto))',
+            gridTemplateColumns: loungeCompact ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, minmax(0, auto))',
+            gridColumn: loungeCompact ? '1 / -1' : undefined,
             alignItems: 'center',
-            columnGap: '1.05vw',
+            columnGap: loungeCompact ? '2vw' : '1.05vw',
             rowGap: '0.3vh',
-            padding: '0.95vh 1.1vw 0.85vh',
+            padding: loungeCompact ? '0.4vh 1.1vw' : '0.95vh 1.1vw 0.85vh',
             background: 'linear-gradient(180deg, rgba(7, 16, 30, 0.72), rgba(6, 12, 24, 0.82))',
             border: '1px solid rgba(255,255,255,0.14)',
-            borderRadius: '0.6vw',
+            borderRadius: loungeCompact ? '1.2vw' : '0.6vw',
             boxShadow: '0 0.4vh 1.4vh rgba(0,0,0,0.35)',
           }}>
             <StackStat value={data.liveCount || 0} label="live" compact={loungeCompact} />
