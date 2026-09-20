@@ -64,6 +64,10 @@ commandReplacement = commandReplacement
   .replace(
     '      if (gamesHubCommand?.rewriteCommand) {',
     "      if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {\n        pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + 30_000 });\n      }\n      if (gamesHubCommand?.rewriteCommand) {",
+  )
+  .replace(
+    '      if (gamesHubCommand?.handled) {',
+    "      if (gamesHubCommand?.overlayEvent?.type) {\n        await sendRichOverlayEvent(channelName, gamesHubCommand.overlayEvent.type, gamesHubCommand.overlayEvent.message || '', gamesHubCommand.overlayEvent.payload || {});\n      }\n      if (gamesHubCommand?.handled) {",
   );
 
 if (!source.includes('const legacyChatTagCommands = new Set(')) {
@@ -112,6 +116,7 @@ if (
   !source.includes(commandMarker) ||
   !source.includes('gamesHubCommand?.handled') ||
   !source.includes('gamesHubCommand?.rewriteCommand') ||
+  !source.includes('gamesHubCommand?.overlayEvent?.type') ||
   !source.includes('let args = normalizedMsg') ||
   !source.includes('const legacyChatTagCommands = new Set(') ||
   !source.includes("const chatTagNamespace = cmd === 'chattag' || cmd === 'taggame'") ||

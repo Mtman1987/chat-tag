@@ -109,6 +109,10 @@ test('direct commands preserve Chat Tag, choose conflicts, and broadcast compati
   assert.equal(chaos.intents[0].command, 'spmt chaos explode');
   assert.equal(resolveDirectGameCommand(['explode'], []).intents.length, 0);
 
+  const hint = resolveDirectGameCommand(['hint'], ['phraseguess']);
+  assert.equal(hint.intents[0].command, 'spmt phrase hint');
+  assert.equal(resolveDirectGameCommand(['hint'], []).intents.length, 0);
+
   const internal = resolveDirectGameCommand(['chicken', 'start'], ['chickenroyale']);
   assert.equal(internal.recognized, false);
 });

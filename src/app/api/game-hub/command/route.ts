@@ -68,6 +68,7 @@ function knownAction(gameId: string, args: string[]): boolean {
   if (gameId === 'dancingparade') return first === 'dance' && args.length === 1;
   if (gameId === 'emojitower') return first === 'drop' && args.length === 1;
   if (gameId === 'petrace') return /^(dog|cat|rabbit|turtle|hamster)$/.test(first) && args.length === 1;
+  if (gameId === 'phraseguess') return first === 'hint' && args.length === 1;
   if (gameId === 'pixelbattle') return /^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)$/.test(first) && /^\d{1,2}$/.test(args[1] || '') && /^\d{1,2}$/.test(args[2] || '') && args.length === 3;
   if (gameId === 'treasurehunt') return /^[a-h][1-8]$/i.test(first) && args.length === 1;
   return false;
@@ -280,7 +281,15 @@ export async function POST(req: NextRequest) {
     const state = await readAppState();
     const leaders = gamesPointsStandings(state).slice(0, 5);
     if (!leaders.length) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} No Games Points have been recorded yet.` });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} No Games Points have been recorded yet.`,
+        overlayEvent: {
+          type: 'leaderboard-card',
+          message: 'Nebula Arcade leaderboard',
+          payload: { rows: [{ rank: '-', username: 'No ranked players yet', score: 0 }] },
+        },
+      });
     }
     const segments = leaders.map((entry) => `#${entry.rank} ${entry.displayName || entry.username} ${entry.balance.toLocaleString()}`);
     return NextResponse.json({
@@ -290,6 +299,17 @@ export async function POST(req: NextRequest) {
         segments,
         pointsLeaderboardUrl(req),
       ),
+      overlayEvent: {
+        type: 'leaderboard-card',
+        message: 'Nebula Arcade leaderboard',
+        payload: {
+          rows: leaders.map((entry) => ({
+            rank: entry.rank,
+            username: entry.displayName || entry.username,
+            score: entry.balance,
+          })),
+        },
+      },
     });
   }
 

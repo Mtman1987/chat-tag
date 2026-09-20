@@ -175,6 +175,44 @@
         .hidden {
             display: none;
         }
+
+        body.embedded {
+            min-height: 100vh;
+            padding: 0;
+            justify-content: center;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        body.embedded .container {
+            max-width: none;
+            width: 100vw;
+            padding: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        body.embedded h1,
+        body.embedded .game-status,
+        body.embedded .controls,
+        body.embedded .config-section,
+        body.embedded .message-log,
+        body.embedded .demo-mode {
+            display: none !important;
+        }
+
+        body.embedded .phrase-display {
+            min-height: 100vh;
+            margin: 0;
+            padding: 4vw;
+            border-radius: 0;
+            background: transparent;
+            font-size: clamp(42px, 8vw, 132px);
+            font-weight: 900;
+            line-height: 1.18;
+            letter-spacing: .12em;
+            text-shadow: 0 0 24px rgba(34, 211, 238, .45), 0 4px 12px rgba(0, 0, 0, .9);
+        }
     </style>
 </head>
 <body>
@@ -215,7 +253,7 @@ You can't handle the truth</textarea>
 
             <div class="config-item">
                 <label>Reveal Interval (seconds):</label>
-                <input type="number" id="revealInterval" min="5" max="60" value="20">
+                <input type="number" id="revealInterval" min="5" max="60" value="45">
             </div>
 
             <div class="config-item">
@@ -225,7 +263,7 @@ You can't handle the truth</textarea>
 
             <div class="config-item">
                 <label>Initial Mask (%):</label>
-                <input type="number" id="initialMask" min="50" max="95" value="80">
+                <input type="number" id="initialMask" min="50" max="95" value="90">
             </div>
 
             <div class="config-item">
@@ -256,11 +294,15 @@ You can't handle the truth</textarea>
         const password = urlParams.get('password') || 'false';
         const serverUrl = urlParams.has('server') ? (urlParams.get('server') || 'wss://io.socialstream.ninja') : '';
         const demo = urlParams.has('demo');
-        
+        const embedded = urlParams.has('embedded');
+        if (embedded) document.body.classList.add('embedded');
+        const ROUND_DURATION_MS = 6 * 60 * 1000;
+        const HINT_COSTS = [10, 25, 50];
+
         const config = {
-            revealInterval: 20000,  // Changed to 20 seconds
+            revealInterval: 45000,
             matchThreshold: 70,
-            initialMask: 80,
+            initialMask: 90,
             maskReduction: 10,
             botName: '🎮 Phrase Bot',
             sendMode: 'dock'  // default to dock only
@@ -276,7 +318,10 @@ You can't handle the truth</textarea>
             currentIndex: -1,
             revealTimer: null,
             winner: null,
-            roundStartTime: null
+            roundStartTime: null,
+            roundDeadlineTimer: null,
+            hintsUsed: 0,
+            players: {}
         };
 
         let socketserver = null;
@@ -303,16 +348,16 @@ You can't handle the truth</textarea>
                 try {
                     const settings = JSON.parse(saved);
                     // Update config with saved values
-                    config.revealInterval = (settings.revealInterval || 20) * 1000;
+                    config.revealInterval = (settings.revealInterval || 45) * 1000;
                     config.matchThreshold = settings.matchThreshold || 70;
-                    config.initialMask = settings.initialMask || 80;
+                    config.initialMask = settings.initialMask || 90;
                     config.botName = settings.botName || '🎮 Phrase Bot';
                     config.sendMode = settings.sendMode || 'dock';
                     
                     // Update UI
-                    document.getElementById('revealInterval').value = settings.revealInterval || 20;
+                    document.getElementById('revealInterval').value = settings.revealInterval || 45;
                     document.getElementById('matchThreshold').value = settings.matchThreshold || 70;
-                    document.getElementById('initialMask').value = settings.initialMask || 80;
+                    document.getElementById('initialMask').value = settings.initialMask || 90;
                     document.getElementById('botName').value = settings.botName || '🎮 Phrase Bot';
                     document.getElementById('sendMode').value = settings.sendMode || 'dock';
                 } catch (e) {
@@ -326,7 +371,11 @@ You can't handle the truth</textarea>
             // Load saved settings first
             loadSettings();
 
-            if (demo) {
+            if (embedded) {
+                loadPhrases();
+                updateStatus('Nebula stage connected');
+                startGame();
+            } else if (demo) {
                 document.getElementById('demoIndicator').style.display = 'block';
                 loadPhrases();
                 updateStatus('Ready to start (Demo Mode)');
@@ -678,11 +727,14 @@ You can't handle the truth</textarea>
             gameState.maskPercent = config.initialMask;
             gameState.winner = null;
             gameState.roundStartTime = Date.now();
+            gameState.hintsUsed = 0;
 
             updateStatus(`Round ${gameState.currentIndex + 1} of ${gameState.phrases.length}`);
-            
+
             revealPhrase();
             gameState.revealTimer = setInterval(revealPhrase, config.revealInterval);
+            clearTimeout(gameState.roundDeadlineTimer);
+            gameState.roundDeadlineTimer = setTimeout(() => endRound(null), ROUND_DURATION_MS);
         }
 
         // Reveal more of the phrase
@@ -696,22 +748,50 @@ You can't handle the truth</textarea>
             
             gameState.maskPercent = Math.max(0, gameState.maskPercent - config.maskReduction);
             
-            if (gameState.maskPercent === 0 && !gameState.winner) {
-                endRound(null);
+        }
+
+        function playerWallet(username) {
+            const key = String(username || '').toLowerCase();
+            gameState.players[key] ||= { name: username, points: 25, joined: false, wrongGuesses: 0 };
+            return gameState.players[key];
+        }
+
+        function buyHint(username) {
+            const player = playerWallet(username);
+            const hintIndex = gameState.hintsUsed;
+            if (hintIndex >= HINT_COSTS.length) {
+                sendResponse(`@${username}, all three hints are already unlocked.`);
+                return;
             }
+            const cost = HINT_COSTS[hintIndex];
+            if (player.points < cost) {
+                sendResponse(`@${username}, hint ${hintIndex + 1} costs ${cost} Games Points; you have ${player.points}.`);
+                return;
+            }
+            player.points -= cost;
+            gameState.hintsUsed += 1;
+            const words = gameState.currentPhrase.trim().split(/\s+/);
+            const hints = [
+                `${words.length} words`,
+                `starts with ${words.map((word) => word[0]?.toUpperCase() || '').join(' · ')}`,
+                `${gameState.currentPhrase.replace(/[^a-z0-9]/gi, '').length} letters total`,
+            ];
+            sendResponse(`💡 Hint ${hintIndex + 1}/3 (${cost} GP by @${username}): ${hints[hintIndex]}`);
         }
 
         // End round
         function endRound(winner) {
             clearInterval(gameState.revealTimer);
+            clearTimeout(gameState.roundDeadlineTimer);
             
             const display = document.getElementById('phraseDisplay');
             display.textContent = gameState.currentPhrase;
             
             if (winner) {
+                playerWallet(winner).points += 50;
                 display.classList.add('winner-announcement');
                 const timeElapsed = Math.floor((Date.now() - gameState.roundStartTime) / 1000);
-                sendResponse(`🎉 ${winner} wins! The phrase was: "${gameState.currentPhrase}" (Solved in ${timeElapsed}s)`);
+                sendResponse(`🎉 ${winner} wins 50 Games Points! The phrase was: "${gameState.currentPhrase}" (Solved in ${timeElapsed}s)`);
                 updateStatus(`${winner} guessed correctly!`);
             } else {
                 sendResponse(`⏰ Time's up! The phrase was: "${gameState.currentPhrase}"`);
@@ -742,6 +822,23 @@ You can't handle the truth</textarea>
                 messageText = stripHtml(messageText);
             }
             const chatname = stripHtml(data.chatname);
+            const command = String(messageText || '').trim().toLowerCase().match(/^!?@?spmt(?:\s+|$)(.*)$/i)?.[1]?.trim() || '';
+            const wallet = playerWallet(chatname);
+            if (/^(phrase|phraseguess)(?:\s+join)?$/.test(command)) {
+                wallet.joined = true;
+                sendResponse(`@${chatname} joined Phrase Guess with ${wallet.points} Games Points.`);
+                return;
+            }
+            if (/^(?:phrase|phraseguess)\s+leave$/.test(command)) {
+                wallet.joined = false;
+                sendResponse(`@${chatname} left Phrase Guess. Your score is preserved.`);
+                return;
+            }
+            if (/^(?:phrase(?:guess)?\s+)?hint$/.test(command)) {
+                if (wallet.joined) buyHint(chatname);
+                return;
+            }
+            if (!wallet.joined || command) return;
 
             const guess = normalizeText(messageText);
             const match = calculateMatch(guess, gameState.normalizedPhrase);
@@ -754,6 +851,9 @@ You can't handle the truth</textarea>
             } else if (match >= 50) {
                 // Give hints for close guesses
                 sendResponse(`@${chatname} is getting warm! (${match}% match)`);
+            } else if (guess.length >= 3) {
+                wallet.points = Math.max(0, wallet.points - 1);
+                wallet.wrongGuesses += 1;
             }
         }
 
@@ -768,13 +868,13 @@ You can't handle the truth</textarea>
 
         function startGame() {
             // Validate session ID
-            if (!demo && !sessionId) {
+            if (!demo && !embedded && !sessionId) {
                 updateStatus('ERROR: Cannot start game without a session ID!');
                 return;
             }
 
             // Update config from UI and save
-            config.revealInterval = parseInt(document.getElementById('revealInterval').value) * 1000;
+            config.revealInterval = embedded ? 45_000 : parseInt(document.getElementById('revealInterval').value) * 1000;
             config.matchThreshold = parseInt(document.getElementById('matchThreshold').value);
             config.initialMask = parseInt(document.getElementById('initialMask').value);
             config.botName = document.getElementById('botName').value;
@@ -801,6 +901,7 @@ You can't handle the truth</textarea>
         function stopGame() {
             gameState.isActive = false;
             clearInterval(gameState.revealTimer);
+            clearTimeout(gameState.roundDeadlineTimer);
             clearTimeout(pendingRoundTimeout);
             pendingRoundTimeout = null;
             document.getElementById('gameToggle').textContent = 'Start Game';

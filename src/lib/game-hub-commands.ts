@@ -158,7 +158,7 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
     symphony: ['colorsymphony', []], harmony: ['colorsymphony', []], colors: ['colorwars', []],
     parade: ['dancingparade', []], dance: ['dancingparade', ['dance']], rain: ['emojirain', []],
     tower: ['emojitower', []], drop: ['emojitower', ['drop']], memory: ['memorylane', []],
-    phrase: ['phraseguess', []], pixel: ['pixelbattle', []], rhythm: ['rhythmpulse', []],
+    phrase: ['phraseguess', []], hint: ['phraseguess', ['hint']], pixel: ['pixelbattle', []], rhythm: ['rhythmpulse', []],
     treasure: ['treasurehunt', []], chain: ['wordchain', []], storm: ['wordstorm', []],
   };
 
