@@ -17,6 +17,7 @@ import {
   purchasePhraseGuessHint,
   resolveChannelGameIds,
   setChannelGameRunning,
+  submitPhraseGuessPhrase,
 } from '@/lib/game-hub-state';
 import {
   allPlayedGameIds,
@@ -69,7 +70,10 @@ function knownAction(gameId: string, args: string[]): boolean {
   if (gameId === 'dancingparade') return first === 'dance' && args.length === 1;
   if (gameId === 'emojitower') return first === 'drop' && args.length === 1;
   if (gameId === 'petrace') return /^(dog|cat|rabbit|turtle|hamster)$/.test(first) && args.length === 1;
-  if (gameId === 'phraseguess') return first === 'hint' && args.length === 1;
+  if (gameId === 'phraseguess') {
+    return (first === 'hint' && args.length === 1)
+      || (first === 'submit' && args.length >= 3);
+  }
   if (gameId === 'pixelbattle') return /^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)$/.test(first) && /^\d{1,2}$/.test(args[1] || '') && /^\d{1,2}$/.test(args[2] || '') && args.length === 3;
   if (gameId === 'treasurehunt') return /^[a-h][1-8]$/i.test(first) && args.length === 1;
   return false;
@@ -521,6 +525,22 @@ export async function POST(req: NextRequest) {
       });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That hint could not be unlocked.'}` });
+    }
+  }
+
+  if (game.id === 'phraseguess' && action === 'submit') {
+    const phrase = rawActionArgs.slice(1).join(' ');
+    try {
+      const submission = await updateAppState((draft) => {
+        joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
+        return submitPhraseGuessPhrase(draft, { channel, userId, username, displayName, phrase });
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} added “${submission.entry.phrase}” to Phrase Guess · ${submission.inventorySize} community phrase${submission.inventorySize === 1 ? '' : 's'} available. You earn 5 Games Points when it is solved.`,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That phrase could not be submitted.'}` });
     }
   }
 

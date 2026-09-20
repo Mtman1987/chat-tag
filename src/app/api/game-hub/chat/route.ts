@@ -7,6 +7,7 @@ import {
   getGameHubStore,
   normalizeGameHubPlayerId,
   recordPhraseGuessAttempt,
+  recordWordChainMessage,
   recordGameHubChatActivity,
   resolveChannelGameIds,
 } from '@/lib/game-hub-state';
@@ -74,7 +75,8 @@ export async function POST(req: NextRequest) {
     return !Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS;
   });
   const phraseGuessAttemptDue = participatingGameIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
-  const activity = scoreWriteDue || phraseGuessAttemptDue
+  const wordChainAttemptDue = participatingGameIds.includes('wordchain') && !/^\s*!?@?spmt\b/i.test(message);
+  const activity = scoreWriteDue || phraseGuessAttemptDue || wordChainAttemptDue
     ? await updateAppStateIfChanged((state) => {
       const result = recordGameHubChatActivity(state, {
         channel,
@@ -86,12 +88,15 @@ export async function POST(req: NextRequest) {
       const phraseGuess = phraseGuessAttemptDue
         ? recordPhraseGuessAttempt(state, { channel, userId: body.userId, username, displayName: cleanText(body.displayName || username, 80), message })
         : { changed: false, outcome: 'ignored' as const };
+      const wordChain = wordChainAttemptDue
+        ? recordWordChainMessage(state, { channel, userId: body.userId, username, displayName: cleanText(body.displayName || username, 80), message })
+        : { changed: false, outcome: 'ignored' as const };
       return {
-        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed,
-        result: { ...result, participatingGameIds, eventGameIds, phraseGuess },
+        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed || wordChain.changed,
+        result: { ...result, participatingGameIds, eventGameIds, phraseGuess, wordChain },
       };
     })
-    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const } };
+    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const }, wordChain: { changed: false, outcome: 'ignored' as const } };
 
   return NextResponse.json({
     accepted: true,
@@ -101,5 +106,6 @@ export async function POST(req: NextRequest) {
     scoredGameIds: activity.scoredGameIds,
     pointsAwarded: activity.pointsAwarded,
     phraseGuess: activity.phraseGuess,
+    wordChain: activity.wordChain,
   });
 }

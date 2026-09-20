@@ -7,6 +7,7 @@ export const PHRASE_GUESS_ROUND_MS = 6 * 60_000;
 export const PHRASE_GUESS_HINT_COSTS = [10, 25, 50] as const;
 export const PHRASE_GUESS_WIN_POINTS = 50;
 export const PHRASE_GUESS_WRONG_COST = 1;
+export const PHRASE_GUESS_SUBMITTER_REWARD = 5;
 export const PHRASE_GUESS_PHRASES = [
   'The quick brown fox jumps over the lazy dog',
   'To be or not to be that is the question',
@@ -19,6 +20,14 @@ export const PHRASE_GUESS_PHRASES = [
   "I'm the king of the world",
   "Here's looking at you kid",
 ] as const;
+export const WORD_CHAIN_ROUND_MS = 6 * 60_000;
+export const WORD_CHAIN_VOTE_MS = 20_000;
+export const WORD_CHAIN_THEMES = {
+  Animals: ['TIGER', 'ELEPHANT', 'MONKEY', 'ZEBRA', 'ANTELOPE', 'EAGLE', 'EMU', 'OTTER', 'RABBIT', 'TURTLE', 'ELK', 'KANGAROO', 'OWL', 'LEMUR', 'RHINO', 'OCTOPUS', 'SNAKE', 'ECHIDNA', 'ALLIGATOR', 'RACCOON', 'NEWT', 'TOUCAN'],
+  Food: ['PIZZA', 'BURGER', 'SALAD', 'TACO', 'ORANGE', 'EGG', 'GRAPE', 'ENCHILADA', 'APPLE', 'EDAMAME', 'ECLAIR', 'RICE', 'EMPANADA', 'AVOCADO', 'OLIVE', 'NOODLE', 'LASAGNA', 'ASPARAGUS', 'SOUP', 'POTATO'],
+  Gaming: ['MARIO', 'ZELDA', 'SONIC', 'PACMAN', 'ARCADE', 'ESPORT', 'TETRIS', 'SIMULATOR', 'RACING', 'GAME', 'EMOTE', 'ENGINE', 'NPC', 'COMBO', 'ONLINE', 'ENEMY', 'YOSHI', 'ITEM', 'MULTIPLAYER', 'RESPAWN'],
+  Nature: ['TREE', 'OCEAN', 'MOUNTAIN', 'RIVER', 'RAINFOREST', 'TORNADO', 'ORCHID', 'DESERT', 'THUNDER', 'REEF', 'FLOWER', 'ROCK', 'KOI', 'ISLAND', 'DAISY', 'YARROW', 'WILLOW', 'WATERFALL', 'LAKE', 'EARTH'],
+} as const;
 const LEDGER_LIMIT = 500;
 
 export type GameHubMembership = {
@@ -47,7 +56,41 @@ export type GameHubChannelSettings = {
   stoppedGameIds: string[];
   updatedAt?: string;
   phraseGuessHints?: { roundSlot: number; hintsUsed: number };
-  phraseGuessRound?: { roundSlot: number; hintsUsed: number; winnerPlayerId?: string };
+  phraseGuessRound?: {
+    roundSlot: number;
+    hintsUsed: number;
+    phraseId?: string;
+    phrase?: string;
+    submitterPlayerId?: string;
+    submitterDisplayName?: string;
+    winnerPlayerId?: string;
+  };
+  phraseGuessInventory?: Array<{
+    id: string;
+    phrase: string;
+    normalized: string;
+    submitterPlayerId: string;
+    submitterDisplayName: string;
+    submittedAt: string;
+  }>;
+  wordChainRound?: {
+    roundSlot: number;
+    theme: keyof typeof WORD_CHAIN_THEMES;
+    currentWord: string;
+    usedWords: string[];
+    lastContributorPlayerId?: string;
+    comboMultiplier: number;
+    pending?: {
+      playerId: string;
+      username: string;
+      displayName: string;
+      word: string;
+      expectedWord: string;
+      closesAt: number;
+      votes: Record<string, boolean>;
+    };
+  };
+  wordChainVerdicts?: Record<string, boolean>;
 };
 
 export type GameHubLedgerEntry = {
@@ -261,23 +304,20 @@ export function purchasePhraseGuessHint(
   const channel = normalizeGameHubChannel(input.channel);
   if (!channel) throw new Error('A channel is required.');
   const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
-  const roundSlot = Math.floor(now / PHRASE_GUESS_ROUND_MS);
   const settings = getChannelGameSettings(state, channel);
+  const activeRound = phraseGuessRoundForChannel(state, channel, now);
+  const roundSlot = activeRound.roundSlot;
   const previous = settings.phraseGuessRound || settings.phraseGuessHints;
-  const hintsUsed = previous?.roundSlot === roundSlot
-    ? Math.max(0, Math.floor(Number(previous.hintsUsed || 0)))
-    : 0;
+  const hintsUsed = Math.max(0, Math.floor(Number(previous?.hintsUsed || 0)));
   if (hintsUsed >= PHRASE_GUESS_HINT_COSTS.length) throw new Error('All three hints are already unlocked this round.');
 
   const player = getOrCreateGameHubPlayer(state, input);
   const cost = PHRASE_GUESS_HINT_COSTS[hintsUsed];
   spendGameHubPoints(state, player, cost, `Phrase Guess hint ${hintsUsed + 1}`);
   settings.phraseGuessRound = {
+    ...activeRound,
     roundSlot,
     hintsUsed: hintsUsed + 1,
-    ...(settings.phraseGuessRound?.roundSlot === roundSlot && settings.phraseGuessRound.winnerPlayerId
-      ? { winnerPlayerId: settings.phraseGuessRound.winnerPlayerId }
-      : {}),
   };
   delete settings.phraseGuessHints;
   settings.updatedAt = new Date(now).toISOString();
@@ -308,6 +348,61 @@ export function phraseGuessRoundAt(nowValue: number) {
   };
 }
 
+export function phraseGuessRoundForChannel(state: any, channelValue: unknown, nowValue = Date.now()) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const settings = getChannelGameSettings(state, channel);
+  const round = phraseGuessRoundAt(nowValue);
+  if (settings.phraseGuessRound?.roundSlot === round.roundSlot && settings.phraseGuessRound.phrase) {
+    return settings.phraseGuessRound;
+  }
+  const inventory = Array.isArray(settings.phraseGuessInventory) ? settings.phraseGuessInventory : [];
+  const communityTurn = inventory.length > 0 && round.roundSlot % 3 === 2;
+  const submission = communityTurn ? inventory[Math.floor(round.roundSlot / 3) % inventory.length] : null;
+  settings.phraseGuessRound = {
+    roundSlot: round.roundSlot,
+    hintsUsed: 0,
+    phraseId: submission?.id || `canonical:${round.roundSlot % PHRASE_GUESS_PHRASES.length}`,
+    phrase: submission?.phrase || round.phrase,
+    ...(submission ? {
+      submitterPlayerId: submission.submitterPlayerId,
+      submitterDisplayName: submission.submitterDisplayName,
+    } : {}),
+  };
+  return settings.phraseGuessRound;
+}
+
+export function submitPhraseGuessPhrase(
+  state: any,
+  input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; phrase: unknown; now?: number },
+) {
+  const channel = normalizeGameHubChannel(input.channel);
+  if (!channel) throw new Error('A channel is required.');
+  const phrase = String(input.phrase || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const normalized = normalizePhraseGuessText(phrase);
+  if (normalized.length < 5 || normalized.split(/\s+/).length < 2) throw new Error('Submit a phrase with at least two words.');
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const settings = getChannelGameSettings(state, channel);
+  phraseGuessRoundForChannel(state, channel, now);
+  settings.phraseGuessInventory ||= [];
+  if (settings.phraseGuessInventory.some((entry) => entry.normalized === normalized)
+    || PHRASE_GUESS_PHRASES.some((entry) => normalizePhraseGuessText(entry) === normalized)) {
+    throw new Error('That phrase is already in the Phrase Guess inventory.');
+  }
+  const player = getOrCreateGameHubPlayer(state, input);
+  const submittedAt = new Date(now).toISOString();
+  const entry = {
+    id: `phrase:${player.id}:${now}`,
+    phrase,
+    normalized,
+    submitterPlayerId: player.id,
+    submitterDisplayName: player.displayName,
+    submittedAt,
+  };
+  settings.phraseGuessInventory = [...settings.phraseGuessInventory, entry].slice(-100);
+  settings.updatedAt = submittedAt;
+  return { entry, inventorySize: settings.phraseGuessInventory.length };
+}
+
 export function recordPhraseGuessAttempt(
   state: any,
   input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; message?: unknown; now?: number },
@@ -321,15 +416,12 @@ export function recordPhraseGuessAttempt(
   if (!membership?.active) return { changed: false, outcome: 'not-playing' as const };
 
   const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
-  const round = phraseGuessRoundAt(now);
   const settings = getChannelGameSettings(state, channel);
-  const current = settings.phraseGuessRound?.roundSlot === round.roundSlot
-    ? settings.phraseGuessRound
-    : { roundSlot: round.roundSlot, hintsUsed: 0 };
-  if (current.winnerPlayerId) return { changed: false, outcome: 'closed' as const, roundSlot: round.roundSlot };
+  const current = phraseGuessRoundForChannel(state, channel, now);
+  if (current.winnerPlayerId) return { changed: false, outcome: 'closed' as const, roundSlot: current.roundSlot };
 
   const normalizedGuess = normalizePhraseGuessText(message);
-  const match = phraseGuessMatchPercent(normalizedGuess, round.phrase);
+  const match = phraseGuessMatchPercent(normalizedGuess, current.phrase);
   if (match >= 70) {
     current.winnerPlayerId = player.id;
     settings.phraseGuessRound = current;
@@ -337,15 +429,143 @@ export function recordPhraseGuessAttempt(
     membership.wins += 1;
     membership.lastActiveAt = new Date(now).toISOString();
     awardGameHubPoints(state, player, PHRASE_GUESS_WIN_POINTS, 'Phrase Guess solved', { gameId: 'phraseguess', channel });
-    return { changed: true, outcome: 'won' as const, match, reward: PHRASE_GUESS_WIN_POINTS, roundSlot: round.roundSlot };
+    let submitterReward = 0;
+    if (current.submitterPlayerId) {
+      const submitter = getGameHubStore(state).players[current.submitterPlayerId];
+      if (submitter) {
+        submitterReward = PHRASE_GUESS_SUBMITTER_REWARD;
+        awardGameHubPoints(state, submitter, submitterReward, 'Phrase Guess submission attribution', { gameId: 'phraseguess', channel });
+      }
+    }
+    return { changed: true, outcome: 'won' as const, match, reward: PHRASE_GUESS_WIN_POINTS, submitterReward, roundSlot: current.roundSlot };
   }
 
   if (normalizedGuess.length >= 3 && player.gamePointsBalance >= PHRASE_GUESS_WRONG_COST) {
     spendGameHubPoints(state, player, PHRASE_GUESS_WRONG_COST, 'Phrase Guess wrong guess');
     membership.lastActiveAt = new Date(now).toISOString();
-    return { changed: true, outcome: 'wrong' as const, match, cost: PHRASE_GUESS_WRONG_COST, roundSlot: round.roundSlot };
+    return { changed: true, outcome: 'wrong' as const, match, cost: PHRASE_GUESS_WRONG_COST, roundSlot: current.roundSlot };
   }
-  return { changed: false, outcome: 'no-charge' as const, match, roundSlot: round.roundSlot };
+  return { changed: false, outcome: 'no-charge' as const, match, roundSlot: current.roundSlot };
+}
+
+export function wordChainRoundAt(nowValue: number) {
+  const now = Math.max(0, Math.floor(Number(nowValue || 0)));
+  const roundSlot = Math.floor(now / WORD_CHAIN_ROUND_MS);
+  const themeNames = Object.keys(WORD_CHAIN_THEMES) as Array<keyof typeof WORD_CHAIN_THEMES>;
+  const theme = themeNames[roundSlot % themeNames.length];
+  const words = WORD_CHAIN_THEMES[theme];
+  const seedIndex = Math.floor(roundSlot / themeNames.length) % words.length;
+  return { roundSlot, theme, seed: words[seedIndex] };
+}
+
+function normalizedWordChainMessage(value: unknown): string {
+  return String(value || '').trim().toUpperCase();
+}
+
+function wordChainStateForRound(settings: GameHubChannelSettings, now: number) {
+  const round = wordChainRoundAt(now);
+  if (settings.wordChainRound?.roundSlot === round.roundSlot) return settings.wordChainRound;
+  settings.wordChainRound = {
+    roundSlot: round.roundSlot,
+    theme: round.theme,
+    currentWord: round.seed,
+    usedWords: [round.seed],
+    comboMultiplier: 1,
+  };
+  return settings.wordChainRound;
+}
+
+function applyWordChainWord(
+  state: any,
+  channel: string,
+  round: NonNullable<GameHubChannelSettings['wordChainRound']>,
+  player: GameHubPlayer,
+  word: string,
+  now: number,
+) {
+  const membership = player.joinedGames.wordchain;
+  if (!membership?.active || round.usedWords.includes(word)) return null;
+  const combo = player.id === round.lastContributorPlayerId
+    ? Math.min(round.comboMultiplier + 0.5, 3)
+    : 1;
+  const points = Math.floor(word.length * combo);
+  round.currentWord = word;
+  round.usedWords = [...round.usedWords, word].slice(-100);
+  round.lastContributorPlayerId = player.id;
+  round.comboMultiplier = combo;
+  membership.score += points;
+  membership.lastActiveAt = new Date(now).toISOString();
+  awardGameHubPoints(state, player, points, 'Word Chain accepted word', { gameId: 'wordchain', channel });
+  return { points, combo };
+}
+
+export function recordWordChainMessage(
+  state: any,
+  input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; message?: unknown; now?: number },
+) {
+  const channel = normalizeGameHubChannel(input.channel);
+  const message = String(input.message || '').trim();
+  if (!channel || !message || /^!?@?spmt(?:\s|$)/i.test(message)) return { changed: false, outcome: 'ignored' as const };
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const settings = getChannelGameSettings(state, channel);
+  const round = wordChainStateForRound(settings, now);
+  let finalized: { accepted: boolean; word: string; points?: number } | null = null;
+
+  if (round.pending && now >= round.pending.closesAt) {
+    const pending = round.pending;
+    delete round.pending;
+    const votes = Object.values(pending.votes);
+    const yes = votes.filter(Boolean).length;
+    const no = votes.length - yes;
+    const accepted = votes.length === 0 || yes >= no;
+    settings.wordChainVerdicts ||= {};
+    settings.wordChainVerdicts[`${round.theme}:${pending.word}`] = accepted;
+    const verdictEntries = Object.entries(settings.wordChainVerdicts).slice(-500);
+    settings.wordChainVerdicts = Object.fromEntries(verdictEntries);
+    const pendingPlayer = getGameHubStore(state).players[pending.playerId];
+    const applied = accepted && pendingPlayer && round.currentWord === pending.expectedWord
+      ? applyWordChainWord(state, channel, round, pendingPlayer, pending.word, now)
+      : null;
+    finalized = { accepted: Boolean(applied), word: pending.word, ...(applied ? { points: applied.points } : {}) };
+  }
+
+  const normalized = normalizedWordChainMessage(message);
+  if (round.pending && /^(YES|Y|ACCEPT|NO|N|REJECT)$/.test(normalized)) {
+    const voterId = normalizeGameHubPlayerId(input.userId, input.username);
+    if (voterId && !Object.prototype.hasOwnProperty.call(round.pending.votes, voterId)) {
+      round.pending.votes[voterId] = /^(YES|Y|ACCEPT)$/.test(normalized);
+      return { changed: true, outcome: 'voted' as const, finalized };
+    }
+    return { changed: Boolean(finalized), outcome: 'duplicate-vote' as const, finalized };
+  }
+
+  const player = getOrCreateGameHubPlayer(state, input);
+  const membership = player.joinedGames.wordchain;
+  if (!membership?.active) return { changed: Boolean(finalized), outcome: 'not-playing' as const, finalized };
+  if (!/^[A-Z]+$/.test(normalized) || normalized.length < 3) return { changed: Boolean(finalized), outcome: 'invalid' as const, finalized };
+  if (normalized[0] !== round.currentWord.at(-1)) return { changed: Boolean(finalized), outcome: 'wrong-letter' as const, finalized };
+  if (round.usedWords.includes(normalized)) return { changed: Boolean(finalized), outcome: 'used' as const, finalized };
+
+  const verdictKey = `${round.theme}:${normalized}`;
+  const canonical = (WORD_CHAIN_THEMES[round.theme] as readonly string[]).includes(normalized);
+  const cachedVerdict = settings.wordChainVerdicts?.[verdictKey];
+  if (canonical || cachedVerdict === true) {
+    const applied = applyWordChainWord(state, channel, round, player, normalized, now);
+    return { changed: Boolean(applied) || Boolean(finalized), outcome: 'accepted' as const, finalized, ...applied };
+  }
+  if (cachedVerdict === false) return { changed: Boolean(finalized), outcome: 'rejected' as const, finalized };
+  if (round.pending) return { changed: Boolean(finalized), outcome: 'vote-busy' as const, finalized };
+
+  round.pending = {
+    playerId: player.id,
+    username: player.username,
+    displayName: player.displayName,
+    word: normalized,
+    expectedWord: round.currentWord,
+    closesAt: now + WORD_CHAIN_VOTE_MS,
+    votes: {},
+  };
+  return { changed: true, outcome: 'vote-opened' as const, closesAt: round.pending.closesAt, finalized };
 }
 
 export function recordGameHubChatActivity(

@@ -27,10 +27,15 @@ import {
 import { nebulaPrototypeMessage } from '../src/lib/nebula-game-message';
 import {
   PHRASE_GUESS_PHRASES,
+  WORD_CHAIN_THEMES,
   getOrCreateGameHubPlayer,
   phraseGuessRoundAt,
+  phraseGuessRoundForChannel,
   purchasePhraseGuessHint,
   recordPhraseGuessAttempt,
+  recordWordChainMessage,
+  submitPhraseGuessPhrase,
+  wordChainRoundAt,
 } from '../src/lib/game-hub-state';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -200,6 +205,58 @@ test('Phrase Guess wins and wrong guesses settle against the durable wallet once
   const nextWin = recordPhraseGuessAttempt(state, { ...identity, channel: 'space', message: next.phrase, now: 6 * 60_000 });
   assert.equal(nextWin.outcome, 'won');
   assert.equal(storedPlayer().gamePointsBalance, 109);
+});
+
+test('community Phrase Guess submissions enter rotation and reward their submitter when solved', () => {
+  const state: any = { gameSettings: { default: {} } };
+  const submitter = { userId: '21', username: 'writer', displayName: 'Writer' };
+  const solver = { userId: '22', username: 'solver', displayName: 'Solver' };
+  const submitted = submitPhraseGuessPhrase(state, { ...submitter, channel: 'space', phrase: 'Starlight finds a way', now: 0 });
+  assert.equal(submitted.inventorySize, 1);
+  assert.throws(
+    () => submitPhraseGuessPhrase(state, { ...submitter, channel: 'space', phrase: 'starlight finds a way', now: 1 }),
+    /already/i,
+  );
+  const solverPlayer = getOrCreateGameHubPlayer(state, solver);
+  solverPlayer.joinedGames.phraseguess = { joinedAt: new Date(0).toISOString(), active: true, score: 0, wins: 0, plays: 1 };
+  const communityRoundAt = 2 * 6 * 60_000;
+  const round = phraseGuessRoundForChannel(state, 'space', communityRoundAt);
+  assert.equal(round.phrase, 'Starlight finds a way');
+  assert.equal(round.submitterDisplayName, 'Writer');
+  const result = recordPhraseGuessAttempt(state, { ...solver, channel: 'space', message: round.phrase, now: communityRoundAt });
+  assert.equal(result.outcome, 'won');
+  assert.equal(result.submitterReward, 5);
+  assert.equal(state.gameSettings.default.gameHub.players['twitch:21'].gamePointsBalance, 5);
+  assert.equal(state.gameSettings.default.gameHub.players['twitch:22'].gamePointsBalance, 50);
+});
+
+test('Word Chain settles canonical words, combos, and neutral majority votes durably', () => {
+  const state: any = { gameSettings: { default: {} } };
+  const first = { userId: '11', username: 'alpha', displayName: 'Alpha' };
+  const second = { userId: '12', username: 'beta', displayName: 'Beta' };
+  for (const identity of [first, second]) {
+    const player = getOrCreateGameHubPlayer(state, identity);
+    player.joinedGames.wordchain = { joinedAt: new Date(0).toISOString(), active: true, score: 0, wins: 0, plays: 1 };
+  }
+  const stored = (id: string) => state.gameSettings.default.gameHub.players[`twitch:${id}`];
+
+  assert.deepEqual(wordChainRoundAt(0), { roundSlot: 0, theme: 'Animals', seed: WORD_CHAIN_THEMES.Animals[0] });
+  const raccoon = recordWordChainMessage(state, { ...first, channel: 'space', message: 'raccoon', now: 0 });
+  const newt = recordWordChainMessage(state, { ...first, channel: 'space', message: 'newt', now: 1 });
+  assert.equal(raccoon.outcome, 'accepted');
+  assert.equal(raccoon.points, 7);
+  assert.equal(newt.points, 6);
+  assert.equal(stored('11').gamePointsBalance, 13);
+  assert.equal(stored('11').joinedGames.wordchain.score, 13);
+
+  const pending = recordWordChainMessage(state, { ...first, channel: 'space', message: 'truck', now: 2 });
+  assert.equal(pending.outcome, 'vote-opened');
+  assert.equal(recordWordChainMessage(state, { ...second, channel: 'space', message: 'yes', now: 3 }).outcome, 'voted');
+  const afterVote = recordWordChainMessage(state, { ...second, channel: 'space', message: 'kangaroo', now: 20_003 });
+  assert.equal(afterVote.finalized?.accepted, true);
+  assert.equal(afterVote.outcome, 'accepted');
+  assert.equal(stored('11').gamePointsBalance, 23);
+  assert.equal(stored('12').gamePointsBalance, 8);
 });
 
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {

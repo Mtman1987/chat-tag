@@ -87,12 +87,26 @@ test('Word Chain and Phrase Guess use six-minute stage rounds with minimal embed
   const phraseGuess = readFileSync(new URL('../public/nebula-arcade/games/phraseguess.html', import.meta.url), 'utf8');
   assert.match(wordChain, /const ROUND_SECONDS = 6 \* 60/);
   assert.match(wordChain, /const ROUNDS_PER_CYCLE = 5/);
+  assert.match(wordChain, /currentRoundSlot = Math\.floor\(Date\.now\(\) \/ \(ROUND_SECONDS \* 1000\)\)/);
+  assert.match(wordChain, /eventAt < roundOpenedAt/);
+  assert.match(wordChain, /if \(!embedded && !participants\.has/);
   assert.match(wordChain, /body\.embedded #scoreboard/);
   assert.match(phraseGuess, /const ROUND_DURATION_MS = 6 \* 60 \* 1000/);
   assert.match(phraseGuess, /const HINT_COSTS = \[10, 25, 50\]/);
   assert.match(phraseGuess, /Math\.floor\(Date\.now\(\) \/ ROUND_DURATION_MS\)/);
   assert.match(phraseGuess, /if \(!embedded\) loadSettings\(\)/);
   assert.match(phraseGuess, /if \(savedPhrases && !embedded\)/);
+  assert.match(phraseGuess, /if \(embedded && !command\) wallet\.joined = true/);
+  assert.match(phraseGuess, /event\.data\?\.dataReceived\?\.overlayNinja/);
+  assert.match(phraseGuess, /nebula-phrase-round/);
   assert.match(phraseGuess, /body\.embedded \.controls/);
   assert.match(phraseGuess, /if \(embedded\)[\s\S]*startGame\(\)/);
+});
+
+test('Word Chain neutral answers use a bounded parent majority vote', () => {
+  const frame = readFileSync(new URL('../src/components/nebula-game-frame.tsx', import.meta.url), 'utf8');
+  assert.match(frame, /neutral-word-vote/);
+  assert.match(frame, /nebula-word-verdict/);
+  assert.match(frame, /votes\.length === 0 \|\| yes >= no/);
+  assert.match(frame, /wordVoteOpenRef/);
 });

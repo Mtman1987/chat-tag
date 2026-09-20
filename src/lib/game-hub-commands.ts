@@ -78,7 +78,10 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt pet turtle', description: 'Enter as a turtle.' },
     { trigger: 'spmt pet hamster', description: 'Enter as a hamster.' },
   ] },
-  { gameId: 'phraseguess', key: 'phrase', aliases: ['phraseguess'], joinDescription: 'Join Phrase Guess.', joinTrigger: 'spmt phrase', commands: [] },
+  { gameId: 'phraseguess', key: 'phrase', aliases: ['phraseguess'], joinDescription: 'Join Phrase Guess.', joinTrigger: 'spmt phrase', commands: [
+    { trigger: 'spmt phrase hint', description: 'Buy the next shared hint with Games Points.' },
+    { trigger: 'spmt phrase submit your phrase', description: 'Submit a community phrase and earn attribution points when it is solved.' },
+  ] },
   { gameId: 'pixelbattle', key: 'pixel', aliases: ['pixelbattle'], joinDescription: 'Join Pixel Battle.', joinTrigger: 'spmt pixel', commands: [
     { trigger: 'spmt paint red 10 5', description: 'Paint a pixel using color, X and Y.' },
   ] },
