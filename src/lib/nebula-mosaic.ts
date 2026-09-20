@@ -13,7 +13,9 @@ export const MOSAIC_BOARD_WIDTH = 20;
 export const MOSAIC_BOARD_HEIGHT = 25;
 export const MOSAIC_IDLE_MS = 30 * 60_000;
 export const MOSAIC_OVERVIEW_MS = 15_000;
-export const MOSAIC_XP_COST = Math.max(0, Math.floor(Number(process.env.MOSAIC_REQUEST_XP_COST || 500)));
+// Theme requests stay free while the SPMT XP economy and redemption rules are
+// being finalized. A positive deployment override can re-enable charging later.
+export const MOSAIC_XP_COST = Math.max(0, Math.floor(Number(process.env.MOSAIC_REQUEST_XP_COST || 0)));
 
 export const MOSAIC_COLORS = {
   R: { name: 'red', hex: '#ef4444' },

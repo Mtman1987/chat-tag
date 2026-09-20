@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  MOSAIC_XP_COST,
   installMosaicTemplate,
   mosaicPublicSnapshot,
   observeMosaicActiveTime,
@@ -10,6 +11,10 @@ import {
   queueMosaicTheme,
   setMosaicView,
 } from '../src/lib/nebula-mosaic';
+
+test('Mosaic theme requests are free by default during testing', () => {
+  assert.equal(MOSAIC_XP_COST, 0);
+});
 
 function state() {
   return { gameSettings: { default: {} } } as any;

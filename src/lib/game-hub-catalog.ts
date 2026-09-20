@@ -266,7 +266,7 @@ export const GAME_HUB_CATALOG: GameHubGame[] = [
     status: 'prototype-ready',
     category: 'creative',
     commands: [
-      { trigger: '!mosaic owl', description: 'Spend SPMT XP to request the next artwork.' },
+      { trigger: '!mosaic owl', description: 'Request the next artwork theme free during testing.' },
       { trigger: 'spmt D12Y', description: 'Paint D12 yellow on the active board.' },
       { trigger: 'spmt view all', description: 'Show all four boards combined.' },
     ],

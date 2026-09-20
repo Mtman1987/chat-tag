@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Choose a valid Mosaic theme.'}` });
     }
-    if (!String(userId || '').trim()) {
+    if (MOSAIC_XP_COST > 0 && !String(userId || '').trim()) {
       return NextResponse.json({ handled: true, reply: `@${displayName} Link your Twitch identity before spending SPMT XP on a Mosaic theme.` });
     }
     const mosaicRequestKey = `mosaic:${channel}:${String(body.messageId || body.eventId || Date.now())}:${String(userId)}`;

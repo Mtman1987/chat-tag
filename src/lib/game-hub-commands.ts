@@ -83,7 +83,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt phrase submit your phrase', description: 'Submit a community phrase and earn attribution points when it is solved.' },
   ] },
   { gameId: 'pixelbattle', key: 'mosaic', aliases: ['pixel', 'pixelbattle'], joinDescription: 'Join Nebula Mosaic.', joinTrigger: 'spmt mosaic', commands: [
-    { trigger: '!mosaic owl', description: 'Spend the configured SPMT XP to request the next artwork.' },
+    { trigger: '!mosaic owl', description: 'Request the next artwork theme free during testing.' },
     { trigger: 'spmt D12Y', description: 'Paint a square; spaces, full color names and reversed order also work.' },
     { trigger: 'spmt view 1', description: 'Open work board 1, 2, 3 or 4.' },
     { trigger: 'spmt view all', description: 'Briefly show the complete combined artwork.' },
