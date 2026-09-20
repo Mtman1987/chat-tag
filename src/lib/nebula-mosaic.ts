@@ -13,6 +13,9 @@ export const MOSAIC_BOARD_WIDTH = 20;
 export const MOSAIC_BOARD_HEIGHT = 25;
 export const MOSAIC_IDLE_MS = 30 * 60_000;
 export const MOSAIC_OVERVIEW_MS = 15_000;
+export const MOSAIC_GENERATION_MAX_ATTEMPTS = 3;
+export const MOSAIC_GENERATION_RETRY_MS = 10_000;
+export const MOSAIC_GENERATION_STALE_MS = 3 * 60_000;
 // Theme requests stay free while the SPMT XP economy and redemption rules are
 // being finalized. A positive deployment override can re-enable charging later.
 export const MOSAIC_XP_COST = Math.max(0, Math.floor(Number(process.env.MOSAIC_REQUEST_XP_COST || 0)));
@@ -43,6 +46,9 @@ export type MosaicThemeRequest = {
   xpCost: number;
   status: 'pending' | 'generating' | 'failed';
   error?: string;
+  attempts?: number;
+  lastAttemptAt?: string;
+  retryAt?: string;
 };
 
 export type NebulaMosaicArtwork = {
@@ -177,12 +183,23 @@ export function queueMosaicTheme(
   return { request, position: mosaic.queue.filter((item) => item.status !== 'failed').length };
 }
 
-export function claimNextMosaicRequest(state: any, channelValue: unknown) {
+export function claimNextMosaicRequest(state: any, channelValue: unknown, now = Date.now()) {
   const mosaic = getMosaicChannelState(state, channelValue);
   if (mosaic.current && !['completed', 'archived'].includes(mosaic.current.status)) return null;
-  const request = mosaic.queue.find((item) => item.status === 'pending');
+  const request = mosaic.queue.find((item) => {
+    const attempts = Math.max(0, Number(item.attempts || 0));
+    if (attempts >= MOSAIC_GENERATION_MAX_ATTEMPTS) return false;
+    if (item.status === 'pending') return true;
+    if (item.status === 'failed') return !item.retryAt || Date.parse(item.retryAt) <= now;
+    return item.status === 'generating'
+      && (!item.lastAttemptAt || now - Date.parse(item.lastAttemptAt) >= MOSAIC_GENERATION_STALE_MS);
+  });
   if (!request) return null;
   request.status = 'generating';
+  request.attempts = Math.max(0, Number(request.attempts || 0)) + 1;
+  request.lastAttemptAt = nowIso(now);
+  delete request.retryAt;
+  delete request.error;
   return structuredClone(request) as MosaicThemeRequest;
 }
 
@@ -226,11 +243,16 @@ export function installMosaicTemplate(
   return artwork;
 }
 
-export function failMosaicRequest(state: any, channelValue: unknown, requestId: string, error: unknown) {
+export function failMosaicRequest(state: any, channelValue: unknown, requestId: string, error: unknown, now = Date.now()) {
   const request = getMosaicChannelState(state, channelValue).queue.find((item) => item.id === requestId);
   if (!request) return null;
   request.status = 'failed';
   request.error = String(error || 'Mosaic generation failed.').slice(0, 240);
+  if (Math.max(0, Number(request.attempts || 0)) < MOSAIC_GENERATION_MAX_ATTEMPTS) {
+    request.retryAt = nowIso(now + MOSAIC_GENERATION_RETRY_MS);
+  } else {
+    delete request.retryAt;
+  }
   return request;
 }
 
@@ -412,7 +434,18 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     ? { current: stored.current, queue: Array.isArray(stored.queue) ? stored.queue : [], saves: Array.isArray(stored.saves) ? stored.saves : [] }
     : { queue: [], saves: [] };
   const artwork = mosaic.current;
-  if (!artwork) return { artwork: null, queueLength: mosaic.queue.filter((item) => item.status !== 'failed').length };
+  const queueLength = mosaic.queue.filter((item) => item.status !== 'failed'
+    || Math.max(0, Number(item.attempts || 0)) < MOSAIC_GENERATION_MAX_ATTEMPTS).length;
+  const latestRequest = mosaic.queue.at(-1);
+  const generation = latestRequest ? {
+    theme: latestRequest.theme,
+    status: latestRequest.status,
+    error: latestRequest.error || '',
+    attempts: Math.max(0, Number(latestRequest.attempts || 0)),
+    maxAttempts: MOSAIC_GENERATION_MAX_ATTEMPTS,
+    retryAt: latestRequest.retryAt || '',
+  } : null;
+  if (!artwork) return { artwork: null, queueLength, generation };
   const viewMode = artwork.viewMode === 'all' && Date.parse(String(artwork.viewUntil || 0)) > now ? 'all' : 'board';
   const progress = artwork.painted.reduce((count, color, index) => count + (color === artwork.target[index] ? 1 : 0), 0);
   const boardOriginValue = boardOrigin(artwork.activeBoard);
@@ -441,6 +474,7 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
       total: artwork.target.length,
       updatedAt: artwork.updatedAt,
     },
-    queueLength: mosaic.queue.filter((item) => item.status !== 'failed').length,
+    queueLength,
+    generation,
   };
 }

@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { MOSAIC_COLORS, MOSAIC_HEIGHT, MOSAIC_WIDTH, type MosaicColorCode } from '@/lib/nebula-mosaic';
+import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 const STREAMWEAVER_URL = String(
   process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev',
@@ -26,14 +27,22 @@ function normalizeStreamWeaverPayload(data: any) {
 
 async function requestImage(theme: string) {
   if (!STREAMWEAVER_TENANT_ID) throw new Error('Nebula Mosaic image generation is not configured.');
+  const serviceSecret = getStreamweaverSecret();
   const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-mountainview-bridge': '1' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-mountainview-bridge': '1',
+      Authorization: `Bearer ${serviceSecret}`,
+      'x-bot-secret': serviceSecret,
+    },
     body: JSON.stringify({
       prompt: promptForTheme(theme),
       scope: 'public',
       tenantId: STREAMWEAVER_TENANT_ID,
-      resolution: '1024x1536',
+      // SeaArt's production CLI rejects 1024x1536. Generate at its supported
+      // square size, then let Sharp crop the centered art to the 40x50 board.
+      resolution: '1024x1024',
       numImages: 1,
       providerOverride: MOSAIC_PROVIDER,
       providerParams: {

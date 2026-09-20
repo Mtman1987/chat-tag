@@ -4,6 +4,7 @@ import {
   claimNextMosaicRequest,
   failMosaicRequest,
   installMosaicTemplate,
+  MOSAIC_GENERATION_MAX_ATTEMPTS,
   mosaicPublicSnapshot,
   observeMosaicActiveTime,
 } from '@/lib/nebula-mosaic';
@@ -58,8 +59,8 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ started: true, theme: request.theme, ...payload });
   } catch (error: any) {
-    await updateAppState((state) => failMosaicRequest(state, channel, request.id, error?.message || error));
-    if (request.xpCost > 0) {
+    const failed = await updateAppState((state) => failMosaicRequest(state, channel, request.id, error?.message || error));
+    if (request.xpCost > 0 && Number(failed?.attempts || 0) >= MOSAIC_GENERATION_MAX_ATTEMPTS) {
       await awardSpmtXp({
         userId: request.playerId.replace(/^twitch:/, ''),
         eventType: 'nebula.mosaic.refund',
@@ -68,6 +69,10 @@ export async function POST(req: NextRequest) {
         metadata: { channel, theme: request.theme, reason: 'generation-failed' },
       }).catch(() => null);
     }
-    return NextResponse.json({ error: error?.message || 'Mosaic generation failed.', refundedXp: request.xpCost }, { status: 502 });
+    return NextResponse.json({
+      error: error?.message || 'Mosaic generation failed.',
+      retrying: Number(failed?.attempts || 0) < MOSAIC_GENERATION_MAX_ATTEMPTS,
+      refundedXp: Number(failed?.attempts || 0) >= MOSAIC_GENERATION_MAX_ATTEMPTS ? request.xpCost : 0,
+    }, { status: 502 });
   }
 }

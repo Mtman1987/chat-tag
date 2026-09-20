@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import {
+  claimNextMosaicRequest,
+  failMosaicRequest,
   MOSAIC_XP_COST,
   installMosaicTemplate,
   mosaicPublicSnapshot,
@@ -14,6 +17,29 @@ import {
 
 test('Mosaic theme requests are free by default during testing', () => {
   assert.equal(MOSAIC_XP_COST, 0);
+});
+
+test('Mosaic requests a SeaArt-supported source size through the authenticated StreamWeaver bridge', () => {
+  const source = fs.readFileSync('src/lib/nebula-mosaic-generation.ts', 'utf8');
+  assert.match(source, /resolution: '1024x1024'/);
+  assert.doesNotMatch(source, /resolution: '1024x1536'/);
+  assert.match(source, /Authorization: `Bearer \$\{serviceSecret\}`/);
+});
+
+test('Mosaic retries failed generation instead of silently dropping the theme', () => {
+  const draft = state();
+  queueMosaicTheme(draft, {
+    channel: 'spacemountainlive', userId: '42', username: 'viewer', displayName: 'Viewer', theme: 'kitten', now: 1,
+  });
+  const first = claimNextMosaicRequest(draft, 'spacemountainlive', 2)!;
+  assert.equal(first.attempts, 1);
+  failMosaicRequest(draft, 'spacemountainlive', first.id, 'provider unavailable', 3);
+  const waiting = mosaicPublicSnapshot(draft, 'spacemountainlive', 4);
+  assert.equal(waiting.queueLength, 1);
+  assert.equal(waiting.generation?.theme, 'kitten');
+  assert.equal(waiting.generation?.status, 'failed');
+  assert.equal(claimNextMosaicRequest(draft, 'spacemountainlive', 9_999), null);
+  assert.equal(claimNextMosaicRequest(draft, 'spacemountainlive', 10_003)?.attempts, 2);
 });
 
 function state() {

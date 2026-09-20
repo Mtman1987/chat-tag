@@ -109,6 +109,14 @@ type MosaicSnapshot = {
     total: number;
   };
   queueLength: number;
+  generation?: null | {
+    theme: string;
+    status: 'pending' | 'generating' | 'failed';
+    error: string;
+    attempts: number;
+    maxAttempts: number;
+    retryAt: string;
+  };
 };
 
 const MOSAIC_HEX: Record<string, string> = {
@@ -160,7 +168,14 @@ function PixelBoard({ channel, gridOnly = false }: { channel: string; gridOnly?:
   }, [artworkId, artworkStatus, channel]);
 
   if (!artwork) {
-    return <div className="grid h-full w-full place-items-center bg-slate-950 text-center text-cyan-100"><div><div className="text-lg font-black">NEBULA MOSAIC</div><div className="mt-2 text-xs text-white/55">{snapshot.queueLength ? 'Creating the next artwork…' : 'Request a theme with !mosaic owl'}</div></div></div>;
+    const generation = snapshot.generation;
+    const exhausted = generation?.status === 'failed' && generation.attempts >= generation.maxAttempts;
+    const status = exhausted
+      ? `Could not create “${generation.theme}” · try !mosaic ${generation.theme} again`
+      : generation
+        ? `${generation.status === 'failed' ? 'Retrying' : 'Creating'} “${generation.theme}”…`
+        : 'Request a theme with !mosaic owl';
+    return <div className="grid h-full w-full place-items-center bg-slate-950 text-center text-cyan-100"><div><div className="text-lg font-black">NEBULA MOSAIC</div><div className="mt-2 text-xs text-white/55">{status}</div></div></div>;
   }
 
   if (artwork.viewMode === 'all') {
