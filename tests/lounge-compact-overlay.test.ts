@@ -7,7 +7,7 @@ test('Lounge compact mode gives names and large stats dedicated halves', () => {
   assert.match(source, /searchParams\.get\('compact'\) === 'lounge'/);
   assert.match(source, /loungeCompact \? 'absolute' : 'static'/);
   assert.match(source, /loungeCompact \? 'min\(9vw,14vh\)'/);
-  assert.match(source, /height: loungeCompact \? '100%' : undefined/);
+  assert.match(source, /height: loungeCompact \? 'calc\(100% - 6px\)' : undefined/);
   assert.match(source, /top: loungeCompact \? '3%'/);
   assert.match(source, /right: loungeCompact \? '4%'/);
   assert.match(source, /<FitText min=\{13\} max=\{36\}>/);
@@ -20,6 +20,9 @@ test('Lounge compact mode gives names and large stats dedicated halves', () => {
   assert.match(source, /align="right" compact=\{loungeCompact\}/);
   assert.match(source, /opacity: loungeCompact \? 1 : \(dimBar/);
   assert.match(source, /transform: loungeCompact \? 'translateY\(0\)'/);
+  assert.match(source, /left: loungeCompact \? 6 : 0/);
+  assert.match(source, /right: loungeCompact \? 6 : 0/);
+  assert.match(source, /textOverflow: loungeCompact \? 'ellipsis'/);
 });
 
 test('Lounge announcements keep the blue card but hide its idle contents', () => {

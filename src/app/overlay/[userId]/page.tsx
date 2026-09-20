@@ -717,7 +717,11 @@ export default function OverlayPage() {
       {/* FULL-SCREEN BROADCAST */}
       {broadcast && (
         <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          position: 'absolute',
+          top: loungeCompact ? 4 : 0,
+          left: loungeCompact ? 6 : 0,
+          right: loungeCompact ? 6 : 0,
+          bottom: loungeCompact ? 4 : 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           zIndex: 50, padding: loungeCompact ? '4% 5%' : '3%', animation: 'broadcastIn 0.3s ease-out',
         }}>
@@ -742,6 +746,9 @@ export default function OverlayPage() {
               marginBottom: '0.3vh', width: '100%', wordWrap: 'break-word' as const, lineHeight: 1.1,
               animation: `lineSlide 0.3s ease-out ${i * 0.06}s both`,
               padding: broadcast.type === 'history' ? '0.3vh 2%' : undefined,
+              overflow: loungeCompact ? 'hidden' : undefined,
+              textOverflow: loungeCompact ? 'ellipsis' : undefined,
+              whiteSpace: loungeCompact ? 'nowrap' : undefined,
             }}>
               {line}
             </div>
@@ -752,14 +759,17 @@ export default function OverlayPage() {
 
       {/* BOTTOM UI CONTAINER */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
+        position: 'absolute',
+        bottom: loungeCompact ? 3 : 0,
+        left: loungeCompact ? 4 : 0,
+        right: loungeCompact ? 4 : 0,
         transition: 'opacity 0.4s ease, transform 0.4s ease',
         // Keep the game-status bar present between announcements. It only
         // dims while an announcement is active; it never fades to zero.
         opacity: loungeCompact ? 1 : (dimBar ? announcementBarOpacity : idleBarOpacity),
         transform: loungeCompact ? 'translateY(0)' : (dimBar ? 'translateY(5%)' : 'translateY(0)'),
         zIndex: 20, display: 'flex', flexDirection: 'column',
-        height: loungeCompact ? '100%' : undefined,
+        height: loungeCompact ? 'calc(100% - 6px)' : undefined,
         justifyContent: loungeCompact ? 'center' : undefined,
         paddingBottom: 'max(1.25vh, env(safe-area-inset-bottom))',
         boxSizing: 'border-box',
