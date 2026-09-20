@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { getChatTagSoundUrl, type ChatTagSoundKey } from '@/lib/sound-effects';
 import { crownName, decorateCrowns } from '@/lib/chat-tag-crowns';
@@ -70,6 +70,33 @@ function StatItem({ value, label, color }: { value: string | number; label: stri
   );
 }
 
+function FitText({ children, min = 11, max = 36 }: { children: string; min?: number; max?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const fit = () => {
+      if (!element.clientWidth) return;
+      let low = min;
+      let high = max;
+      element.style.fontSize = `${high}px`;
+      while (high - low > 0.25) {
+        const size = (low + high) / 2;
+        element.style.fontSize = `${size}px`;
+        if (element.scrollWidth <= element.clientWidth) low = size;
+        else high = size;
+      }
+      element.style.fontSize = `${low.toFixed(2)}px`;
+    };
+    fit();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
+    observer?.observe(element);
+    void document.fonts?.ready.then(fit);
+    return () => observer?.disconnect();
+  }, [children, max, min]);
+  return <div ref={ref} title={children} style={{ width: '100%', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{children}</div>;
+}
+
 function StackStat({ value, label, align = 'right', compact = false }: { value: string | number; label: string; align?: 'left' | 'right'; compact?: boolean }) {
   return (
     <div style={{
@@ -79,8 +106,8 @@ function StackStat({ value, label, align = 'right', compact = false }: { value: 
       lineHeight: 1,
       minWidth: 0,
     }}>
-      <span style={{ fontSize: compact ? '11px' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
-      <small style={{ fontSize: compact ? '6px' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.04em', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
+      <span style={{ fontSize: compact ? '20px' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
+      <small style={{ fontSize: compact ? '9px' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.04em', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
     </div>
   );
 }
@@ -714,11 +741,11 @@ export default function OverlayPage() {
         {/* IT / FFA Status */}
         <div style={{
           padding: loungeCompact ? '0.7vh 1.6vw' : '2.2vh 2.6vw',
-          display: loungeCompact ? 'grid' : 'flex',
-          gridTemplateColumns: loungeCompact ? 'auto minmax(0, 1fr)' : undefined,
-          gridTemplateRows: loungeCompact ? 'minmax(0, 1fr) auto' : undefined,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: loungeCompact ? 'column' : 'row',
           alignItems: 'center',
-          gap: loungeCompact ? '0.35vh 1.2vw' : '1.35vw',
+          gap: loungeCompact ? '0.35vh' : '1.35vw',
           flex: loungeCompact ? '1 1 auto' : undefined,
           borderTop: `0.8vh solid ${data.isFFA ? '#ff4500' : '#00d9ff'}`,
           background: data.isFFA
@@ -726,12 +753,31 @@ export default function OverlayPage() {
             : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
           boxSizing: 'border-box',
         }}>
-          <span style={{ fontSize: loungeCompact ? 'min(9vw,20vh)' : 'min(10.5vw, 88px)', lineHeight: 1, opacity: compactAnnouncementActive ? 0 : 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
-          <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0, opacity: compactAnnouncementActive ? 0 : 1 }}>
+          <span style={{
+            position: loungeCompact ? 'absolute' : 'static',
+            top: loungeCompact ? '3%' : undefined,
+            right: loungeCompact ? '4%' : undefined,
+            zIndex: 2,
+            fontSize: loungeCompact ? 'min(9vw,18vh)' : 'min(10.5vw, 88px)',
+            lineHeight: 1,
+            opacity: compactAnnouncementActive ? 0 : 1,
+          }}>{data.isFFA ? '🔥' : '🎯'}</span>
+          <div style={{
+            display: 'flex',
+            width: loungeCompact ? '100%' : undefined,
+            minHeight: 0,
+            flex: loungeCompact ? '1 1 57%' : '1 1 auto',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            minWidth: 0,
+            paddingRight: loungeCompact ? '12vw' : undefined,
+            opacity: compactAnnouncementActive ? 0 : 1,
+          }}>
             {data.isFFA ? (
               <div style={{ display: 'flex', minHeight: loungeCompact ? '100%' : undefined, flexDirection: 'column', justifyContent: 'center' }}>
                 <div style={{
-                  fontSize: loungeCompact ? 'min(10vw, 16vh)' : 'min(2.6vw, 2.4vh)',
+                  fontSize: loungeCompact ? 'min(10vw, 17vh)' : 'min(2.6vw, 2.4vh)',
                   lineHeight: 0.92,
                   opacity: 0.98,
                   fontWeight: 900,
@@ -739,8 +785,8 @@ export default function OverlayPage() {
                   textShadow: '0 2px 6px rgba(0,0,0,0.55)',
                 }}>FREE FOR ALL</div>
                 <div style={{
-                  marginTop: loungeCompact ? '1.2vh' : undefined,
-                  fontSize: loungeCompact ? 'min(5.4vw, 7.8vh)' : 'min(3.4vw, 3vh)',
+                  marginTop: loungeCompact ? '0.45vh' : undefined,
+                  fontSize: loungeCompact ? 'min(6vw, 9vh)' : 'min(3.4vw, 3vh)',
                   lineHeight: 1.05,
                   opacity: 0.96,
                   fontWeight: 800,
@@ -750,24 +796,24 @@ export default function OverlayPage() {
             ) : (
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>IT</div>
-                <div style={{
-                  fontSize: loungeCompact ? 'min(13vw,22vh)' : 'min(7.4vw, 7.8vh)',
+                {loungeCompact ? <FitText min={13} max={36}>{crown(data.it?.username || '?')}</FitText> : <div style={{
+                  fontSize: 'min(7.4vw, 7.8vh)',
                   fontWeight: 900,
                   lineHeight: 0.95,
                   whiteSpace: 'nowrap',
                   textOverflow: 'ellipsis',
                   overflow: 'hidden',
                   textShadow: '0 2px 6px rgba(0,0,0,0.5)',
-                }}>{crown(data.it?.username || '?')}</div>
+                }}>{crown(data.it?.username || '?')}</div>}
               </>
             )}
           </div>
           <div style={{
+            width: loungeCompact ? '100%' : undefined,
             marginLeft: loungeCompact ? 0 : 'auto',
-            flex: loungeCompact ? undefined : '0 0 auto',
+            flex: loungeCompact ? '0 0 43%' : '0 0 auto',
             display: 'grid',
             gridTemplateColumns: loungeCompact ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, minmax(0, auto))',
-            gridColumn: loungeCompact ? '1 / -1' : undefined,
             alignItems: 'center',
             columnGap: loungeCompact ? '2vw' : '1.05vw',
             rowGap: '0.3vh',

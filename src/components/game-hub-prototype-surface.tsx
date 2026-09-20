@@ -96,20 +96,22 @@ function TeamBoard({ events, gameKey, paint = false, broadcastOnly = false }: { 
 
 function PixelBoard({ events, gridOnly = false }: { events: GameHubChatEvent[]; gridOnly?: boolean }) {
   const cells = useMemo(() => {
-    const next = Array.from({ length: 96 }, () => '');
+    const columns = 20;
+    const rows = 25;
+    const next = Array.from({ length: columns * rows }, () => '');
     for (const event of events) {
       const args = spmtArgs(event.message, 'pixel', 'pixelbattle');
       if (!args) continue;
       const joined = args.join(' ');
       const match = joined.match(/^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)\s+(\d{1,2})\s+(\d{1,2})$/);
       if (!match) continue;
-      const x = Number(match[2]) % 12;
-      const y = Number(match[3]) % 8;
-      next[y * 12 + x] = match[1];
+      const x = Number(match[2]) % columns;
+      const y = Number(match[3]) % rows;
+      next[y * columns + x] = match[1];
     }
     return next;
   }, [events]);
-  return <div className={gridOnly ? 'grid h-full w-full place-items-center' : ''}><div aria-label="Pixel Battle grid" className={`grid grid-cols-12 gap-px overflow-hidden rounded-lg bg-white/10 p-px ${gridOnly ? 'aspect-[3/2] w-[min(100%,150vh)]' : 'w-full'}`}>{cells.map((color, index) => <span key={index} className="aspect-square bg-slate-950/70" style={color ? { background: COLORS[color] } : undefined} />)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 12×8 board</div>}</div>;
+  return <div className={gridOnly ? 'h-full w-full' : ''}><div aria-label="Pixel Battle grid" className={`grid gap-px overflow-hidden bg-white/10 p-px ${gridOnly ? 'h-full w-full' : 'aspect-[4/5] w-full max-w-[420px]'}`} style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))', gridTemplateRows: 'repeat(25, minmax(0, 1fr))' }}>{cells.map((color, index) => <span key={index} className="min-h-0 min-w-0 bg-slate-950/70" style={color ? { background: COLORS[color] } : undefined} />)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 20×25 board</div>}</div>;
 }
 
 function TreasureBoard({ events, channel, gridOnly = false }: { events: GameHubChatEvent[]; channel: string; gridOnly?: boolean }) {

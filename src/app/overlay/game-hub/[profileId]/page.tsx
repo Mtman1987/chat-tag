@@ -161,6 +161,19 @@ export default function GameHubOverlayPage() {
   }, [activeGameIds, profile]);
 
   useEffect(() => {
+    if (profileId !== 'system-spacemountainlive-activity') return;
+    window.parent.postMessage({
+      type: 'nebula.activity-state',
+      profileId,
+      active: games.length > 0,
+      gameIds: games.map((game) => game.id),
+    }, '*');
+    return () => {
+      window.parent.postMessage({ type: 'nebula.activity-state', profileId, active: false, gameIds: [] }, '*');
+    };
+  }, [games, profileId]);
+
+  useEffect(() => {
     if (profile?.layout !== 'rotation' || games.length < 2) return;
     let timer: number | null = null;
     let cancelled = false;
@@ -190,10 +203,11 @@ export default function GameHubOverlayPage() {
     ? nebulaRotationIndexAt(rotationNow, games.length)
     : 0;
   const renderedGames = profile.layout === 'focus' ? games.slice(0, 1) : games;
+  const systemProfile = profile.id.startsWith('system-');
 
   return (
     <main className={`min-h-screen w-screen overflow-hidden ${profile.transparent ? 'bg-transparent' : 'bg-slate-950'}`}>
-      <div className={`grid h-screen w-screen gap-3 p-3 ${gridClass}`}>
+      <div className={`grid h-screen w-screen ${systemProfile ? 'gap-0 p-0' : 'gap-3 p-3'} ${gridClass}`}>
         {renderedGames.map((game, index) => {
           const visible = profile.layout !== 'rotation' || index === rotationIndex;
           return (

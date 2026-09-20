@@ -72,6 +72,18 @@ test('system stage stays transparent during idle and transient recovery', () => 
   assert.match(overlay, /!renderedGames\.length && !profile\.transparent/);
 });
 
+test('activity stage reports active games and system surfaces use every available pixel', () => {
+  const overlay = readFileSync(new URL('../src/app/overlay/game-hub/[profileId]/page.tsx', import.meta.url), 'utf8');
+  const prototype = readFileSync(new URL('../src/components/game-hub-prototype-surface.tsx', import.meta.url), 'utf8');
+  assert.match(overlay, /type: 'nebula\.activity-state'/);
+  assert.match(overlay, /active: games\.length > 0/);
+  assert.match(overlay, /systemProfile \? 'gap-0 p-0'/);
+  assert.match(prototype, /const columns = 20/);
+  assert.match(prototype, /const rows = 25/);
+  assert.match(prototype, /gridTemplateColumns: 'repeat\(20, minmax\(0, 1fr\)\)'/);
+  assert.match(prototype, /gridTemplateRows: 'repeat\(25, minmax\(0, 1fr\)\)'/);
+});
+
 test('spmt leaderboard queues a main-display card and the overlay holds it for 15 seconds', () => {
   const command = readFileSync(new URL('../src/app/api/game-hub/command/route.ts', import.meta.url), 'utf8');
   const botPatch = readFileSync(new URL('../scripts/patch-game-hub-bot.mjs', import.meta.url), 'utf8');

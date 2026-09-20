@@ -2,17 +2,19 @@ import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-test('Lounge compact mode prioritizes names over broadcast emotes', () => {
+test('Lounge compact mode gives names and large stats dedicated halves', () => {
   const source = fs.readFileSync('src/app/overlay/[userId]/page.tsx', 'utf8');
   assert.match(source, /searchParams\.get\('compact'\) === 'lounge'/);
   assert.match(source, /loungeCompact \? 'absolute' : 'static'/);
   assert.match(source, /loungeCompact \? 'min\(9vw,14vh\)'/);
   assert.match(source, /height: loungeCompact \? '100%' : undefined/);
-  assert.match(source, /gridTemplateRows: loungeCompact \? 'minmax\(0, 1fr\) auto'/);
-  assert.match(source, /gridColumn: loungeCompact \? '1 \/ -1'/);
-  assert.match(source, /loungeCompact \? 'min\(10vw, 16vh\)'/);
-  assert.match(source, /loungeCompact \? 'min\(5\.4vw, 7\.8vh\)'/);
-  assert.match(source, /minHeight: loungeCompact \? '100%'/);
+  assert.match(source, /top: loungeCompact \? '3%'/);
+  assert.match(source, /right: loungeCompact \? '4%'/);
+  assert.match(source, /<FitText min=\{13\} max=\{36\}>/);
+  assert.match(source, /compact \? '20px'/);
+  assert.match(source, /compact \? '9px'/);
+  assert.match(source, /loungeCompact \? '1 1 57%'/);
+  assert.match(source, /loungeCompact \? '0 0 43%'/);
   assert.match(source, /opacity: loungeCompact \? 1 : \(dimBar/);
   assert.match(source, /transform: loungeCompact \? 'translateY\(0\)'/);
 });
