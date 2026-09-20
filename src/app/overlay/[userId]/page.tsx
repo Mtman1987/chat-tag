@@ -17,6 +17,7 @@ interface OverlayState {
   leaderboard: any[];
   recentHistory: any[];
   overlayMessages?: any[];
+  activeGridLeaderboard?: { gameId: string; gameName: string; theme?: string; rows: Array<{ rank: number; username: string; score: number }> } | null;
   monthlyWinners: any[];
   timestamp: number;
 }
@@ -42,6 +43,7 @@ const EMPTY_OVERLAY_STATE: OverlayState = {
   leaderboard: [],
   recentHistory: [],
   overlayMessages: [],
+  activeGridLeaderboard: null,
   monthlyWinners: [],
   timestamp: 0,
 };
@@ -143,7 +145,7 @@ export default function OverlayPage() {
   const prevOverlayMessageTs = useRef<number | null>(null);
   const prevIt = useRef<string | null>(null);
   const lastHistoryShow = useRef<number>(0);
-  const nextCycleMode = useRef<'history' | 'leaderboard' | 'live'>('leaderboard');
+  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'live'>('leaderboard');
   const dataRef = useRef<OverlayState | null>(null);
   const broadcastRef = useRef<Broadcast | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -356,6 +358,19 @@ export default function OverlayPage() {
       lastHistoryShow.current = Date.now();
     },
     [broadcast, fireBroadcast, spawnConfetti],
+  );
+
+  const fireGridLeaderboardBroadcast = useCallback(
+    (leaderboard: NonNullable<OverlayState['activeGridLeaderboard']>) => {
+      if (!leaderboard.rows.length || broadcastRef.current) return;
+      const lines = [
+        `${leaderboard.gameName}${leaderboard.theme ? ` · ${leaderboard.theme}` : ''}`,
+        ...leaderboard.rows.slice(0, 4).map((row) => `#${row.rank} ${row.username} ${row.score} pts`),
+      ];
+      fireBroadcast({ type: 'history', lines, icon: '🧩', color: '#22d3ee', glow: '#8b5cf6', sound: 'leaderboard' }, 15000);
+      lastHistoryShow.current = Date.now();
+    },
+    [fireBroadcast],
   );
 
   const fireLiveBroadcast = useCallback(
@@ -641,9 +656,17 @@ export default function OverlayPage() {
       if (!current || broadcastRef.current || Date.now() - lastHistoryShow.current <= historyInterval) return;
 
       if (nextCycleMode.current === 'leaderboard') {
-        nextCycleMode.current = 'history';
+        nextCycleMode.current = 'grid';
         if (current.leaderboard?.length) {
           fireLeaderboardBroadcast(current.leaderboard);
+          return;
+        }
+      }
+
+      if (nextCycleMode.current === 'grid') {
+        nextCycleMode.current = 'history';
+        if (loungeCompact && current.activeGridLeaderboard?.rows?.length) {
+          fireGridLeaderboardBroadcast(current.activeGridLeaderboard);
           return;
         }
       }
@@ -660,7 +683,7 @@ export default function OverlayPage() {
       fireLiveBroadcast(current);
     }, 10000);
     return () => { if (historyTimer.current) clearInterval(historyTimer.current); };
-  }, [fireHistoryBroadcast, fireLeaderboardBroadcast, fireLiveBroadcast, historyInterval, isPreview]);
+  }, [fireGridLeaderboardBroadcast, fireHistoryBroadcast, fireLeaderboardBroadcast, fireLiveBroadcast, historyInterval, isPreview, loungeCompact]);
 
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
   const compactAnnouncementActive = loungeCompact && Boolean(broadcast);

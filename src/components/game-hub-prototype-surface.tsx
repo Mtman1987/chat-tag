@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
 
 export type GameHubChatEvent = {
@@ -94,24 +94,99 @@ function TeamBoard({ events, gameKey, paint = false, broadcastOnly = false }: { 
   );
 }
 
-function PixelBoard({ events, gridOnly = false }: { events: GameHubChatEvent[]; gridOnly?: boolean }) {
-  const cells = useMemo(() => {
-    const columns = 20;
-    const rows = 25;
-    const next = Array.from({ length: columns * rows }, () => '');
-    for (const event of events) {
-      const args = spmtArgs(event.message, 'pixel', 'pixelbattle');
-      if (!args) continue;
-      const joined = args.join(' ');
-      const match = joined.match(/^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)\s+(\d{1,2})\s+(\d{1,2})$/);
-      if (!match) continue;
-      const x = Number(match[2]) % columns;
-      const y = Number(match[3]) % rows;
-      next[y * columns + x] = match[1];
-    }
-    return next;
-  }, [events]);
-  return <div className={gridOnly ? 'h-full w-full' : ''}><div aria-label="Pixel Battle grid" className={`grid gap-px overflow-hidden bg-slate-700 p-px ${gridOnly ? 'h-full w-full' : 'aspect-[4/5] w-full max-w-[420px]'}`} style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))', gridTemplateRows: 'repeat(25, minmax(0, 1fr))' }}>{cells.map((color, index) => <span key={index} className="min-h-0 min-w-0 bg-slate-950" style={color ? { background: COLORS[color] } : undefined} />)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 20×25 board</div>}</div>;
+type MosaicSnapshot = {
+  artwork: null | {
+    id: string;
+    theme: string;
+    status: string;
+    activeBoard: number;
+    viewMode: 'board' | 'all';
+    target: string[];
+    painted: string[];
+    width: number;
+    height: number;
+    progress: number;
+    total: number;
+  };
+  queueLength: number;
+};
+
+const MOSAIC_HEX: Record<string, string> = {
+  R: '#ef4444', B: '#3b82f6', G: '#22c55e', Y: '#eab308', P: '#a855f7',
+  O: '#f97316', PK: '#ec4899', W: '#f8fafc', K: '#111827', C: '#06b6d4',
+};
+
+function PixelBoard({ channel, gridOnly = false }: { channel: string; gridOnly?: boolean }) {
+  const [snapshot, setSnapshot] = useState<MosaicSnapshot>({ artwork: null, queueLength: 0 });
+  const generationRunning = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/game-hub/mosaic?channel=${encodeURIComponent(channel)}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json() as MosaicSnapshot;
+        if (!cancelled) setSnapshot(body);
+        const canGenerate = body.queueLength > 0 && (!body.artwork || body.artwork.status === 'completed' || body.artwork.status === 'archived');
+        if (canGenerate && !generationRunning.current) {
+          generationRunning.current = true;
+          void fetch('/api/game-hub/mosaic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel }),
+          }).finally(() => { generationRunning.current = false; });
+        }
+      } catch {}
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 1500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [channel]);
+
+  const artwork = snapshot.artwork;
+  const artworkId = artwork?.id;
+  const artworkStatus = artwork?.status;
+  useEffect(() => {
+    if (!artworkId || artworkStatus !== 'active') return;
+    const heartbeat = () => void fetch('/api/game-hub/mosaic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel, action: 'heartbeat' }),
+    }).catch(() => {});
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 30_000);
+    return () => window.clearInterval(timer);
+  }, [artworkId, artworkStatus, channel]);
+
+  if (!artwork) {
+    return <div className="grid h-full w-full place-items-center bg-slate-950 text-center text-cyan-100"><div><div className="text-lg font-black">NEBULA MOSAIC</div><div className="mt-2 text-xs text-white/55">{snapshot.queueLength ? 'Creating the next artwork…' : 'Request a theme with !mosaic owl'}</div></div></div>;
+  }
+
+  if (artwork.viewMode === 'all') {
+    return <div aria-label={`Nebula Mosaic ${artwork.theme} combined progress`} className="grid h-full w-full gap-px overflow-hidden bg-slate-700 p-px" style={{ gridTemplateColumns: `repeat(${artwork.width}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${artwork.height}, minmax(0, 1fr))` }}>{artwork.target.map((target, index) => {
+      const painted = artwork.painted[index];
+      return <span key={index} className="min-h-0 min-w-0 bg-slate-950" style={painted ? { background: MOSAIC_HEX[painted] } : undefined} />;
+    })}</div>;
+  }
+
+  const columns = Array.from({ length: 20 }, (_, index) => String.fromCharCode(65 + index));
+  const rows = Array.from({ length: 25 }, (_, index) => index + 1);
+  return <div className={gridOnly ? 'h-full w-full bg-slate-950' : 'aspect-[4/5] w-full max-w-[420px] bg-slate-950'}>
+    <div aria-label={`Nebula Mosaic ${artwork.theme} board ${artwork.activeBoard}`} className="grid h-full w-full gap-px overflow-hidden bg-slate-700 p-px" style={{ gridTemplateColumns: 'minmax(14px,.55fr) repeat(20,minmax(0,1fr))', gridTemplateRows: 'minmax(12px,.48fr) repeat(25,minmax(0,1fr))' }}>
+      <span className="bg-slate-950" />
+      {columns.map((label) => <span key={`column-${label}`} className="grid min-h-0 min-w-0 place-items-center bg-slate-900 text-[clamp(6px,1.4vw,11px)] font-black text-cyan-100">{label}</span>)}
+      {rows.flatMap((row, rowIndex) => [
+        <span key={`row-${row}`} className="grid min-h-0 min-w-0 place-items-center bg-slate-900 text-[clamp(6px,1.25vw,10px)] font-black text-cyan-100">{row}</span>,
+        ...columns.map((_, columnIndex) => {
+          const index = rowIndex * 20 + columnIndex;
+          const target = artwork.target[index];
+          const painted = artwork.painted[index];
+          return <span key={`cell-${index}`} className="grid min-h-0 min-w-0 place-items-center bg-slate-950 text-[clamp(6px,1.45vw,11px)] font-black leading-none" style={painted ? { background: MOSAIC_HEX[painted], color: painted === 'K' ? '#94a3b8' : '#07111f' } : { color: MOSAIC_HEX[target] }}>{painted ? '' : target}</span>;
+        }),
+      ])}
+    </div>
+  </div>;
 }
 
 function TreasureBoard({ events, channel, gridOnly = false }: { events: GameHubChatEvent[]; channel: string; gridOnly?: boolean }) {
@@ -213,7 +288,7 @@ export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly =
     if (game.id === 'colorwars') return <TeamBoard events={recent} gameKey="colorwars" paint broadcastOnly={broadcastOnly} />;
     if (game.id === 'chickenroyale') return <RaceBoard events={recent} chicken broadcastOnly={broadcastOnly} />;
     if (game.id === 'petrace') return <RaceBoard events={recent} broadcastOnly={broadcastOnly} />;
-    if (game.id === 'pixelbattle') return <PixelBoard events={recent} gridOnly={broadcastOnly} />;
+    if (game.id === 'pixelbattle') return <PixelBoard channel={channel} gridOnly={broadcastOnly} />;
     if (game.id === 'treasurehunt') return <TreasureBoard events={recent} channel={channel} gridOnly={broadcastOnly} />;
     if (game.id === 'wordchain') return <WordChain events={recent} />;
     if (game.id === 'wordstorm') return <WordStorm events={recent} />;

@@ -208,6 +208,8 @@ export async function middleware(request: NextRequest) {
   const isPublicGameInstructionsRead = request.method === 'GET' && pathname === '/api/game-hub/instructions';
   const isPublicShowcaseManifestRead = request.method === 'GET' && pathname === '/api/game-hub/showcase-manifest';
   const isPublicParadeStateRead = request.method === 'GET' && pathname === '/api/game-hub/parade';
+  const isPublicMosaicRuntime = pathname === '/api/game-hub/mosaic'
+    && (request.method === 'GET' || request.method === 'POST');
   const isPublicBingoStateRead = request.method === 'GET' && pathname === '/api/bingo/state';
   // Generated artwork is public to view. Generation itself is never public.
   const isPublicQuackverseArtRead = request.method === 'GET'
@@ -221,6 +223,7 @@ export async function middleware(request: NextRequest) {
     || isPublicGameInstructionsRead
     || isPublicShowcaseManifestRead
     || isPublicParadeStateRead
+    || isPublicMosaicRuntime
     || isPublicBingoStateRead
     || isPublicQuackverseArtRead
     || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))

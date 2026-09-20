@@ -43,6 +43,7 @@ export default function GameHubOverlayPage() {
   const profileId = String(params?.profileId || '');
   const [profile, setProfile] = useState<PublicOverlayProfile | null>(null);
   const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
+  const [suspendedGameIds, setSuspendedGameIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GameHubChatEvent[]>([]);
   const [error, setError] = useState('');
   const [rotationNow, setRotationNow] = useState(() => Date.now());
@@ -87,7 +88,10 @@ export default function GameHubOverlayPage() {
         const response = await fetch(`/api/game-hub/channel?channel=${encodeURIComponent(ownerLogin)}`, { cache: 'no-store' });
         if (!response.ok) return;
         const body = await response.json();
-        if (!cancelled) setActiveGameIds(Array.isArray(body.gameIds) ? body.gameIds : []);
+        if (!cancelled) {
+          setActiveGameIds(Array.isArray(body.gameIds) ? body.gameIds : []);
+          setSuspendedGameIds(Array.isArray(body.suspendedGameIds) ? body.suspendedGameIds : []);
+        }
       } catch {}
     }
     void loadScope();
@@ -162,6 +166,7 @@ export default function GameHubOverlayPage() {
   const games = useMemo(() => {
     if (!profile) return [];
     const active = new Set(activeGameIds);
+    const suspended = new Set(suspendedGameIds);
     const requireRecentPlay = profile.id.startsWith('system-');
     const recentlyPlayed = new Set(events.flatMap((event) => {
       const at = Date.parse(event.at);
@@ -171,10 +176,10 @@ export default function GameHubOverlayPage() {
         : [];
     }));
     return profile.gameIds
-      .filter((gameId) => active.has(gameId) && (!requireRecentPlay || recentlyPlayed.has(gameId)))
+      .filter((gameId) => active.has(gameId) && !suspended.has(gameId) && (!requireRecentPlay || recentlyPlayed.has(gameId) || gameId === 'pixelbattle'))
       .map((gameId) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
       .filter((game): game is GameHubGame => Boolean(game));
-  }, [activeGameIds, activityNow, events, profile]);
+  }, [activeGameIds, activityNow, events, profile, suspendedGameIds]);
   const activeGamesKey = games.map((game) => game.id).join(',');
 
   useEffect(() => {
@@ -228,6 +233,7 @@ export default function GameHubOverlayPage() {
       <div className={`grid h-screen w-screen ${systemProfile ? 'gap-0 p-0' : 'gap-3 p-3'} ${gridClass}`}>
         {renderedGames.map((game, index) => {
           const visible = profile.layout !== 'rotation' || index === rotationIndex;
+          if (!visible) return null;
           return (
             <div key={game.id} className={visible ? 'h-full min-h-0 w-full' : 'hidden'} aria-hidden={!visible}>
               <GameHubSurface

@@ -325,7 +325,13 @@ async function apiCall(endpoint, options = {}) {
       ...(options.headers || {}),
       'x-bot-secret': getBotSecret(),
     };
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+    const defaultTimeoutMs = Number.parseInt(process.env.CHAT_TAG_API_TIMEOUT_MS || '10000', 10);
+    const slowTimeoutMs = Number.parseInt(process.env.CHAT_TAG_SLOW_API_TIMEOUT_MS || '45000', 10);
+    const requestedTimeoutMs = endpoint === '/api/discord/live-members' ? slowTimeoutMs : defaultTimeoutMs;
+    const fallbackTimeoutMs = endpoint === '/api/discord/live-members' ? 45000 : 10000;
+    const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0 ? requestedTimeoutMs : fallbackTimeoutMs;
+    const signal = options.signal || AbortSignal.timeout(timeoutMs);
+    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, signal });
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
     updateWinnersCache(data);
@@ -995,6 +1001,7 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
 
 const username = env.TWITCH_BOT_USERNAME;
 const recentMessages = new Set();
+const pendingGameChoices = new Map();
 const BOT_TEST_CHANNEL = (env.BOT_TEST_CHANNEL || '').toLowerCase().replace(/^#/, '');
 const ALWAYS_JOINED_CHANNELS = ['mtman1987']; // Channels the bot should keep joined even while offline
 let isIrcConnected = false;
@@ -1924,13 +1931,27 @@ console.log = (...args) => {
       }
     }
     
-    const rawMessage = message.trim();
-    const msg = rawMessage.toLowerCase();
-    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ')) return;
+    let rawMessage = message.trim();
+    let msg = rawMessage.toLowerCase();
+    const rawChoiceKey = channel.replace('#', '').toLowerCase() + ':' + senderLogin;
+    const pendingChoice = pendingGameChoices.get(rawChoiceKey);
+    const pendingChoiceNumber = /^\d{1,2}$/.test(msg) ? Number(msg) : 0;
+    const mosaicShortcut = msg === '!mosaic' || msg.startsWith('!mosaic ');
+    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ') && !mosaicShortcut) {
+      if (!pendingChoice || pendingChoice.expiresAt < Date.now() || pendingChoiceNumber < 1 || pendingChoiceNumber > pendingChoice.choices.length) {
+        if (pendingChoice?.expiresAt < Date.now()) pendingGameChoices.delete(rawChoiceKey);
+        return;
+      }
+      rawMessage = String(pendingChoice.choices[pendingChoiceNumber - 1].command || '');
+      msg = rawMessage.toLowerCase();
+      pendingGameChoices.delete(rawChoiceKey);
+    }
     // Normalize: ensure @spmt prefix
-    const normalizedMsg = (msg.startsWith('spmt ') || msg.startsWith('!spmt '))
-      ? '@' + rawMessage.trim().replace(/^!/, '')
-      : rawMessage.trim();
+    const normalizedMsg = mosaicShortcut
+      ? '@spmt mosaic' + rawMessage.trim().slice(7)
+      : (msg.startsWith('spmt ') || msg.startsWith('!spmt '))
+        ? '@' + rawMessage.trim().replace(/^!/, '')
+        : rawMessage.trim();
 
     // In shared chat, process mirrored partner messages too, but map to source channel context.
     const rawChannelName = channel.replace('#', '');
@@ -1952,8 +1973,8 @@ console.log = (...args) => {
     // Small random delay to avoid looking too bot-like (0.5-1.5s)
     await new Promise(r => setTimeout(r, 500 + Math.random() * 1000));
     
-    const args = normalizedMsg.toLowerCase().split(/\s+/).slice(1);
-    const cmd = args[0];
+    let args = normalizedMsg.toLowerCase().split(/\s+/).slice(1);
+    let cmd = args[0];
     const userId = `user_${tags['user-id']}`;
     const user = tags['display-name'] || tags['username'];
     const isAdminUser =
@@ -1973,6 +1994,65 @@ console.log = (...args) => {
     // Muted channel check - still process commands but don't respond
     const mutedData = await apiCall('/api/bot/muted');
     const isMuted = mutedData?.muted?.includes(channelName);
+
+    // Chat Tag predates Games Hub and is a persistent ecosystem-wide game.
+    // Keep every command already implemented by the legacy parser local so a
+    // Games Hub/API outage can never intercept score, live, tag, pass, etc.
+    const legacyChatTagCommands = new Set(["admin","away","discord","givepass","help","join","kick","leave","live","mod","more","mute","optout","pack","pass","pinrank","players","quackpack","rank","refillpacks","rules","score","sleep","status","support","tag","ticket","twitch","unmute","wake","whosit"]);
+    const chatTagNamespace = cmd === 'chattag' || cmd === 'taggame';
+    if (chatTagNamespace) {
+      const chatTagAction = args[1] || 'status';
+      if (chatTagAction === 'start') {
+        if (!isMuted) await reply('@' + user + ' Chat Tag is always active globally; no channel start is required. Use "spmt score" to check your score.');
+        return;
+      }
+      if (chatTagAction === 'stop') {
+        if (!isMuted) await reply('@' + user + ' Chat Tag is persistent and cannot be stopped per-channel.');
+        return;
+      }
+      args = [chatTagAction, ...args.slice(2)];
+      cmd = args[0];
+    }
+
+    // Games Hub owns only commands that are not already proven Chat Tag
+    // commands. This ordering is deliberate: legacy Tag never waits on the
+    // Games Hub router before reaching its original handler.
+    const sharedNebulaCommands = new Set(['join', 'leave']);
+    if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd)) {
+      const gamesHubCommand = await apiCall('/api/game-hub/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: channelName,
+          userId: tags['user-id'] || '',
+          username: senderLogin,
+          displayName: user,
+          message: rawMessage,
+          messageId: tags.id || '',
+          isBroadcaster: tags?.badges?.broadcaster === '1' || senderLogin === channelName,
+          isModerator: Boolean(tags?.mod),
+          isAdmin: isAdminUser,
+        }),
+      });
+      if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {
+        pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + 30_000 });
+      }
+      if (gamesHubCommand?.rewriteCommand) {
+        const rewritten = String(gamesHubCommand.rewriteCommand || '')
+          .trim()
+          .toLowerCase()
+          .replace(/^!?@?spmt\s+/, '');
+        args = rewritten.split(/\s+/).filter(Boolean);
+        cmd = args[0];
+      }
+      if (gamesHubCommand?.overlayEvent?.type) {
+        await sendRichOverlayEvent(channelName, gamesHubCommand.overlayEvent.type, gamesHubCommand.overlayEvent.message || '', gamesHubCommand.overlayEvent.payload || {});
+      }
+      if (gamesHubCommand?.handled) {
+        if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);
+        return;
+      }
+    }
     
     if (isMirroredSharedMessage) {
       console.log(`[Bot] Shared chat mirrored command mapped ${rawChannelName} -> ${channelName}`);

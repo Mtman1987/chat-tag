@@ -79,10 +79,10 @@ test('activity stage reports active games and system surfaces use every availabl
   assert.match(overlay, /activeGamesKey = games\.map/);
   assert.match(overlay, /active: gameIds\.length > 0/);
   assert.match(overlay, /systemProfile \? 'gap-0 p-0'/);
-  assert.match(prototype, /const columns = 20/);
-  assert.match(prototype, /const rows = 25/);
-  assert.match(prototype, /gridTemplateColumns: 'repeat\(20, minmax\(0, 1fr\)\)'/);
-  assert.match(prototype, /gridTemplateRows: 'repeat\(25, minmax\(0, 1fr\)\)'/);
+  assert.match(prototype, /Array\.from\(\{ length: 20 \}/);
+  assert.match(prototype, /Array\.from\(\{ length: 25 \}/);
+  assert.match(prototype, /repeat\(20,minmax\(0,1fr\)\)/);
+  assert.match(prototype, /repeat\(25,minmax\(0,1fr\)\)/);
 });
 
 test('system games release their panel after thirty minutes without play', () => {

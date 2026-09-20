@@ -4,6 +4,7 @@ import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalPlayerCommands, canonicalStreamerCommands, getCanonicalGameCommandSpec } from '@/lib/game-hub-commands';
 import { normalizeGameHubChannel, resolveChannelGameIds, setChannelGameRunning } from '@/lib/game-hub-state';
 import { readAppState, updateAppState } from '@/lib/volume-store';
+import { mosaicPublicSnapshot, resumeMosaicIfNeeded } from '@/lib/nebula-mosaic';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,9 @@ export async function GET(req: NextRequest) {
   if (!channel) return NextResponse.json({ error: 'channel is required.' }, { status: 400 });
   const state = await readAppState();
   const gameIds = resolveChannelGameIds(state, channel);
-  return NextResponse.json({ channel, gameIds, games: publicGames(gameIds) });
+  const mosaic = mosaicPublicSnapshot(state, channel);
+  const suspendedGameIds = mosaic.artwork?.status === 'suspended' ? ['pixelbattle'] : [];
+  return NextResponse.json({ channel, gameIds, games: publicGames(gameIds), suspendedGameIds });
 }
 
 export async function POST(req: NextRequest) {
@@ -51,6 +54,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await updateAppState((state) => {
       setChannelGameRunning(state, channel, gameId, action === 'start');
+      if (gameId === 'pixelbattle' && action === 'start') resumeMosaicIfNeeded(state, channel);
       const gameIds = resolveChannelGameIds(state, channel);
       return { gameIds, games: publicGames(gameIds) };
     });

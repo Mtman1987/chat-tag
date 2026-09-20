@@ -82,8 +82,11 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt phrase hint', description: 'Buy the next shared hint with Games Points.' },
     { trigger: 'spmt phrase submit your phrase', description: 'Submit a community phrase and earn attribution points when it is solved.' },
   ] },
-  { gameId: 'pixelbattle', key: 'pixel', aliases: ['pixelbattle'], joinDescription: 'Join Pixel Battle.', joinTrigger: 'spmt pixel', commands: [
-    { trigger: 'spmt paint red 10 5', description: 'Paint a pixel using color, X and Y.' },
+  { gameId: 'pixelbattle', key: 'mosaic', aliases: ['pixel', 'pixelbattle'], joinDescription: 'Join Nebula Mosaic.', joinTrigger: 'spmt mosaic', commands: [
+    { trigger: '!mosaic owl', description: 'Spend the configured SPMT XP to request the next artwork.' },
+    { trigger: 'spmt D12Y', description: 'Paint a square; spaces, full color names and reversed order also work.' },
+    { trigger: 'spmt view 1', description: 'Open work board 1, 2, 3 or 4.' },
+    { trigger: 'spmt view all', description: 'Briefly show the complete combined artwork.' },
   ] },
   { gameId: 'rhythmpulse', key: 'rhythm', aliases: ['rhythmpulse'], joinDescription: 'Join Rhythm Pulse.', joinTrigger: 'spmt rhythm', commands: [] },
   { gameId: 'treasurehunt', key: 'treasure', aliases: ['treasurehunt'], joinDescription: 'Join Treasure Hunt.', joinTrigger: 'spmt treasure', commands: [
@@ -161,7 +164,7 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
     symphony: ['colorsymphony', []], harmony: ['colorsymphony', []], colors: ['colorwars', []],
     parade: ['dancingparade', []], dance: ['dancingparade', ['dance']], rain: ['emojirain', []],
     tower: ['emojitower', []], drop: ['emojitower', ['drop']], memory: ['memorylane', []],
-    phrase: ['phraseguess', []], hint: ['phraseguess', ['hint']], pixel: ['pixelbattle', []], rhythm: ['rhythmpulse', []],
+    phrase: ['phraseguess', []], hint: ['phraseguess', ['hint']], pixel: ['pixelbattle', []], mosaic: ['pixelbattle', []], rhythm: ['rhythmpulse', []],
     treasure: ['treasurehunt', []], chain: ['wordchain', []], storm: ['wordstorm', []],
   };
 

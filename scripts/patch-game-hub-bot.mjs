@@ -22,6 +22,18 @@ if (!source.includes(numericChoiceMarker)) {
   source = source.replace(numericChoiceTarget, numericChoiceReplacement);
 }
 
+const mosaicShortcutMarker = "const mosaicShortcut = msg === '!mosaic'";
+if (!source.includes(mosaicShortcutMarker)) {
+  const mosaicGateTarget = `    const pendingChoiceNumber = /^\\d{1,2}$/.test(msg) ? Number(msg) : 0;\n    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ')) {`;
+  const mosaicGateReplacement = `    const pendingChoiceNumber = /^\\d{1,2}$/.test(msg) ? Number(msg) : 0;\n    const mosaicShortcut = msg === '!mosaic' || msg.startsWith('!mosaic ');\n    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ') && !mosaicShortcut) {`;
+  if (!source.includes(mosaicGateTarget)) throw new Error('Mosaic shortcut command gate target was not found.');
+  source = source.replace(mosaicGateTarget, mosaicGateReplacement);
+  const normalizeTarget = `    const normalizedMsg = (msg.startsWith('spmt ') || msg.startsWith('!spmt '))\n      ? '@' + rawMessage.trim().replace(/^!/, '')\n      : rawMessage.trim();`;
+  const normalizeReplacement = `    const normalizedMsg = mosaicShortcut\n      ? '@spmt mosaic' + rawMessage.trim().slice(7)\n      : (msg.startsWith('spmt ') || msg.startsWith('!spmt '))\n        ? '@' + rawMessage.trim().replace(/^!/, '')\n        : rawMessage.trim();`;
+  if (!source.includes(normalizeTarget)) throw new Error('Mosaic shortcut normalization target was not found.');
+  source = source.replace(normalizeTarget, normalizeReplacement);
+}
+
 const chatMarker = "apiCall('/api/game-hub/chat'";
 const chatTarget = `      // Forward chat to DSH for leaderboard points\n      forwardToDSH({ type: 'chat', twitchLogin: senderLogin, twitchId: tags['user-id'], username: tags['display-name'] || senderLogin, channel: resolvedChannel });\n      apiCall('/api/tag', {`;
 
@@ -57,6 +69,10 @@ const commandTarget = `    const mutedData = await apiCall('/api/bot/muted');\n 
 let commandReplacement = `    const mutedData = await apiCall('/api/bot/muted');\n    const isMuted = mutedData?.muted?.includes(channelName);\n\n    // Chat Tag predates Games Hub and is a persistent ecosystem-wide game.\n    // Keep every command already implemented by the legacy parser local so a\n    // Games Hub/API outage can never intercept score, live, tag, pass, etc.\n    const legacyChatTagCommands = new Set(${legacyChatTagCommandsLiteral});\n    const chatTagNamespace = cmd === 'chattag' || cmd === 'taggame';\n    if (chatTagNamespace) {\n      const chatTagAction = args[1] || 'status';\n      if (chatTagAction === 'start') {\n        if (!isMuted) await reply('@' + user + ' Chat Tag is always active globally; no channel start is required. Use "spmt score" to check your score.');\n        return;\n      }\n      if (chatTagAction === 'stop') {\n        if (!isMuted) await reply('@' + user + ' Chat Tag is persistent and cannot be stopped per-channel.');\n        return;\n      }\n      args = [chatTagAction, ...args.slice(2)];\n      cmd = args[0];\n    }\n\n    // Games Hub owns only commands that are not already proven Chat Tag\n    // commands. This ordering is deliberate: legacy Tag never waits on the\n    // Games Hub router before reaching its original handler.\n    if (!legacyChatTagCommands.has(cmd)) {\n      const gamesHubCommand = await apiCall('/api/game-hub/command', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({\n          channel: channelName,\n          userId: tags['user-id'] || '',\n          username: senderLogin,\n          displayName: user,\n          message: rawMessage,\n          isBroadcaster: tags?.badges?.broadcaster === '1' || senderLogin === channelName,\n          isModerator: Boolean(tags?.mod),\n          isAdmin: isAdminUser,\n        }),\n      });\n      if (gamesHubCommand?.rewriteCommand) {\n        const rewritten = String(gamesHubCommand.rewriteCommand || '')\n          .trim()\n          .toLowerCase()\n          .replace(/^!?@?spmt\\s+/, '');\n        args = rewritten.split(/\\s+/).filter(Boolean);\n        cmd = args[0];\n      }\n      if (gamesHubCommand?.handled) {\n        if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);\n        return;\n      }\n    }\n    \n    if (isMirroredSharedMessage) {`;
 
 commandReplacement = commandReplacement
+  .replace(
+    '          message: rawMessage,',
+    "          message: rawMessage,\n          messageId: tags.id || '',",
+  )
   .replace(
     '    if (!legacyChatTagCommands.has(cmd)) {',
     "    const sharedNebulaCommands = new Set(['join', 'leave']);\n    if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd)) {",
@@ -123,6 +139,8 @@ if (
   !source.includes('sharedNebulaCommands.has(cmd)') ||
   !source.includes(choiceStoreMarker) ||
   !source.includes(numericChoiceMarker) ||
+  !source.includes(mosaicShortcutMarker) ||
+  !source.includes("messageId: tags.id || ''") ||
   !source.includes('gamesHubCommand?.choices') ||
   !source.includes(apiTimeoutMarker) ||
   !source.includes(healthContract) ||

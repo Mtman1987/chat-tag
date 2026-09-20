@@ -26,7 +26,7 @@ GAMES = [
     ("Memory Lane", "creative", "Stories become drifting memory cards"),
     ("Pet Race", "race", "Enter a pet in a quick live race"),
     ("Phrase Guess", "word", "Race to solve the hidden phrase"),
-    ("Pixel Battle", "creative", "Paint a shared canvas together"),
+    ("Nebula Mosaic", "creative", "Complete AI-generated artwork together"),
     ("Rhythm Pulse", "music", "Chat generates beats and combos"),
     ("Treasure Hunt", "strategy", "Dig the grid with hot and cold clues"),
     ("Word Chain", "word", "Extend the chain one word at a time"),

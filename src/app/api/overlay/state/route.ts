@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
+import { getGameHubGameStats, normalizeGameHubChannel } from '@/lib/game-hub-state';
+import { mosaicPublicSnapshot } from '@/lib/nebula-mosaic';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +73,23 @@ export async function GET(req: NextRequest) {
     .slice()
     .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
     .slice(0, 10);
+  const overlayOwner = state.tagPlayers?.[userId] || state.users?.[userId] || {};
+  const overlayChannel = normalizeGameHubChannel(
+    overlayOwner.twitchUsername || overlayOwner.username || String(userId).replace(/^user_/, ''),
+  );
+  const mosaic = overlayChannel ? mosaicPublicSnapshot(state, overlayChannel) : { artwork: null };
+  const activeGridLeaderboard = mosaic.artwork?.status === 'active'
+    ? {
+      gameId: 'pixelbattle',
+      gameName: 'Nebula Mosaic',
+      theme: mosaic.artwork.theme,
+      rows: getGameHubGameStats(state, 'pixelbattle').leaderboard.slice(0, 5).map((entry, index) => ({
+        rank: index + 1,
+        username: entry.displayName || entry.username,
+        score: entry.score,
+      })),
+    }
+    : null;
   const trackedChannels = Object.keys(state.botChannels || {});
   let liveCount = 0;
   let liveUsers: any[] = [];
@@ -95,6 +114,7 @@ export async function GET(req: NextRequest) {
     leaderboard,
     recentHistory,
     overlayMessages,
+    activeGridLeaderboard,
     monthlyWinners,
     timestamp: Date.now(),
   });

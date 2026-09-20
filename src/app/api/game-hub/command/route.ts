@@ -38,6 +38,21 @@ import {
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import {
+  MOSAIC_COLORS,
+  MOSAIC_XP_COST,
+  mosaicPublicSnapshot,
+  paintMosaicCell,
+  parseMosaicPaintCommand,
+  parseMosaicViewCommand,
+  queueMosaicTheme,
+  resumeMosaicIfNeeded,
+  setMosaicView,
+  validateMosaicTheme,
+} from '@/lib/nebula-mosaic';
+import { awardSpmtXp } from '@/lib/spmt-client';
+import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
+import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
+import {
   addDancingParadeEmojis,
   addDancingParadeParticipant,
   extractParadeEmojis,
@@ -48,9 +63,24 @@ import {
 export const dynamic = 'force-dynamic';
 
 const LEGACY_CHAT_TAG_ROOT_COMMANDS = new Set(['help', 'rules', 'score']);
+const ACTIVITY_GAME_ORDER = ['chatwars', 'colorwars', 'memorylane', 'pixelbattle', 'treasurehunt', 'bingo'];
+const ACTIVITY_RECENT_MS = 30 * 60_000;
+
+function currentActivityGameId(state: any, channel: string, activeGameIds: string[], now = Date.now()) {
+  const recent = new Set(getNebulaChatEvents(channel, '', 250).flatMap((event: any) => {
+    const at = Date.parse(String(event?.at || ''));
+    return Number.isFinite(at) && now - at <= ACTIVITY_RECENT_MS && Array.isArray(event?.gameIds) ? event.gameIds : [];
+  }));
+  const mosaic = mosaicPublicSnapshot(state, channel).artwork;
+  const available = ACTIVITY_GAME_ORDER.filter((gameId) => activeGameIds.includes(gameId)
+    && (recent.has(gameId) || (gameId === 'pixelbattle' && mosaic?.status === 'active')));
+  return available.length ? available[nebulaRotationIndexAt(now, available.length)] : null;
+}
 
 function parseSpmt(message: unknown): string[] {
   const raw = String(message || '').trim();
+  const mosaic = raw.match(/^!mosaic(?:\s+|$)(.*)$/i);
+  if (mosaic) return ['mosaic', ...String(mosaic[1] || '').trim().split(/\s+/).filter(Boolean)];
   const match = raw.match(/^!?@?spmt(?:\s+|$)(.*)$/i);
   if (!match) return [];
   return String(match[1] || '').trim().split(/\s+/).filter(Boolean);
@@ -128,7 +158,120 @@ export async function POST(req: NextRequest) {
   let command = parts[0].toLowerCase();
   const directState = await readAppState();
   const activeForDirectRouting = resolveChannelGameIds(directState, channel);
+  const activeActivityGame = currentActivityGameId(directState, channel, activeForDirectRouting);
   const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
+
+  if (command === 'mosaic' && parts.length > 1) {
+    let theme = '';
+    try {
+      theme = validateMosaicTheme(parts.slice(1).join(' '));
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Choose a valid Mosaic theme.'}` });
+    }
+    if (!String(userId || '').trim()) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Link your Twitch identity before spending SPMT XP on a Mosaic theme.` });
+    }
+    const mosaicRequestKey = `mosaic:${channel}:${String(body.messageId || body.eventId || Date.now())}:${String(userId)}`;
+    if (MOSAIC_XP_COST > 0) {
+      const charge = await awardSpmtXp({
+        userId: String(userId),
+        eventType: 'nebula.mosaic.request',
+        idempotencyKey: mosaicRequestKey,
+        delta: -MOSAIC_XP_COST,
+        metadata: { channel, theme },
+      });
+      if (charge.skipped || charge.ok !== true) {
+        return NextResponse.json({ handled: true, reply: `@${displayName} the ${MOSAIC_XP_COST.toLocaleString()} SPMT XP charge could not be completed, so nothing was queued.` });
+      }
+    }
+    try {
+      const queued = await updateAppState((draft) => {
+        setChannelGameRunning(draft, channel, 'pixelbattle', true);
+        const result = queueMosaicTheme(draft, { channel, userId, username, displayName, theme, xpCost: MOSAIC_XP_COST });
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: 'pixelbattle', actorId: userId, username, displayName,
+          action: 'theme', args: [theme], message: String(body.message || ''),
+        });
+        return result;
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} “${theme}” is Mosaic request #${queued.position}${MOSAIC_XP_COST ? ` · ${MOSAIC_XP_COST.toLocaleString()} SPMT XP spent` : ''}.`,
+        mosaicGenerationQueued: true,
+      });
+    } catch (error: any) {
+      if (MOSAIC_XP_COST > 0) {
+        await awardSpmtXp({
+          userId: String(userId),
+          eventType: 'nebula.mosaic.refund',
+          idempotencyKey: `${mosaicRequestKey}:refund`,
+          delta: MOSAIC_XP_COST,
+          metadata: { channel, theme, reason: 'queue-rejected' },
+        }).catch(() => null);
+      }
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That Mosaic could not be queued.'}` });
+    }
+  }
+
+  const mosaicView = parseMosaicViewCommand(body.message);
+  if (mosaicView !== null) {
+    if (!activeForDirectRouting.includes('pixelbattle')) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.` });
+    }
+    if (activeActivityGame && activeActivityGame !== 'pixelbattle') {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Nebula Mosaic is waiting in the activity rotation; commands currently belong to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'}.` });
+    }
+    try {
+      await updateAppState((draft) => {
+        const artwork = setMosaicView(draft, channel, mosaicView);
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: 'pixelbattle', actorId: userId, username, displayName,
+          action: 'view', args: [String(mosaicView)], message: String(body.message || ''),
+        });
+        return artwork;
+      });
+      return NextResponse.json({ handled: true, reply: mosaicView === 'all'
+        ? `@${displayName} showing the complete Mosaic for 15 seconds.`
+        : `@${displayName} opened Mosaic board ${mosaicView}.` });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That Mosaic view is unavailable.'}` });
+    }
+  }
+
+  const mosaicPaint = parseMosaicPaintCommand(body.message);
+  if (mosaicPaint) {
+    if (!activeForDirectRouting.includes('pixelbattle')) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.` });
+    }
+    if (activeActivityGame && activeActivityGame !== 'pixelbattle') {
+      return NextResponse.json({ handled: true, reply: `@${displayName} that coordinate belongs to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'} right now. Nebula Mosaic will return in the rotation.` });
+    }
+    try {
+      const result = await updateAppState((draft) => {
+        const painted = paintMosaicCell(draft, { channel, userId, username, displayName, command: mosaicPaint });
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: 'pixelbattle', actorId: userId, username, displayName,
+          action: 'paint', args: [mosaicPaint.coordinate, mosaicPaint.color], message: String(body.message || ''),
+        });
+        return painted;
+      });
+      const expectedName = MOSAIC_COLORS[result.expected].name;
+      if (result.outcome === 'wrong') {
+        return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} needs ${expectedName} · −1 point · score ${result.score}.` });
+      }
+      if (result.outcome === 'already-painted') {
+        return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} on board ${result.board} is already ${expectedName}.` });
+      }
+      const bonus = result.milestones.reduce((sum, milestone) => sum + milestone.bonus, 0);
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} painted board ${result.board} ${result.coordinate} ${expectedName} · +1${bonus ? ` · milestone bonuses +${bonus}` : ''} · score ${result.score}.`,
+        mosaicMilestones: result.milestones,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That square could not be painted.'}` });
+    }
+  }
 
   if (command === 'instructions') {
     if (!canControl) {
@@ -413,6 +556,7 @@ export async function POST(req: NextRequest) {
 
     const activeIds = await updateAppState((state) => {
       setChannelGameRunning(state, channel, game.id, action === 'start');
+      if (game.id === 'pixelbattle' && action === 'start') resumeMosaicIfNeeded(state, channel);
       if (action === 'stop') setGameHubInstructions(state, channel, null);
       recordGameHubRuntimeAction(state, {
         channel,

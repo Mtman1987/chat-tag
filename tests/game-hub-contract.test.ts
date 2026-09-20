@@ -95,8 +95,8 @@ test('every Games Hub chat command uses the spmt namespace', () => {
     const streamerCommands = canonicalStreamerCommands(game);
     assert.ok(playerCommands.length >= 2, `${game.id} needs join/leave commands`);
     for (const command of [...playerCommands, ...streamerCommands]) {
-      assert.match(command.trigger, /^spmt\s+/i, `${game.id} leaked a non-SPMT command`);
-      assert.doesNotMatch(command.trigger, /^!/);
+      assert.match(command.trigger, /^(?:spmt\s+|!mosaic\s+)/i, `${game.id} leaked an unsupported command prefix`);
+      if (!/^!mosaic\s+/i.test(command.trigger)) assert.doesNotMatch(command.trigger, /^!/);
     }
   }
   const chatTag = canonicalPlayerCommands(getGameHubGame('chat-tag')!);
@@ -568,7 +568,8 @@ test('all chat games separate broadcast visuals from full popout controls', () =
   assert.match(surface, /GameHubBingoSurface broadcastOnly=\{!chrome\}/);
   assert.match(prototype, /PixelBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
   assert.match(prototype, /TreasureBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
-  assert.match(prototype, /!gridOnly &&[\s\S]*spmt pixel red 10 5/);
+  assert.match(prototype, /fetch\(`\/api\/game-hub\/mosaic\?channel=/);
+  assert.doesNotMatch(prototype, /<button[\s\S]*PixelBoard/);
   assert.match(prototype, /broadcastOnly \? 'p-0' : 'p-4'/);
   assert.match(bingo, /!broadcastOnly &&[\s\S]*24 shared phrases/);
   assert.match(bingo, /aria-label="Bingo grid"/);
