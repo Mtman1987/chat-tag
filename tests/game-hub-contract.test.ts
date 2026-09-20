@@ -245,6 +245,7 @@ test('Word Chain settles canonical words, combos, and neutral majority votes dur
   const newt = recordWordChainMessage(state, { ...first, channel: 'space', message: 'newt', now: 1 });
   assert.equal(raccoon.outcome, 'accepted');
   assert.equal(raccoon.points, 7);
+  assert.equal(newt.outcome, 'accepted');
   assert.equal(newt.points, 6);
   assert.equal(stored('11').gamePointsBalance, 13);
   assert.equal(stored('11').joinedGames.wordchain.score, 13);
