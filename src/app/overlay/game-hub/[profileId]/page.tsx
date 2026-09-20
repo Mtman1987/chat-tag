@@ -175,19 +175,21 @@ export default function GameHubOverlayPage() {
       .map((gameId) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
       .filter((game): game is GameHubGame => Boolean(game));
   }, [activeGameIds, activityNow, events, profile]);
+  const activeGamesKey = games.map((game) => game.id).join(',');
 
   useEffect(() => {
     if (profileId !== 'system-spacemountainlive-activity') return;
+    const gameIds = activeGamesKey ? activeGamesKey.split(',') : [];
     window.parent.postMessage({
       type: 'nebula.activity-state',
       profileId,
-      active: games.length > 0,
-      gameIds: games.map((game) => game.id),
+      active: gameIds.length > 0,
+      gameIds,
     }, '*');
     return () => {
       window.parent.postMessage({ type: 'nebula.activity-state', profileId, active: false, gameIds: [] }, '*');
     };
-  }, [games, profileId]);
+  }, [activeGamesKey, profileId]);
 
   useEffect(() => {
     if (profile?.layout !== 'rotation' || games.length < 2) return;

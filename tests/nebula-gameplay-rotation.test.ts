@@ -76,7 +76,8 @@ test('activity stage reports active games and system surfaces use every availabl
   const overlay = readFileSync(new URL('../src/app/overlay/game-hub/[profileId]/page.tsx', import.meta.url), 'utf8');
   const prototype = readFileSync(new URL('../src/components/game-hub-prototype-surface.tsx', import.meta.url), 'utf8');
   assert.match(overlay, /type: 'nebula\.activity-state'/);
-  assert.match(overlay, /active: games\.length > 0/);
+  assert.match(overlay, /activeGamesKey = games\.map/);
+  assert.match(overlay, /active: gameIds\.length > 0/);
   assert.match(overlay, /systemProfile \? 'gap-0 p-0'/);
   assert.match(prototype, /const columns = 20/);
   assert.match(prototype, /const rows = 25/);
