@@ -227,6 +227,7 @@
     const ROUNDS_PER_CYCLE = 5;
     let timeLeft = ROUND_SECONDS;
     let roundNumber = 0;
+    let currentRoundSlot = -1;
     let gameActive = true;
     let currentTheme = 'General';
     let comboMultiplier = 1;
@@ -379,7 +380,7 @@
                 verdictCache[verdictKey] = true;
                 try { localStorage.setItem(verdictCacheKey, JSON.stringify(verdictCache)); } catch (_) {}
                 if (currentWord === pending.expectedWord) processWord(pending.username, pending.word);
-            }, 20_000);
+            }, 22_000);
             return;
         }
         
@@ -428,21 +429,23 @@
     }
     
     function startNewRound() {
-        roundNumber = (roundNumber % ROUNDS_PER_CYCLE) + 1;
-        // Pick random theme
+        currentRoundSlot = Math.floor(Date.now() / (ROUND_SECONDS * 1000));
+        roundNumber = (currentRoundSlot % ROUNDS_PER_CYCLE) + 1;
+        // Use a wall-clock seed so the server and a recovering overlay always
+        // rebuild the same round before replaying this round's chat events.
         const themeNames = Object.keys(themes);
-        currentTheme = themeNames[Math.floor(Math.random() * themeNames.length)];
+        currentTheme = themeNames[currentRoundSlot % themeNames.length];
         document.getElementById('current-theme').textContent = currentTheme;
-        
-        // Pick random starting word from theme
+
+        // Pick a deterministic starting word from the active theme.
         const themeWords = themes[currentTheme];
-        currentWord = themeWords[Math.floor(Math.random() * themeWords.length)];
+        currentWord = themeWords[Math.floor(currentRoundSlot / themeNames.length) % themeWords.length];
         
         // Reset game state
         wordChain = [currentWord];
         usedWords = new Set([currentWord]);
         roundScores = new Map();
-        timeLeft = ROUND_SECONDS;
+        timeLeft = Math.max(1, Math.ceil(((currentRoundSlot + 1) * ROUND_SECONDS * 1000 - Date.now()) / 1000));
         gameActive = true;
         comboMultiplier = 1;
         lastContributor = null;
@@ -459,6 +462,11 @@
     
     function updateTimer() {
         if (!gameActive) return;
+        const liveSlot = Math.floor(Date.now() / (ROUND_SECONDS * 1000));
+        if (liveSlot !== currentRoundSlot) {
+            startNewRound();
+            return;
+        }
         
         timeLeft--;
         document.getElementById('timer').textContent = `Time: ${timeLeft}s`;
@@ -469,9 +477,7 @@
             document.getElementById('timer').style.color = 'white';
         }
         
-        if (timeLeft <= 0) {
-            endRound();
-        }
+        if (timeLeft <= 0) endRound();
     }
     
     function endRound() {
@@ -485,8 +491,8 @@
             sendResponse(`🏆 Round over! Winner: ${winner[0]} with ${winner[1]} points! Chain length: ${wordChain.length} words`);
         }
         
-        // Start new round after delay
-        setTimeout(startNewRound, 5000);
+        // Embedded rounds stay aligned to the six-minute wall clock.
+        setTimeout(startNewRound, embedded ? 0 : 5000);
     }
     
     function sendResponse(message) {
@@ -513,6 +519,9 @@
         }
         
         if (!data || !data.chatmessage || !data.chatname) return;
+        const eventAt = Date.parse(String(data.timestamp || ''));
+        const roundOpenedAt = currentRoundSlot * ROUND_SECONDS * 1000;
+        if (Number.isFinite(eventAt) && eventAt < roundOpenedAt) return;
 
         let message = data.chatmessage;
         if (!data.textonly) {
@@ -531,7 +540,11 @@
             sendResponse(`@${username} left Word Chain. Your ranking is preserved.`);
             return;
         }
-        if (!participants.has(username.toLowerCase())) return;
+        // The embedded event stream is already scoped to durable participants
+        // by the server. This keeps existing players active after an overlay
+        // reload even when their original join action has aged out of replay.
+        if (!embedded && !participants.has(username.toLowerCase())) return;
+        if (/^(yes|y|accept|no|n|reject)$/i.test(message)) return;
 
         // Check if it's a plausible word attempt (starts with the required letter)
         if (gameActive && message.length >= 3 && /^[a-zA-Z]+$/.test(message) &&

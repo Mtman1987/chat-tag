@@ -7,6 +7,7 @@ export type GameHubChatEvent = {
   id: string;
   at: string;
   channel: string;
+  userId?: string;
   username: string;
   displayName: string;
   message: string;

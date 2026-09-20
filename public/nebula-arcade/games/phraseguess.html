@@ -328,6 +328,7 @@ You can't handle the truth</textarea>
         let iframe = null;
         let connectedPeers = {};
         let pendingRoundTimeout = null;
+        let serverRound = null;
 
         // Save settings to localStorage
         function saveSettings() {
@@ -509,6 +510,23 @@ You can't handle the truth</textarea>
                 processMessage(data);
             }
         }
+
+        // Embedded Nebula frames do not create the Social Stream relay iframe,
+        // so listen to the parent directly for both chat and round inventory.
+        window.addEventListener('message', (event) => {
+            if (!embedded || event.source !== window.parent) return;
+            if (event.data?.dataReceived?.overlayNinja) {
+                processData(event.data.dataReceived.overlayNinja);
+            }
+            if (event.data?.type === 'nebula-phrase-round') {
+                const roundSlot = Number(event.data.roundSlot);
+                const phrase = String(event.data.phrase || '').trim();
+                if (!Number.isFinite(roundSlot) || !phrase) return;
+                const changed = !serverRound || serverRound.roundSlot !== roundSlot || serverRound.phrase !== phrase;
+                serverRound = { roundSlot, phrase, submitterDisplayName: String(event.data.submitterDisplayName || '') };
+                if (changed && gameState.isActive) startRound();
+            }
+        });
 
         // Send response back to chat
         function sendResponse(message) {
@@ -709,7 +727,12 @@ You can't handle the truth</textarea>
         function getNextPhrase() {
             if (gameState.phrases.length === 0) return null;
             if (embedded) {
-                gameState.currentIndex = Math.floor(Date.now() / ROUND_DURATION_MS) % gameState.phrases.length;
+                const liveSlot = Math.floor(Date.now() / ROUND_DURATION_MS);
+                if (serverRound && serverRound.roundSlot === liveSlot && serverRound.phrase) {
+                    gameState.currentIndex = liveSlot;
+                    return serverRound.phrase;
+                }
+                gameState.currentIndex = liveSlot % gameState.phrases.length;
                 return gameState.phrases[gameState.currentIndex];
             }
             gameState.currentIndex = (gameState.currentIndex + 1) % gameState.phrases.length;
@@ -719,6 +742,8 @@ You can't handle the truth</textarea>
         // Start new round
         function startRound() {
             if (!gameState.isActive) return;
+            clearInterval(gameState.revealTimer);
+            clearTimeout(gameState.roundDeadlineTimer);
 
             const phrase = getNextPhrase();
             if (!phrase) {
@@ -849,6 +874,7 @@ You can't handle the truth</textarea>
                 buyHint(chatname);
                 return;
             }
+            if (embedded && !command) wallet.joined = true;
             if (!wallet.joined || command) return;
 
             const guess = normalizeText(messageText);
