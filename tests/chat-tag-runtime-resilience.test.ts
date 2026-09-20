@@ -46,6 +46,13 @@ test('live-member Twitch calls run outside the shared volume update lock', () =>
   assert.doesNotMatch(route, /updateAppState\(async \(state\)/);
 });
 
+test('live-member API preserves normalized Twitch category and viewer data', () => {
+  const route = read('src/app/api/discord/live-members/route.ts');
+  assert.match(route, /gameName: user\.gameName \|\| user\.game_name/);
+  assert.match(route, /viewerCount: user\.viewerCount \?\? user\.viewer_count/);
+  assert.match(route, /thumbnailUrl: user\.thumbnailUrl \|\| user\.thumbnail_url/);
+});
+
 test('deployed bot allows realistic API and live-roster response times', () => {
   const patch = read('scripts/patch-game-hub-bot.mjs');
   assert.match(patch, /CHAT_TAG_API_TIMEOUT_MS \|\| '10000'/);
