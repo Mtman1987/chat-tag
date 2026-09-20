@@ -729,10 +729,24 @@ export default function OverlayPage() {
           <span style={{ fontSize: loungeCompact ? 'min(9vw,20vh)' : 'min(10.5vw, 88px)', lineHeight: 1, opacity: compactAnnouncementActive ? 0 : 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
           <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0, opacity: compactAnnouncementActive ? 0 : 1 }}>
             {data.isFFA ? (
-              <>
-                <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>FREE FOR ALL</div>
-                <div style={{ fontSize: 'min(3.4vw, 3vh)', opacity: 0.92, fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>Anyone can tag for DOUBLE POINTS!</div>
-              </>
+              <div style={{ display: 'flex', minHeight: loungeCompact ? '100%' : undefined, flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{
+                  fontSize: loungeCompact ? 'min(10vw, 16vh)' : 'min(2.6vw, 2.4vh)',
+                  lineHeight: 0.92,
+                  opacity: 0.98,
+                  fontWeight: 900,
+                  textTransform: 'uppercase',
+                  textShadow: '0 2px 6px rgba(0,0,0,0.55)',
+                }}>FREE FOR ALL</div>
+                <div style={{
+                  marginTop: loungeCompact ? '1.2vh' : undefined,
+                  fontSize: loungeCompact ? 'min(5.4vw, 7.8vh)' : 'min(3.4vw, 3vh)',
+                  lineHeight: 1.05,
+                  opacity: 0.96,
+                  fontWeight: 800,
+                  textShadow: '0 1px 4px rgba(0,0,0,0.45)',
+                }}>Anyone can tag for DOUBLE POINTS!</div>
+              </div>
             ) : (
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>IT</div>
