@@ -90,6 +90,9 @@ test('Word Chain and Phrase Guess use six-minute stage rounds with minimal embed
   assert.match(wordChain, /body\.embedded #scoreboard/);
   assert.match(phraseGuess, /const ROUND_DURATION_MS = 6 \* 60 \* 1000/);
   assert.match(phraseGuess, /const HINT_COSTS = \[10, 25, 50\]/);
+  assert.match(phraseGuess, /Math\.floor\(Date\.now\(\) \/ ROUND_DURATION_MS\)/);
+  assert.match(phraseGuess, /if \(!embedded\) loadSettings\(\)/);
+  assert.match(phraseGuess, /if \(savedPhrases && !embedded\)/);
   assert.match(phraseGuess, /body\.embedded \.controls/);
   assert.match(phraseGuess, /if \(embedded\)[\s\S]*startGame\(\)/);
 });

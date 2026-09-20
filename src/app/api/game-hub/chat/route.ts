@@ -6,6 +6,7 @@ import {
   GAME_SCORE_INTERVAL_MS,
   getGameHubStore,
   normalizeGameHubPlayerId,
+  recordPhraseGuessAttempt,
   recordGameHubChatActivity,
   resolveChannelGameIds,
 } from '@/lib/game-hub-state';
@@ -72,7 +73,8 @@ export async function POST(req: NextRequest) {
     const lastScoreAt = Date.parse(String(snapshotPlayer?.joinedGames?.[gameId]?.lastScoreAt || 0));
     return !Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS;
   });
-  const activity = scoreWriteDue
+  const phraseGuessAttemptDue = participatingGameIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
+  const activity = scoreWriteDue || phraseGuessAttemptDue
     ? await updateAppStateIfChanged((state) => {
       const result = recordGameHubChatActivity(state, {
         channel,
@@ -81,12 +83,15 @@ export async function POST(req: NextRequest) {
         displayName: cleanText(body.displayName || username, 80),
         message,
       });
+      const phraseGuess = phraseGuessAttemptDue
+        ? recordPhraseGuessAttempt(state, { channel, userId: body.userId, username, displayName: cleanText(body.displayName || username, 80), message })
+        : { changed: false, outcome: 'ignored' as const };
       return {
-        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0,
-        result: { ...result, participatingGameIds, eventGameIds },
+        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed,
+        result: { ...result, participatingGameIds, eventGameIds, phraseGuess },
       };
     })
-    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0 };
+    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const } };
 
   return NextResponse.json({
     accepted: true,
@@ -95,5 +100,6 @@ export async function POST(req: NextRequest) {
     eventGameIds: activity.eventGameIds,
     scoredGameIds: activity.scoredGameIds,
     pointsAwarded: activity.pointsAwarded,
+    phraseGuess: activity.phraseGuess,
   });
 }

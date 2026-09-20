@@ -25,7 +25,13 @@ import {
   getPlayerGameSnapshots,
 } from '../src/lib/game-hub-chat-summary';
 import { nebulaPrototypeMessage } from '../src/lib/nebula-game-message';
-import { getOrCreateGameHubPlayer, purchasePhraseGuessHint } from '../src/lib/game-hub-state';
+import {
+  PHRASE_GUESS_PHRASES,
+  getOrCreateGameHubPlayer,
+  phraseGuessRoundAt,
+  purchasePhraseGuessHint,
+  recordPhraseGuessAttempt,
+} from '../src/lib/game-hub-state';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -166,6 +172,34 @@ test('Phrase Guess hint tiers spend the durable Games Points wallet once per rou
   const nextRound = purchasePhraseGuessHint(state, { ...player, now: 6 * 60_000 });
   assert.equal(nextRound.cost, 10);
   assert.equal(nextRound.tier, 1);
+});
+
+test('Phrase Guess wins and wrong guesses settle against the durable wallet once per wall-clock round', () => {
+  const state: any = { gameSettings: { default: {} } };
+  const identity = { userId: '7', username: 'solver', displayName: 'Solver' };
+  const player = getOrCreateGameHubPlayer(state, identity);
+  player.gamePointsBalance = 10;
+  player.joinedGames.phraseguess = { joinedAt: new Date(0).toISOString(), active: true, score: 0, wins: 0, plays: 1 };
+  const storedPlayer = () => state.gameSettings.default.gameHub.players['twitch:7'];
+
+  assert.equal(phraseGuessRoundAt(0).phrase, PHRASE_GUESS_PHRASES[0]);
+  const wrong = recordPhraseGuessAttempt(state, { ...identity, channel: 'space', message: 'definitely wrong', now: 0 });
+  assert.equal(wrong.outcome, 'wrong');
+  assert.equal(storedPlayer().gamePointsBalance, 9);
+
+  const won = recordPhraseGuessAttempt(state, { ...identity, channel: 'space', message: PHRASE_GUESS_PHRASES[0], now: 1 });
+  assert.equal(won.outcome, 'won');
+  assert.equal(storedPlayer().gamePointsBalance, 59);
+  assert.equal(storedPlayer().joinedGames.phraseguess.wins, 1);
+
+  const duplicate = recordPhraseGuessAttempt(state, { ...identity, channel: 'space', message: PHRASE_GUESS_PHRASES[0], now: 2 });
+  assert.equal(duplicate.outcome, 'closed');
+  assert.equal(storedPlayer().gamePointsBalance, 59);
+
+  const next = phraseGuessRoundAt(6 * 60_000);
+  const nextWin = recordPhraseGuessAttempt(state, { ...identity, channel: 'space', message: next.phrase, now: 6 * 60_000 });
+  assert.equal(nextWin.outcome, 'won');
+  assert.equal(storedPlayer().gamePointsBalance, 109);
 });
 
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {

@@ -32,7 +32,7 @@ test('Games Hub chat skips the volume write when no game is running', () => {
   assert.ok(activeGameRead >= 0 && noGameReturn > activeGameRead, 'the active-game preflight must exist');
   assert.ok(write > noGameReturn, 'the no-game response must return before the volume write');
   assert.match(route, /scoreWriteDue/);
-  assert.match(route, /scoreWriteDue\s*\?\s*await updateAppStateIfChanged/);
+  assert.match(route, /scoreWriteDue \|\| phraseGuessAttemptDue[\s\S]*\? await updateAppStateIfChanged/);
   assert.match(route, /appendNebulaChatEvent/);
 });
 

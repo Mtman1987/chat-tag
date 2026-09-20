@@ -5,6 +5,20 @@ export const GAME_SCORE_INTERVAL_MS = 30_000;
 export const GAME_POINTS_INTERVAL_MS = 90_000;
 export const PHRASE_GUESS_ROUND_MS = 6 * 60_000;
 export const PHRASE_GUESS_HINT_COSTS = [10, 25, 50] as const;
+export const PHRASE_GUESS_WIN_POINTS = 50;
+export const PHRASE_GUESS_WRONG_COST = 1;
+export const PHRASE_GUESS_PHRASES = [
+  'The quick brown fox jumps over the lazy dog',
+  'To be or not to be that is the question',
+  'May the force be with you',
+  'Houston we have a problem',
+  "I'll be back",
+  'Life is like a box of chocolates',
+  'Show me the money',
+  "You can't handle the truth",
+  "I'm the king of the world",
+  "Here's looking at you kid",
+] as const;
 const LEDGER_LIMIT = 500;
 
 export type GameHubMembership = {
@@ -33,6 +47,7 @@ export type GameHubChannelSettings = {
   stoppedGameIds: string[];
   updatedAt?: string;
   phraseGuessHints?: { roundSlot: number; hintsUsed: number };
+  phraseGuessRound?: { roundSlot: number; hintsUsed: number; winnerPlayerId?: string };
 };
 
 export type GameHubLedgerEntry = {
@@ -248,7 +263,7 @@ export function purchasePhraseGuessHint(
   const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
   const roundSlot = Math.floor(now / PHRASE_GUESS_ROUND_MS);
   const settings = getChannelGameSettings(state, channel);
-  const previous = settings.phraseGuessHints;
+  const previous = settings.phraseGuessRound || settings.phraseGuessHints;
   const hintsUsed = previous?.roundSlot === roundSlot
     ? Math.max(0, Math.floor(Number(previous.hintsUsed || 0)))
     : 0;
@@ -257,9 +272,80 @@ export function purchasePhraseGuessHint(
   const player = getOrCreateGameHubPlayer(state, input);
   const cost = PHRASE_GUESS_HINT_COSTS[hintsUsed];
   spendGameHubPoints(state, player, cost, `Phrase Guess hint ${hintsUsed + 1}`);
-  settings.phraseGuessHints = { roundSlot, hintsUsed: hintsUsed + 1 };
+  settings.phraseGuessRound = {
+    roundSlot,
+    hintsUsed: hintsUsed + 1,
+    ...(settings.phraseGuessRound?.roundSlot === roundSlot && settings.phraseGuessRound.winnerPlayerId
+      ? { winnerPlayerId: settings.phraseGuessRound.winnerPlayerId }
+      : {}),
+  };
+  delete settings.phraseGuessHints;
   settings.updatedAt = new Date(now).toISOString();
   return { tier: hintsUsed + 1, cost, balance: player.gamePointsBalance, roundSlot };
+}
+
+function normalizePhraseGuessText(value: unknown): string {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+}
+
+function phraseGuessMatchPercent(guessValue: unknown, targetValue: unknown): number {
+  const guessWords = normalizePhraseGuessText(guessValue).split(/\s+/).filter(Boolean);
+  const targetWords = normalizePhraseGuessText(targetValue).split(/\s+/).filter(Boolean);
+  if (!guessWords.length || !targetWords.length) return 0;
+  let matches = 0;
+  for (const guess of guessWords) {
+    if (targetWords.includes(guess)) matches += 1;
+  }
+  return Math.floor((matches / Math.max(guessWords.length, targetWords.length)) * 100);
+}
+
+export function phraseGuessRoundAt(nowValue: number) {
+  const now = Math.max(0, Math.floor(Number(nowValue || 0)));
+  const roundSlot = Math.floor(now / PHRASE_GUESS_ROUND_MS);
+  return {
+    roundSlot,
+    phrase: PHRASE_GUESS_PHRASES[roundSlot % PHRASE_GUESS_PHRASES.length],
+  };
+}
+
+export function recordPhraseGuessAttempt(
+  state: any,
+  input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; message?: unknown; now?: number },
+) {
+  const channel = normalizeGameHubChannel(input.channel);
+  const message = String(input.message || '').trim();
+  if (!channel || !message || /^!?@?spmt(?:\s|$)/i.test(message)) return { changed: false, outcome: 'ignored' as const };
+
+  const player = getOrCreateGameHubPlayer(state, input);
+  const membership = player.joinedGames.phraseguess;
+  if (!membership?.active) return { changed: false, outcome: 'not-playing' as const };
+
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const round = phraseGuessRoundAt(now);
+  const settings = getChannelGameSettings(state, channel);
+  const current = settings.phraseGuessRound?.roundSlot === round.roundSlot
+    ? settings.phraseGuessRound
+    : { roundSlot: round.roundSlot, hintsUsed: 0 };
+  if (current.winnerPlayerId) return { changed: false, outcome: 'closed' as const, roundSlot: round.roundSlot };
+
+  const normalizedGuess = normalizePhraseGuessText(message);
+  const match = phraseGuessMatchPercent(normalizedGuess, round.phrase);
+  if (match >= 70) {
+    current.winnerPlayerId = player.id;
+    settings.phraseGuessRound = current;
+    membership.score += PHRASE_GUESS_WIN_POINTS;
+    membership.wins += 1;
+    membership.lastActiveAt = new Date(now).toISOString();
+    awardGameHubPoints(state, player, PHRASE_GUESS_WIN_POINTS, 'Phrase Guess solved', { gameId: 'phraseguess', channel });
+    return { changed: true, outcome: 'won' as const, match, reward: PHRASE_GUESS_WIN_POINTS, roundSlot: round.roundSlot };
+  }
+
+  if (normalizedGuess.length >= 3 && player.gamePointsBalance >= PHRASE_GUESS_WRONG_COST) {
+    spendGameHubPoints(state, player, PHRASE_GUESS_WRONG_COST, 'Phrase Guess wrong guess');
+    membership.lastActiveAt = new Date(now).toISOString();
+    return { changed: true, outcome: 'wrong' as const, match, cost: PHRASE_GUESS_WRONG_COST, roundSlot: round.roundSlot };
+  }
+  return { changed: false, outcome: 'no-charge' as const, match, roundSlot: round.roundSlot };
 }
 
 export function recordGameHubChatActivity(

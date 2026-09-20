@@ -369,9 +369,13 @@ You can't handle the truth</textarea>
         // Initialize UI
         function initializeUI() {
             // Load saved settings first
-            loadSettings();
+            if (!embedded) loadSettings();
 
             if (embedded) {
+                // The live stage uses the same canonical phrase inventory as
+                // the server-side wallet settlement. Ignore browser-local
+                // edits so guesses and payouts can never disagree.
+                loadDefaultPhrases();
                 loadPhrases();
                 updateStatus('Nebula stage connected');
                 startGame();
@@ -704,6 +708,10 @@ You can't handle the truth</textarea>
         // Get next phrase
         function getNextPhrase() {
             if (gameState.phrases.length === 0) return null;
+            if (embedded) {
+                gameState.currentIndex = Math.floor(Date.now() / ROUND_DURATION_MS) % gameState.phrases.length;
+                return gameState.phrases[gameState.currentIndex];
+            }
             gameState.currentIndex = (gameState.currentIndex + 1) % gameState.phrases.length;
             return gameState.phrases[gameState.currentIndex];
         }
@@ -724,7 +732,10 @@ You can't handle the truth</textarea>
                 startRound();
                 return;
             }
-            gameState.maskPercent = config.initialMask;
+            const elapsedRevealSteps = embedded
+                ? Math.floor((Date.now() % ROUND_DURATION_MS) / config.revealInterval)
+                : 0;
+            gameState.maskPercent = Math.max(0, config.initialMask - elapsedRevealSteps * config.maskReduction);
             gameState.winner = null;
             gameState.roundStartTime = Date.now();
             gameState.hintsUsed = 0;
@@ -734,7 +745,10 @@ You can't handle the truth</textarea>
             revealPhrase();
             gameState.revealTimer = setInterval(revealPhrase, config.revealInterval);
             clearTimeout(gameState.roundDeadlineTimer);
-            gameState.roundDeadlineTimer = setTimeout(() => endRound(null), ROUND_DURATION_MS);
+            const roundDelay = embedded
+                ? ROUND_DURATION_MS - (Date.now() % ROUND_DURATION_MS)
+                : ROUND_DURATION_MS;
+            gameState.roundDeadlineTimer = setTimeout(() => endRound(null), roundDelay);
         }
 
         // Reveal more of the phrase
@@ -800,7 +814,7 @@ You can't handle the truth</textarea>
                 if (gameState.isActive) {
                     startRound();
                 }
-            }, 5000);
+            }, embedded ? 0 : 5000);
         }
 
         // Process incoming message
@@ -965,7 +979,7 @@ You can't handle the truth</textarea>
         // Load saved phrases on startup
         window.onload = () => {
             const savedPhrases = localStorage.getItem('ssnPhrases');
-            if (savedPhrases) {
+            if (savedPhrases && !embedded) {
                 document.getElementById('phrasesInput').value = savedPhrases;
             }
             
