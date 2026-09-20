@@ -633,6 +633,7 @@ export default function OverlayPage() {
   }, [fireHistoryBroadcast, fireLeaderboardBroadcast, fireLiveBroadcast, historyInterval, isPreview]);
 
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
+  const compactAnnouncementActive = loungeCompact && Boolean(broadcast);
 
   return (
     <div style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff', boxSizing: 'border-box' }}>
@@ -725,8 +726,8 @@ export default function OverlayPage() {
             : 'linear-gradient(180deg, rgba(0, 180, 255, 0.75), rgba(0, 100, 200, 0.75))',
           boxSizing: 'border-box',
         }}>
-          <span style={{ fontSize: loungeCompact ? 'min(9vw,20vh)' : 'min(10.5vw, 88px)', lineHeight: 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
-          <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0 }}>
+          <span style={{ fontSize: loungeCompact ? 'min(9vw,20vh)' : 'min(10.5vw, 88px)', lineHeight: 1, opacity: compactAnnouncementActive ? 0 : 1 }}>{data.isFFA ? '🔥' : '🎯'}</span>
+          <div style={{ flex: '1 1 auto', overflow: 'hidden', minWidth: 0, opacity: compactAnnouncementActive ? 0 : 1 }}>
             {data.isFFA ? (
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>FREE FOR ALL</div>
@@ -761,6 +762,7 @@ export default function OverlayPage() {
             border: '1px solid rgba(255,255,255,0.14)',
             borderRadius: loungeCompact ? '1.2vw' : '0.6vw',
             boxShadow: '0 0.4vh 1.4vh rgba(0,0,0,0.35)',
+            opacity: compactAnnouncementActive ? 0 : 1,
           }}>
             <StackStat value={data.liveCount || 0} label="live" compact={loungeCompact} />
             <StackStat value={data.isFFA ? 'FFA' : `${elapsed}m`} label={data.isFFA ? 'mode' : 'it time'} compact={loungeCompact} />
