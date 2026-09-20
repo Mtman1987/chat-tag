@@ -38,6 +38,12 @@ test('DSH clip worker can read the public Nebula showcase manifest', async () =>
   assert.equal(response.headers.get('x-middleware-next'), '1');
 });
 
+test('OBS can read the public Nebula instruction state', async () => {
+  const response = await middleware(request('/api/game-hub/instructions?channel=spacemountainlive'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-middleware-next'), '1');
+});
+
 test('anonymous Chat Tag writes stay protected', async () => {
   const response = await middleware(request('/api/tag', { method: 'POST' }));
   assert.equal(response.status, 401);

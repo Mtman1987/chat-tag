@@ -10,7 +10,7 @@ export function NebulaGameplayCapture({ game }: { game: GameHubGame }) {
   let surface: React.ReactNode;
 
   if (game.sourcePrototype) {
-    surface = <NebulaGameFrame game={game} demo title={`${game.name} gameplay capture`} />;
+    surface = <NebulaGameFrame game={game} demo broadcastOnly title={`${game.name} gameplay capture`} />;
   } else if (game.id === 'chat-tag') {
     surface = <ChatTagGame />;
   } else if (game.id === 'quackverse') {

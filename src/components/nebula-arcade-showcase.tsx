@@ -57,7 +57,7 @@ export function NebulaArcadeShowcase() {
       </div>
       <div className="aspect-video min-h-[320px] bg-black/35">
         {active.sourcePrototype
-          ? <NebulaGameFrame key={active.id} game={active} demo title={`${active.name} demo`} />
+          ? <NebulaGameFrame key={active.id} game={active} demo broadcastOnly title={`${active.name} demo`} />
           : <NativeGamePreview key={active.id} game={active} />}
       </div>
       <div className="flex gap-1 overflow-x-auto border-t border-white/10 p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

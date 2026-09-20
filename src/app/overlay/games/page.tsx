@@ -28,6 +28,7 @@ export default function GameOverlayStudioPage() {
   const selected = useMemo(() => profiles.find((profile) => profile.id === selectedId) || profiles[0] || null, [profiles, selectedId]);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const overlayUrl = selected ? `${origin}/overlay/game-hub/${selected.id}` : '';
+  const instructionOverlayUrl = selected ? `${origin}/overlay/game-hub/instructions/${encodeURIComponent(selected.ownerLogin)}` : '';
 
   const loadProfiles = useCallback(async () => {
     setLoading(true);
@@ -152,6 +153,15 @@ export default function GameOverlayStudioPage() {
                   <GameOverlayBayHandoff profileId={selected.id} profileName={selected.name} overlayUrl={overlayUrl} />
                 </div>
                 <p className="mt-2 text-[10px] leading-4 text-slate-500">Overlay Bay receives this profile as a normal Web source. SPMT still owns scene position, size, layering, and the final Save.</p>
+              </div>
+              <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[.04] p-4">
+                <div className="text-xs font-bold uppercase tracking-[.18em] text-violet-200/70">Separate instructions browser source</div>
+                <p className="mt-2 text-xs leading-5 text-slate-400">Place this wherever instructions belong in the scene. It remains transparent until a streamer or mod uses <code className="text-violet-100">spmt instructions game</code>, then hides with <code className="text-violet-100">spmt instructions hide</code>.</p>
+                <div className="mt-3 rounded-xl bg-black/50 px-3 py-3 font-mono text-xs text-violet-100 break-all">{instructionOverlayUrl}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(instructionOverlayUrl)} className="rounded-lg border border-violet-300/20 bg-violet-300/10 px-3 py-2 text-xs font-bold text-violet-100">Copy instructions URL</button>
+                  <button type="button" onClick={() => window.open(instructionOverlayUrl, '_blank', 'noopener,noreferrer')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white">Open instructions overlay</button>
+                </div>
               </div>
             </div>
 

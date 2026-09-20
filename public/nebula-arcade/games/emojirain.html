@@ -43,14 +43,14 @@
         /* Browser-source embeds must reveal the stream while idle. The game
            effects remain visible because they are appended to #game-container
            when chat events arrive. */
-        body.embedded {
+        body.broadcast {
             background: transparent !important;
         }
 
-        body.embedded > #game-container > #stats,
-        body.embedded > #game-container > #emoji-counter,
-        body.embedded > #game-container > #rain-intensity,
-        body.embedded > #game-container > #instructions {
+        body.broadcast > #game-container > #stats,
+        body.broadcast > #game-container > #emoji-counter,
+        body.broadcast > #game-container > #rain-intensity,
+        body.broadcast > #game-container > #instructions {
             display: none;
         }
         
@@ -253,6 +253,9 @@
 
         if (urlParams.get('embedded') === '1') {
             document.body.classList.add('embedded');
+        }
+        if (urlParams.get('broadcast') === '1') {
+            document.body.classList.add('broadcast');
         }
 
         // Apply theme settings

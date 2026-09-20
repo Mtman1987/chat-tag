@@ -176,7 +176,7 @@
             display: none;
         }
 
-        body.embedded {
+        body.broadcast {
             min-height: 100vh;
             padding: 0;
             justify-content: center;
@@ -184,7 +184,7 @@
             overflow: hidden;
         }
 
-        body.embedded .container {
+        body.broadcast .container {
             max-width: none;
             width: 100vw;
             padding: 0;
@@ -192,16 +192,16 @@
             box-shadow: none;
         }
 
-        body.embedded h1,
-        body.embedded .game-status,
-        body.embedded .controls,
-        body.embedded .config-section,
-        body.embedded .message-log,
-        body.embedded .demo-mode {
+        body.broadcast h1,
+        body.broadcast .game-status,
+        body.broadcast .controls,
+        body.broadcast .config-section,
+        body.broadcast .message-log,
+        body.broadcast .demo-mode {
             display: none !important;
         }
 
-        body.embedded .phrase-display {
+        body.broadcast .phrase-display {
             min-height: 100vh;
             margin: 0;
             padding: 4vw;
@@ -296,6 +296,7 @@ You can't handle the truth</textarea>
         const demo = urlParams.has('demo');
         const embedded = urlParams.has('embedded');
         if (embedded) document.body.classList.add('embedded');
+        if (urlParams.has('broadcast')) document.body.classList.add('broadcast');
         const ROUND_DURATION_MS = 6 * 60 * 1000;
         const HINT_COSTS = [10, 25, 50];
 

@@ -8,6 +8,7 @@ import {
   resolveGameHubCommandKey,
 } from '@/lib/game-hub-commands';
 import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
+import { setGameHubInstructions } from '@/lib/game-hub-instructions';
 import {
   awardGameHubPoints,
   joinGameHubGame,
@@ -126,6 +127,38 @@ export async function POST(req: NextRequest) {
 
   let command = parts[0].toLowerCase();
   const directState = await readAppState();
+  const activeForDirectRouting = resolveChannelGameIds(directState, channel);
+  const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
+
+  if (command === 'instructions') {
+    if (!canControl) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Only the streamer or a moderator can change the instruction overlay.` });
+    }
+    const requested = String(parts[1] || '').trim().toLowerCase();
+    if (/^(hide|off|clear)$/.test(requested)) {
+      await updateAppState((state) => setGameHubInstructions(state, channel, null));
+      return NextResponse.json({ handled: true, reply: `Nebula Arcade instructions are now hidden.` });
+    }
+
+    let spec = requested ? resolveGameHubCommandKey(requested) : null;
+    if (!spec && !requested && activeForDirectRouting.length === 1) {
+      spec = resolveGameHubCommandKey(activeForDirectRouting[0]);
+    }
+    if (!spec) {
+      const choices = activeForDirectRouting.map((gameId) => {
+        const activeSpec = resolveGameHubCommandKey(gameId);
+        return activeSpec ? `spmt instructions ${activeSpec.key}` : '';
+      }).filter(Boolean);
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} Choose an ACTIVE game: ${choices.join(' · ') || 'none are active'}.`.slice(0, 480),
+      });
+    }
+
+    const instructionGame = getGameHubGame(spec.gameId)!;
+    await updateAppState((state) => setGameHubInstructions(state, channel, instructionGame.id));
+    return NextResponse.json({ handled: true, reply: `${instructionGame.name} instructions are now visible on the instruction overlay.` });
+  }
 
   const paradeSnapshot = getDancingParadeSnapshot(directState, channel);
   if (paradeSnapshot.active) {
@@ -167,7 +200,6 @@ export async function POST(req: NextRequest) {
   // Player-facing Nebula Arcade commands are short ("spmt explode",
   // "spmt pet dog", "spmt dig B5"). Namespaced forms remain an internal
   // compatibility transport so old links and bot rewrites keep working.
-  const activeForDirectRouting = resolveChannelGameIds(directState, channel);
   const direct = resolveDirectGameCommand(parts, activeForDirectRouting);
   if (direct.recognized) {
     if (!direct.intents.length) {
@@ -325,7 +357,6 @@ export async function POST(req: NextRequest) {
   const rawActionArgs = parts.slice(1);
   const actionArgs = rawActionArgs.map((part) => part.toLowerCase());
   const action = String(actionArgs[0] || '').toLowerCase();
-  const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
 
   // Chat Tag is global and persistent, not a per-channel Games Hub session.
   // Namespaced Chat Tag commands are compatibility aliases for the legacy
@@ -382,6 +413,7 @@ export async function POST(req: NextRequest) {
 
     const activeIds = await updateAppState((state) => {
       setChannelGameRunning(state, channel, game.id, action === 'start');
+      if (action === 'stop') setGameHubInstructions(state, channel, null);
       recordGameHubRuntimeAction(state, {
         channel,
         gameId: game.id,

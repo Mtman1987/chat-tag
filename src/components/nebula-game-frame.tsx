@@ -5,10 +5,13 @@ import type { GameHubGame } from '@/lib/game-hub-registry';
 import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 import { nebulaPrototypeMessage } from '@/lib/nebula-game-message';
 
-function prototypePath(game: GameHubGame, demo: boolean, channel: string) {
+function prototypePath(game: GameHubGame, demo: boolean, channel: string, broadcastOnly: boolean) {
   const filename = String(game.sourcePrototype || '').split('/').pop();
   if (!filename) return '';
+  // `embedded` keeps the parent chat/event bridge active in both the Nebula
+  // popout and broadcast surfaces. `broadcast` alone strips the UI chrome.
   const query = new URLSearchParams({ embedded: '1', room: 'nebula-arcade' });
+  if (broadcastOnly) query.set('broadcast', '1');
   if (channel) query.set('channel', channel);
   if (demo) query.set('demo', '1');
   return `/nebula-arcade/games/${encodeURIComponent(filename)}?${query.toString()}`;
@@ -20,19 +23,21 @@ export function NebulaGameFrame({
   demo = false,
   title,
   channel = '',
+  broadcastOnly = false,
 }: {
   game: GameHubGame;
   events?: GameHubChatEvent[];
   demo?: boolean;
   title?: string;
   channel?: string;
+  broadcastOnly?: boolean;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const deliveredRef = useRef(new Set<string>());
   const eventsRef = useRef(events);
   const wordVoteOpenRef = useRef(false);
   const [ready, setReady] = useState(false);
-  const src = useMemo(() => prototypePath(game, demo, channel), [channel, demo, game]);
+  const src = useMemo(() => prototypePath(game, demo, channel, broadcastOnly), [broadcastOnly, channel, demo, game]);
 
   useEffect(() => { eventsRef.current = events; }, [events]);
 

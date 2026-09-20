@@ -184,10 +184,16 @@ export function canonicalJoinCommand(gameOrId: GameHubGame | string): string {
 
 export function canonicalStreamerCommands(gameOrId: GameHubGame | string): CanonicalGameCommand[] {
   const spec = getCanonicalGameCommandSpec(gameOrId);
-  if (!spec || spec.gameId === 'chat-tag') return [];
+  if (!spec) return [];
+  const instructions = [
+    { trigger: `spmt instructions ${spec.key}`, description: "Show this game's instructions on the separate instruction overlay." },
+    { trigger: 'spmt instructions hide', description: 'Hide the instruction overlay.' },
+  ];
+  if (spec.gameId === 'chat-tag') return instructions;
   return [
     { trigger: 'spmt start', description: 'Streamer/mod: choose a game to start.' },
     { trigger: 'spmt stop', description: 'Streamer/mod: choose an active game to stop.' },
+    ...instructions,
   ];
 }
 

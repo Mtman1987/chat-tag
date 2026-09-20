@@ -7,6 +7,8 @@ import { NebulaGameFrame } from '@/components/nebula-game-frame';
 
 type ScopedGameEvent = GameHubChatEvent & { gameIds?: string[] };
 
+const LARGE_STAGE_GAMES = new Set(['wordchain', 'phraseguess']);
+
 function tagOverlayUserId(ownerUserId: string) {
   const value = String(ownerUserId || '').trim();
   return value.startsWith('user_') ? value : `user_${value}`;
@@ -38,9 +40,13 @@ export function GameHubSurface({
     const query = channel ? `?tenant=${encodeURIComponent(channel)}` : '';
     content = <iframe src={`/quackverse-overlay${query}`} title={`${game.name} overlay`} className="h-full w-full border-0 bg-transparent" />;
   } else if (game.id === 'bingo') {
-    content = <GameHubBingoSurface />;
+    content = <GameHubBingoSurface broadcastOnly={!chrome} />;
+  } else if (game.sourcePrototype && !LARGE_STAGE_GAMES.has(game.id)) {
+    // Every chat-driven overlay uses a purpose-built read-only state surface.
+    // Full prototype controls, rules and scores stay in the Nebula popout.
+    content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly />;
   } else if (game.sourcePrototype) {
-    content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} channel={channel} />;
+    content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} channel={channel} broadcastOnly />;
   } else {
     content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} />;
   }

@@ -25,6 +25,7 @@ import {
   getPlayerGameSnapshots,
 } from '../src/lib/game-hub-chat-summary';
 import { nebulaPrototypeMessage } from '../src/lib/nebula-game-message';
+import { getGameHubInstructions, setGameHubInstructions } from '../src/lib/game-hub-instructions';
 import {
   PHRASE_GUESS_PHRASES,
   WORD_CHAIN_THEMES,
@@ -553,6 +554,52 @@ test('all game detail pages and composite slots use peer templates', () => {
   assert.doesNotMatch(overlay, /game\.id === 'quackverse'/);
   assert.match(surface, /data-game-hub-surface/);
   assert.match(home, /redirect\('\/games'\)/);
+});
+
+test('all chat games separate broadcast visuals from full popout controls', () => {
+  const surface = read('src/components/game-hub-surface.tsx');
+  const prototype = read('src/components/game-hub-prototype-surface.tsx');
+  const bingo = read('src/components/game-hub-bingo-surface.tsx');
+  const frame = read('src/components/nebula-game-frame.tsx');
+
+  assert.match(surface, /LARGE_STAGE_GAMES = new Set\(\['wordchain', 'phraseguess'\]\)/);
+  assert.match(surface, /game\.sourcePrototype && !LARGE_STAGE_GAMES\.has\(game\.id\)/);
+  assert.match(surface, /GameHubPrototypeSurface[\s\S]*broadcastOnly/);
+  assert.match(surface, /GameHubBingoSurface broadcastOnly=\{!chrome\}/);
+  assert.match(prototype, /PixelBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
+  assert.match(prototype, /TreasureBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
+  assert.match(prototype, /!gridOnly &&[\s\S]*spmt pixel red 10 5/);
+  assert.match(prototype, /broadcastOnly \? 'p-0' : 'p-4'/);
+  assert.match(bingo, /!broadcastOnly &&[\s\S]*24 shared phrases/);
+  assert.match(bingo, /aria-label="Bingo grid"/);
+  assert.match(frame, /embedded: '1'/);
+  assert.match(frame, /if \(broadcastOnly\) query\.set\('broadcast', '1'\)/);
+});
+
+test('every game exposes a separate show-hide instruction overlay', () => {
+  const command = read('src/app/api/game-hub/command/route.ts');
+  const commands = read('src/lib/game-hub-commands.ts');
+  const route = read('src/app/api/game-hub/instructions/route.ts');
+  const overlay = read('src/app/overlay/game-hub/instructions/[channel]/page.tsx');
+  const studio = read('src/app/overlay/games/page.tsx');
+
+  assert.match(command, /command === 'instructions'/);
+  assert.match(command, /setGameHubInstructions/);
+  assert.match(commands, /spmt instructions \$\{spec\.key\}/);
+  assert.match(commands, /spmt instructions hide/);
+  assert.match(route, /canonicalPlayerCommands/);
+  assert.match(overlay, /data-nebula-instructions/);
+  assert.match(overlay, /game\.commands\.map/);
+  assert.match(studio, /Separate instructions browser source/);
+  assert.match(studio, /instructionOverlayUrl/);
+
+  const state: any = { gameSettings: { default: {} } };
+  assert.equal(getGameHubInstructions(state, 'spacemountainlive'), null);
+  const shown = setGameHubInstructions(state, 'SpaceMountainLive', 'pixelbattle');
+  assert.equal(shown.visible, true);
+  assert.equal(getGameHubInstructions(state, 'spacemountainlive')?.gameId, 'pixelbattle');
+  const hidden = setGameHubInstructions(state, 'spacemountainlive', null);
+  assert.equal(hidden.visible, false);
 });
 
 test('composite game overlays remain shell-free while the editor stays in the normal app shell', () => {

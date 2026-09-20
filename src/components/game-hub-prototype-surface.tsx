@@ -65,7 +65,7 @@ function emojiTokens(message: string): string[] {
   try { return message.match(/\p{Extended_Pictographic}/gu) || []; } catch { return []; }
 }
 
-function TeamBoard({ events, gameKey, paint = false }: { events: GameHubChatEvent[]; gameKey: 'chatwars' | 'colorwars'; paint?: boolean }) {
+function TeamBoard({ events, gameKey, paint = false, broadcastOnly = false }: { events: GameHubChatEvent[]; gameKey: 'chatwars' | 'colorwars'; paint?: boolean; broadcastOnly?: boolean }) {
   const state = useMemo(() => {
     const memberships = new Map<string, string>();
     const scores = Object.fromEntries(TEAM_NAMES.map((team) => [team, 0])) as Record<string, number>;
@@ -84,17 +84,17 @@ function TeamBoard({ events, gameKey, paint = false }: { events: GameHubChatEven
   }, [events, gameKey, paint]);
   const total = Math.max(1, Object.values(state.scores).reduce((sum, value) => sum + value, 0));
   return (
-    <div className="grid gap-2">
+    <div className={`grid gap-2 ${broadcastOnly ? 'h-full content-center' : ''}`}>
       {TEAM_NAMES.map((team) => {
         const pct = Math.round((state.scores[team] / total) * 100);
         return <div key={team} className="grid grid-cols-[62px_1fr_42px] items-center gap-2 text-xs"><span className="capitalize">{team}</span><span className="h-3 overflow-hidden rounded-full bg-white/10"><i className="block h-full rounded-full" style={{ width: `${pct}%`, background: COLORS[team] }} /></span><b>{pct}%</b></div>;
       })}
-      <div className="text-[10px] text-white/50">{state.memberships.size} team players · spmt {gameKey} red|blue|green|yellow</div>
+      {!broadcastOnly && <div className="text-[10px] text-white/50">{state.memberships.size} team players · spmt {gameKey} red|blue|green|yellow</div>}
     </div>
   );
 }
 
-function PixelBoard({ events }: { events: GameHubChatEvent[] }) {
+function PixelBoard({ events, gridOnly = false }: { events: GameHubChatEvent[]; gridOnly?: boolean }) {
   const cells = useMemo(() => {
     const next = Array.from({ length: 96 }, () => '');
     for (const event of events) {
@@ -109,10 +109,10 @@ function PixelBoard({ events }: { events: GameHubChatEvent[] }) {
     }
     return next;
   }, [events]);
-  return <div><div className="grid grid-cols-12 gap-px overflow-hidden rounded-lg bg-white/10 p-px">{cells.map((color, index) => <span key={index} className="aspect-square bg-slate-950/70" style={color ? { background: COLORS[color] } : undefined} />)}</div><div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 12×8 board</div></div>;
+  return <div className={gridOnly ? 'grid h-full w-full place-items-center' : ''}><div aria-label="Pixel Battle grid" className={`grid grid-cols-12 gap-px overflow-hidden rounded-lg bg-white/10 p-px ${gridOnly ? 'aspect-[3/2] w-[min(100%,150vh)]' : 'w-full'}`}>{cells.map((color, index) => <span key={index} className="aspect-square bg-slate-950/70" style={color ? { background: COLORS[color] } : undefined} />)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">spmt pixel red 10 5 · coordinates wrap to the shared 12×8 board</div>}</div>;
 }
 
-function TreasureBoard({ events, channel }: { events: GameHubChatEvent[]; channel: string }) {
+function TreasureBoard({ events, channel, gridOnly = false }: { events: GameHubChatEvent[]; channel: string; gridOnly?: boolean }) {
   const day = new Date().toISOString().slice(0, 10);
   const treasures = useMemo(() => new Set(Array.from({ length: 5 }, (_, index) => hashText(`${channel}:${day}:${index}`) % 64)), [channel, day]);
   const dug = useMemo(() => {
@@ -126,7 +126,7 @@ function TreasureBoard({ events, channel }: { events: GameHubChatEvent[]; channe
     return cells;
   }, [events]);
   const found = [...dug].filter((cell) => treasures.has(cell)).length;
-  return <div><div className="mb-2 text-xs">Treasures found <b>{found}/5</b></div><div className="grid grid-cols-8 gap-1">{Array.from({ length: 64 }, (_, index) => <span key={index} className={`grid aspect-square place-items-center rounded text-xs ${dug.has(index) ? 'bg-cyan-300/15' : 'bg-white/5'}`}>{dug.has(index) ? (treasures.has(index) ? '💎' : '·') : ''}</span>)}</div><div className="mt-2 text-[10px] text-white/50">Dig with spmt treasure B5 · map rotates daily per channel</div></div>;
+  return <div className={gridOnly ? 'grid h-full w-full place-items-center' : ''}>{!gridOnly && <div className="mb-2 text-xs">Treasures found <b>{found}/5</b></div>}<div aria-label="Treasure Hunt grid" className={`grid grid-cols-8 gap-1 ${gridOnly ? 'aspect-square w-[min(100%,100vh)]' : ''}`}>{Array.from({ length: 64 }, (_, index) => <span key={index} className={`grid aspect-square place-items-center rounded text-xs ${dug.has(index) ? 'bg-cyan-300/15' : 'bg-white/5'}`}>{dug.has(index) ? (treasures.has(index) ? '💎' : '·') : ''}</span>)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">Dig with spmt treasure B5 · map rotates daily per channel</div>}</div>;
 }
 
 function WordChain({ events }: { events: GameHubChatEvent[] }) {
@@ -167,7 +167,7 @@ function PhraseGuess({ events, channel }: { events: GameHubChatEvent[]; channel:
   return <div className="grid min-h-36 place-items-center text-center"><div><div className="font-mono text-xl tracking-[.18em] text-cyan-100">{winner ? phrase.toUpperCase() : mask}</div><div className="mt-4 text-xs text-white/55">{winner ? `Solved by ${winner.displayName}!` : 'Guess the phrase in normal chat.'}</div></div></div>;
 }
 
-function RaceBoard({ events, chicken = false }: { events: GameHubChatEvent[]; chicken?: boolean }) {
+function RaceBoard({ events, chicken = false, broadcastOnly = false }: { events: GameHubChatEvent[]; chicken?: boolean; broadcastOnly?: boolean }) {
   const racers = useMemo(() => {
     const map = new Map<string, { name: string; pet: string; activity: number; seed: number }>();
     for (const event of events) {
@@ -188,10 +188,10 @@ function RaceBoard({ events, chicken = false }: { events: GameHubChatEvent[]; ch
     }
     return [...map.values()].map((racer) => ({ ...racer, progress: Math.min(100, racer.seed + racer.activity * (chicken ? 8 : 11)) })).sort((a, b) => b.progress - a.progress).slice(0, 10);
   }, [events, chicken]);
-  return <div className="space-y-2">{racers.length ? racers.map((racer) => <div key={racer.name} className="grid grid-cols-[28px_78px_1fr] items-center gap-2 text-xs"><span>{racer.pet}</span><span className="truncate">{racer.name}</span><span className="h-3 overflow-hidden rounded-full bg-white/10"><i className="block h-full rounded-full bg-cyan-300" style={{ width: `${racer.progress}%` }} /></span></div>) : <div className="text-sm text-white/40">Use {chicken ? 'spmt chicken' : 'spmt petrace'} to enter.</div>}</div>;
+  return <div className="space-y-2">{racers.length ? racers.map((racer) => <div key={racer.name} className="grid grid-cols-[28px_78px_1fr] items-center gap-2 text-xs"><span>{racer.pet}</span><span className="truncate">{racer.name}</span><span className="h-3 overflow-hidden rounded-full bg-white/10"><i className="block h-full rounded-full bg-cyan-300" style={{ width: `${racer.progress}%` }} /></span></div>) : broadcastOnly ? null : <div className="text-sm text-white/40">Use {chicken ? 'spmt chicken' : 'spmt petrace'} to enter.</div>}</div>;
 }
 
-export function GameHubPrototypeSurface({ game, events, channel }: { game: GameHubGame; events: GameHubChatEvent[]; channel: string }) {
+export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly = false }: { game: GameHubGame; events: GameHubChatEvent[]; channel: string; broadcastOnly?: boolean }) {
   const recent = events.slice(-60);
   const passive = recent.filter((event) => !isSpmtCommand(event.message));
   const content = useMemo(() => {
@@ -201,28 +201,28 @@ export function GameHubPrototypeSurface({ game, events, channel }: { game: GameH
         return Boolean(args && /^(explode|glitch|portal|shake)$/.test(args[0] || ''));
       }).at(-1);
       const level = Math.min(100, passive.length * 4);
-      return <div className="grid min-h-36 place-items-center text-center"><div><div className="text-6xl">{special ? '💥' : level > 70 ? '🌀' : '⚡'}</div><div className="mt-2 text-2xl font-black">CHAOS {level}%</div><div className="mt-1 text-[10px] text-white/50">{special ? `${special.displayName}: ${special.message}` : 'Every normal chat message raises the chaos.'}</div></div></div>;
+      return <div className="grid min-h-36 place-items-center text-center"><div><div className="text-6xl">{special ? '💥' : level > 70 ? '🌀' : '⚡'}</div><div className="mt-2 text-2xl font-black">CHAOS {level}%</div>{(special || !broadcastOnly) && <div className="mt-1 text-[10px] text-white/50">{special ? `${special.displayName}: ${special.message}` : 'Every normal chat message raises the chaos.'}</div>}</div></div>;
     }
     if (game.id === 'chatgarden') {
       const plants = passive.flatMap((event) => PLANTS.filter(([pattern]) => pattern.test(event.message)).map(([, icon]) => ({ icon, user: event.displayName }))).slice(-24);
-      return <div className="flex min-h-36 flex-wrap content-end items-end justify-center gap-2 rounded-xl bg-gradient-to-b from-sky-950/40 to-emerald-950/40 p-3">{plants.length ? plants.map((plant, index) => <span key={`${plant.user}-${index}`} className="text-3xl" title={plant.user}>{plant.icon}</span>) : <span className="self-center text-sm text-white/40">Mention flowers, trees, grass or mushrooms.</span>}</div>;
+      return <div className="flex min-h-36 flex-wrap content-end items-end justify-center gap-2 rounded-xl bg-gradient-to-b from-sky-950/40 to-emerald-950/40 p-3">{plants.length ? plants.map((plant, index) => <span key={`${plant.user}-${index}`} className="text-3xl" title={plant.user}>{plant.icon}</span>) : broadcastOnly ? null : <span className="self-center text-sm text-white/40">Mention flowers, trees, grass or mushrooms.</span>}</div>;
     }
-    if (game.id === 'chatwars') return <TeamBoard events={recent} gameKey="chatwars" />;
-    if (game.id === 'colorwars') return <TeamBoard events={recent} gameKey="colorwars" paint />;
-    if (game.id === 'chickenroyale') return <RaceBoard events={recent} chicken />;
-    if (game.id === 'petrace') return <RaceBoard events={recent} />;
-    if (game.id === 'pixelbattle') return <PixelBoard events={recent} />;
-    if (game.id === 'treasurehunt') return <TreasureBoard events={recent} channel={channel} />;
+    if (game.id === 'chatwars') return <TeamBoard events={recent} gameKey="chatwars" broadcastOnly={broadcastOnly} />;
+    if (game.id === 'colorwars') return <TeamBoard events={recent} gameKey="colorwars" paint broadcastOnly={broadcastOnly} />;
+    if (game.id === 'chickenroyale') return <RaceBoard events={recent} chicken broadcastOnly={broadcastOnly} />;
+    if (game.id === 'petrace') return <RaceBoard events={recent} broadcastOnly={broadcastOnly} />;
+    if (game.id === 'pixelbattle') return <PixelBoard events={recent} gridOnly={broadcastOnly} />;
+    if (game.id === 'treasurehunt') return <TreasureBoard events={recent} channel={channel} gridOnly={broadcastOnly} />;
     if (game.id === 'wordchain') return <WordChain events={recent} />;
     if (game.id === 'wordstorm') return <WordStorm events={recent} />;
     if (game.id === 'phraseguess') return <PhraseGuess events={recent} channel={channel} />;
     if (game.id === 'emojirain') {
       const emojis = passive.flatMap((event) => emojiTokens(event.message).map((emoji) => ({ emoji, id: `${event.id}-${emoji}` }))).slice(-40);
-      return <div className="flex min-h-36 flex-wrap items-center justify-center gap-2 overflow-hidden">{emojis.length ? emojis.map((item, index) => <span key={`${item.id}-${index}`} className="animate-bounce text-3xl" style={{ animationDelay: `${(index % 8) * 90}ms` }}>{item.emoji}</span>) : <span className="text-sm text-white/40">Send emojis to make it rain.</span>}</div>;
+      return <div className="flex min-h-36 flex-wrap items-center justify-center gap-2 overflow-hidden">{emojis.length ? emojis.map((item, index) => <span key={`${item.id}-${index}`} className="animate-bounce text-3xl" style={{ animationDelay: `${(index % 8) * 90}ms` }}>{item.emoji}</span>) : broadcastOnly ? null : <span className="text-sm text-white/40">Send emojis to make it rain.</span>}</div>;
     }
     if (game.id === 'emojitower') {
       const drops = recent.filter((event) => spmtArgs(event.message, 'tower', 'emojitower')?.[0] === 'drop').slice(-18);
-      return <div className="flex min-h-40 flex-col-reverse items-center justify-start gap-0.5">{drops.length ? drops.map((event, index) => <span key={event.id} className="grid h-7 place-items-center rounded border border-white/15 bg-violet-400/15 text-xl" style={{ width: `${50 + (hashText(event.id) % 70)}px`, transform: `translateX(${(hashText(`${event.id}:x`) % 31) - 15}px)` }}>{['🟪','🟦','🟩','🟨','🟥'][index % 5]}</span>) : <span className="my-auto text-sm text-white/40">spmt tower drop stacks the next block.</span>}</div>;
+      return <div className="flex min-h-40 flex-col-reverse items-center justify-start gap-0.5">{drops.length ? drops.map((event, index) => <span key={event.id} className="grid h-7 place-items-center rounded border border-white/15 bg-violet-400/15 text-xl" style={{ width: `${50 + (hashText(event.id) % 70)}px`, transform: `translateX(${(hashText(`${event.id}:x`) % 31) - 15}px)` }}>{['🟪','🟦','🟩','🟨','🟥'][index % 5]}</span>) : broadcastOnly ? null : <span className="my-auto text-sm text-white/40">spmt tower drop stacks the next block.</span>}</div>;
     }
     if (game.id === 'dancingparade') {
       const dancers = new Map<string, GameHubChatEvent>();
@@ -233,22 +233,22 @@ export function GameHubPrototypeSurface({ game, events, channel }: { game: GameH
         if (action === 'join' || action === 'dance') dancers.set(event.username, event);
         if (action === 'leave') dancers.delete(event.username);
       }
-      return <div className="flex min-h-36 flex-wrap items-end justify-center gap-4">{dancers.size ? [...dancers.values()].map((event) => <div key={event.username} className="text-center"><div className="animate-bounce text-4xl">🕺</div><div className="text-[10px]">{event.displayName}</div></div>) : <span className="self-center text-sm text-white/40">spmt parade to join.</span>}</div>;
+      return <div className="flex min-h-36 flex-wrap items-end justify-center gap-4">{dancers.size ? [...dancers.values()].map((event) => <div key={event.username} className="text-center"><div className="animate-bounce text-4xl">🕺</div><div className="text-[10px]">{event.displayName}</div></div>) : broadcastOnly ? null : <span className="self-center text-sm text-white/40">spmt parade to join.</span>}</div>;
     }
     if (game.id === 'memorylane') {
       const memories = passive.filter((event) => event.message.length >= 24).slice(-5);
-      return <div className="grid gap-2">{memories.length ? memories.map((event) => <div key={event.id} className="rotate-[-1deg] rounded bg-white p-2 text-slate-900 shadow"><div className="text-[10px] font-bold">{event.displayName}</div><div className="line-clamp-2 text-xs">{event.message}</div></div>) : <span className="text-sm text-white/40">Share a story or memory in chat.</span>}</div>;
+      return <div className="grid gap-2">{memories.length ? memories.map((event) => <div key={event.id} className="rotate-[-1deg] rounded bg-white p-2 text-slate-900 shadow"><div className="text-[10px] font-bold">{event.displayName}</div><div className="line-clamp-2 text-xs">{event.message}</div></div>) : broadcastOnly ? null : <span className="text-sm text-white/40">Share a story or memory in chat.</span>}</div>;
     }
     if (game.id === 'colorsymphony') {
       const notes = passive.flatMap((event) => Object.keys(COLORS).filter((color) => new RegExp(`\\b${color}\\b`, 'i').test(event.message)).map((color) => ({ color, id: `${event.id}-${color}` }))).slice(-16);
-      return <div className="flex min-h-36 items-center justify-center gap-2">{notes.length ? notes.map((note, index) => <span key={`${note.id}-${index}`} className="grid h-12 w-8 place-items-center rounded-full text-xl" style={{ background: COLORS[note.color], transform: `translateY(${(index % 4) * -8}px)` }}>♪</span>) : <span className="text-sm text-white/40">Type color names to write the symphony.</span>}</div>;
+      return <div className="flex min-h-36 items-center justify-center gap-2">{notes.length ? notes.map((note, index) => <span key={`${note.id}-${index}`} className="grid h-12 w-8 place-items-center rounded-full text-xl" style={{ background: COLORS[note.color], transform: `translateY(${(index % 4) * -8}px)` }}>♪</span>) : broadcastOnly ? null : <span className="text-sm text-white/40">Type color names to write the symphony.</span>}</div>;
     }
     if (game.id === 'rhythmpulse') {
       const bars = passive.slice(-20).map((event) => Math.min(100, 12 + event.message.length * 2 + emojiTokens(event.message).length * 12));
-      return <div className="flex min-h-36 items-end justify-center gap-1">{bars.length ? bars.map((value, index) => <span key={`${passive[passive.length - bars.length + index]?.id}-${index}`} className="w-3 rounded-t bg-cyan-300/80" style={{ height: `${value}%`, minHeight: '8px' }} />) : <span className="self-center text-sm text-white/40">Chat creates the beat.</span>}</div>;
+      return <div className="flex min-h-36 items-end justify-center gap-1">{bars.length ? bars.map((value, index) => <span key={`${passive[passive.length - bars.length + index]?.id}-${index}`} className="w-3 rounded-t bg-cyan-300/80" style={{ height: `${value}%`, minHeight: '8px' }} />) : broadcastOnly ? null : <span className="self-center text-sm text-white/40">Chat creates the beat.</span>}</div>;
     }
-    return <div className="grid min-h-36 place-items-center text-sm text-white/45">Live chat runtime connected.</div>;
-  }, [channel, game.id, passive, recent]);
+    return broadcastOnly ? null : <div className="grid min-h-36 place-items-center text-sm text-white/45">Live chat runtime connected.</div>;
+  }, [broadcastOnly, channel, game.id, passive, recent]);
 
-  return <section className="h-full min-h-0 overflow-hidden p-4 text-white">{content}</section>;
+  return <section className={`h-full min-h-0 overflow-hidden text-white ${broadcastOnly ? 'p-0' : 'p-4'}`}>{content}</section>;
 }

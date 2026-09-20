@@ -171,20 +171,34 @@
             backdrop-filter: blur(10px);
         }
 
-        body.embedded {
+        body.broadcast {
             background: transparent;
             overflow: hidden;
         }
 
-        body.embedded #timer,
-        body.embedded #theme-indicator,
-        body.embedded #chain-container,
-        body.embedded #scoreboard,
-        body.embedded #instructions {
+        body.broadcast #chain-container,
+        body.broadcast #scoreboard,
+        body.broadcast #instructions {
             display: none;
         }
 
-        body.embedded #word-display {
+        body.broadcast #timer,
+        body.broadcast #theme-indicator {
+            top: 2vh;
+            padding: .5em .8em;
+            background: rgba(0, 0, 0, .45);
+            font-size: clamp(12px, 2vw, 24px);
+        }
+
+        body.broadcast #timer {
+            right: 2vw;
+        }
+
+        body.broadcast #theme-indicator {
+            left: 2vw;
+        }
+
+        body.broadcast #word-display {
             top: 50%;
             width: 94vw;
             font-size: clamp(64px, 13vw, 180px);
@@ -247,6 +261,7 @@
     const password = urlParams.get('password') || 'false';
     const embedded = urlParams.has('embedded');
     if (embedded) document.body.classList.add('embedded');
+    if (urlParams.has('broadcast')) document.body.classList.add('broadcast');
     const participants = new Set();
     const verdictCacheKey = 'nebulaWordChainVerdicts';
     let verdictCache = {};

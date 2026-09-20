@@ -90,7 +90,9 @@ test('Word Chain and Phrase Guess use six-minute stage rounds with minimal embed
   assert.match(wordChain, /currentRoundSlot = Math\.floor\(Date\.now\(\) \/ \(ROUND_SECONDS \* 1000\)\)/);
   assert.match(wordChain, /eventAt < roundOpenedAt/);
   assert.match(wordChain, /if \(!embedded && !participants\.has/);
-  assert.match(wordChain, /body\.embedded #scoreboard/);
+  assert.match(wordChain, /body\.broadcast #scoreboard/);
+  assert.doesNotMatch(wordChain, /body\.broadcast #timer,\s*body\.broadcast #theme-indicator,\s*body\.broadcast #chain-container/);
+  assert.match(wordChain, /body\.broadcast #timer,\s*body\.broadcast #theme-indicator[\s\S]*font-size: clamp/);
   assert.match(phraseGuess, /const ROUND_DURATION_MS = 6 \* 60 \* 1000/);
   assert.match(phraseGuess, /const HINT_COSTS = \[10, 25, 50\]/);
   assert.match(phraseGuess, /Math\.floor\(Date\.now\(\) \/ ROUND_DURATION_MS\)/);
@@ -99,7 +101,7 @@ test('Word Chain and Phrase Guess use six-minute stage rounds with minimal embed
   assert.match(phraseGuess, /if \(embedded && !command\) wallet\.joined = true/);
   assert.match(phraseGuess, /event\.data\?\.dataReceived\?\.overlayNinja/);
   assert.match(phraseGuess, /nebula-phrase-round/);
-  assert.match(phraseGuess, /body\.embedded \.controls/);
+  assert.match(phraseGuess, /body\.broadcast \.controls/);
   assert.match(phraseGuess, /if \(embedded\)[\s\S]*startGame\(\)/);
 });
 
