@@ -46,6 +46,7 @@ export default function GameHubOverlayPage() {
   const [rotationNow, setRotationNow] = useState(() => Date.now());
   const latestChatId = useRef('');
   const latestRuntimeId = useRef('');
+  const hasLoadedProfile = useRef(false);
   const ownerLogin = profile?.ownerLogin || '';
   const profileGamesKey = profile?.gameIds.join(',') || '';
 
@@ -57,11 +58,17 @@ export default function GameHubOverlayPage() {
         const body = await response.json().catch(() => ({})) as Partial<ProfileResponse> & { error?: string };
         if (!response.ok || !body.profile) throw new Error(body.error || `Overlay returned ${response.status}`);
         if (!cancelled) {
+          hasLoadedProfile.current = true;
           setProfile(body.profile);
           setError('');
         }
       } catch (nextError: any) {
-        if (!cancelled) setError(nextError?.message || 'Unable to load overlay profile.');
+        // Keep the last known-good stage on transient volume/network errors.
+        // System overlays start transparent so a restart never puts an error
+        // card over the live media feed while the next poll recovers.
+        if (!cancelled && !hasLoadedProfile.current && !profileId.startsWith('system-')) {
+          setError(nextError?.message || 'Unable to load overlay profile.');
+        }
       }
     }
     void loadProfile();
@@ -172,7 +179,7 @@ export default function GameHubOverlayPage() {
   }, [games.length, profile?.layout]);
 
   if (error) return <main className="grid min-h-screen place-items-center bg-transparent p-8 text-center text-sm text-rose-200">{error}</main>;
-  if (!profile) return <main className="min-h-screen bg-transparent" />;
+  if (!profile) return <main className="min-h-screen bg-transparent" data-nebula-state="recovering" />;
 
   const gridClass = profile.layout === 'stack'
     ? 'grid-cols-1 auto-rows-[minmax(260px,1fr)]'

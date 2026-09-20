@@ -14,6 +14,7 @@ import {
   leaveGameHubGame,
   normalizeGameHubChannel,
   normalizeGameHubPlayerId,
+  purchasePhraseGuessHint,
   resolveChannelGameIds,
   setChannelGameRunning,
 } from '@/lib/game-hub-state';
@@ -500,6 +501,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ handled: true, reply: `@${displayName} your personal Bingo center is set to “${phrase.slice(0, 120)}”.` });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Your Bingo center phrase could not be saved.'}` });
+    }
+  }
+
+  if (game.id === 'phraseguess' && action === 'hint') {
+    try {
+      const purchase = await updateAppState((draft) => {
+        joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
+        const result = purchasePhraseGuessHint(draft, { channel, userId, username, displayName });
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: game.id, actorId: userId, username, displayName,
+          action: 'hint', args: [], message: String(body.message || ''),
+        });
+        return result;
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} unlocked Phrase Guess hint ${purchase.tier}/3 for ${purchase.cost} Games Points · ${purchase.balance} remaining.`,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That hint could not be unlocked.'}` });
     }
   }
 

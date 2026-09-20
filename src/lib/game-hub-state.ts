@@ -3,6 +3,8 @@ import { GAME_HUB_CATALOG, getGameHubGame, normalizeGameHubGameIds } from '@/lib
 
 export const GAME_SCORE_INTERVAL_MS = 30_000;
 export const GAME_POINTS_INTERVAL_MS = 90_000;
+export const PHRASE_GUESS_ROUND_MS = 6 * 60_000;
+export const PHRASE_GUESS_HINT_COSTS = [10, 25, 50] as const;
 const LEDGER_LIMIT = 500;
 
 export type GameHubMembership = {
@@ -30,6 +32,7 @@ export type GameHubChannelSettings = {
   extraGameIds: string[];
   stoppedGameIds: string[];
   updatedAt?: string;
+  phraseGuessHints?: { roundSlot: number; hintsUsed: number };
 };
 
 export type GameHubLedgerEntry = {
@@ -234,6 +237,29 @@ export function spendGameHubPoints(
     reason: String(reason || 'Nebula Arcade purchase').slice(0, 160),
   });
   return player;
+}
+
+export function purchasePhraseGuessHint(
+  state: any,
+  input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; now?: number },
+) {
+  const channel = normalizeGameHubChannel(input.channel);
+  if (!channel) throw new Error('A channel is required.');
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const roundSlot = Math.floor(now / PHRASE_GUESS_ROUND_MS);
+  const settings = getChannelGameSettings(state, channel);
+  const previous = settings.phraseGuessHints;
+  const hintsUsed = previous?.roundSlot === roundSlot
+    ? Math.max(0, Math.floor(Number(previous.hintsUsed || 0)))
+    : 0;
+  if (hintsUsed >= PHRASE_GUESS_HINT_COSTS.length) throw new Error('All three hints are already unlocked this round.');
+
+  const player = getOrCreateGameHubPlayer(state, input);
+  const cost = PHRASE_GUESS_HINT_COSTS[hintsUsed];
+  spendGameHubPoints(state, player, cost, `Phrase Guess hint ${hintsUsed + 1}`);
+  settings.phraseGuessHints = { roundSlot, hintsUsed: hintsUsed + 1 };
+  settings.updatedAt = new Date(now).toISOString();
+  return { tier: hintsUsed + 1, cost, balance: player.gamePointsBalance, roundSlot };
 }
 
 export function recordGameHubChatActivity(

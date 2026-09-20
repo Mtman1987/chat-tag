@@ -64,6 +64,14 @@ test('SpaceMountain event stage rotates only Word Chain and Phrase Guess', () =>
   assert.match(route, /layout: 'rotation'/);
 });
 
+test('system stage stays transparent during idle and transient recovery', () => {
+  const overlay = readFileSync(new URL('../src/app/overlay/game-hub/[profileId]/page.tsx', import.meta.url), 'utf8');
+  assert.match(overlay, /hasLoadedProfile/);
+  assert.match(overlay, /profileId\.startsWith\('system-'\)/);
+  assert.match(overlay, /data-nebula-state="recovering"/);
+  assert.match(overlay, /!renderedGames\.length && !profile\.transparent/);
+});
+
 test('spmt leaderboard queues a main-display card and the overlay holds it for 15 seconds', () => {
   const command = readFileSync(new URL('../src/app/api/game-hub/command/route.ts', import.meta.url), 'utf8');
   const botPatch = readFileSync(new URL('../scripts/patch-game-hub-bot.mjs', import.meta.url), 'utf8');

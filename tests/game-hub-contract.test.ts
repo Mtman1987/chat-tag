@@ -24,6 +24,8 @@ import {
   gamesPointsStandings,
   getPlayerGameSnapshots,
 } from '../src/lib/game-hub-chat-summary';
+import { nebulaPrototypeMessage } from '../src/lib/nebula-game-message';
+import { getOrCreateGameHubPlayer, purchasePhraseGuessHint } from '../src/lib/game-hub-state';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -115,6 +117,55 @@ test('direct commands preserve Chat Tag, choose conflicts, and broadcast compati
 
   const internal = resolveDirectGameCommand(['chicken', 'start'], ['chickenroyale']);
   assert.equal(internal.recognized, false);
+});
+
+test('Nebula translates every legacy prototype command without changing ordinary chat', () => {
+  const cases: Array<[string, string, string]> = [
+    ['chaosmode', 'spmt explode', '!explode'],
+    ['chaosmode', 'spmt glitch', '!glitch'],
+    ['chaosmode', 'spmt portal', '!portal'],
+    ['chaosmode', 'spmt shake', '!shake'],
+    ['chatwars', 'spmt red', '!red'],
+    ['colorwars', 'spmt yellow', '!yellow'],
+    ['chickenroyale', 'spmt chicken', '!join'],
+    ['chickenroyale', 'spmt hatch', '!join'],
+    ['chickenroyale', 'spmt chicken start', '!start'],
+    ['chaosmode', 'spmt chaos portal', '!portal'],
+    ['dancingparade', 'spmt parade', '!join'],
+    ['dancingparade', 'spmt dance', '!dance'],
+    ['emojitower', 'spmt drop', '!drop'],
+    ['petrace', 'spmt pet rabbit', '!join rabbit'],
+    ['petrace', 'spmt petrace turtle', '!join turtle'],
+    ['pixelbattle', 'spmt paint cyan 10 5', 'paint cyan 10 5'],
+    ['pixelbattle', 'spmt pixel red 3 7', 'paint red 3 7'],
+    ['treasurehunt', 'spmt dig B5', '!dig b5'],
+    ['treasurehunt', 'spmt treasure A4', '!dig a4'],
+  ];
+  for (const [gameId, command, expected] of cases) {
+    assert.equal(nebulaPrototypeMessage(gameId, command), expected, `${gameId}: ${command}`);
+  }
+  for (const gameId of ['chatgarden', 'colorsymphony', 'emojirain', 'memorylane', 'rhythmpulse', 'wordstorm']) {
+    assert.equal(nebulaPrototypeMessage(gameId, 'purple memories 🌱'), 'purple memories 🌱');
+  }
+  assert.equal(nebulaPrototypeMessage('wordchain', 'spmt chain'), 'spmt chain');
+  assert.equal(nebulaPrototypeMessage('phraseguess', 'spmt phrase hint'), 'spmt phrase hint');
+});
+
+test('Phrase Guess hint tiers spend the durable Games Points wallet once per round tier', () => {
+  const state: any = { gameSettings: { default: {} } };
+  const player = {
+    userId: '42', username: 'viewer', displayName: 'Viewer', channel: 'space', now: 0,
+  };
+  getOrCreateGameHubPlayer(state, player).gamePointsBalance = 110;
+  const stored = purchasePhraseGuessHint(state, player);
+  const second = purchasePhraseGuessHint(state, { ...player, now: 1 });
+  const third = purchasePhraseGuessHint(state, { ...player, now: 2 });
+  assert.deepEqual([stored.cost, second.cost, third.cost], [10, 25, 50]);
+  assert.equal(third.balance, 25);
+  assert.throws(() => purchasePhraseGuessHint(state, { ...player, now: 3 }), /three hints/i);
+  const nextRound = purchasePhraseGuessHint(state, { ...player, now: 6 * 60_000 });
+  assert.equal(nextRound.cost, 10);
+  assert.equal(nextRound.tier, 1);
 });
 
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {

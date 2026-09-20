@@ -757,18 +757,14 @@ You can't handle the truth</textarea>
         }
 
         function buyHint(username) {
-            const player = playerWallet(username);
             const hintIndex = gameState.hintsUsed;
             if (hintIndex >= HINT_COSTS.length) {
                 sendResponse(`@${username}, all three hints are already unlocked.`);
                 return;
             }
             const cost = HINT_COSTS[hintIndex];
-            if (player.points < cost) {
-                sendResponse(`@${username}, hint ${hintIndex + 1} costs ${cost} Games Points; you have ${player.points}.`);
-                return;
-            }
-            player.points -= cost;
+            // The authenticated bot command route has already charged the
+            // durable Games Points wallet before this runtime event arrives.
             gameState.hintsUsed += 1;
             const words = gameState.currentPhrase.trim().split(/\s+/);
             const hints = [
@@ -835,7 +831,8 @@ You can't handle the truth</textarea>
                 return;
             }
             if (/^(?:phrase(?:guess)?\s+)?hint$/.test(command)) {
-                if (wallet.joined) buyHint(chatname);
+                wallet.joined = true;
+                buyHint(chatname);
                 return;
             }
             if (!wallet.joined || command) return;
