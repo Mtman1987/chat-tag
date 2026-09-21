@@ -10,9 +10,11 @@ import {
   mosaicPublicSnapshot,
   observeMosaicActiveTime,
   paintMosaicCell,
+  parseMosaicBrushCommand,
   parseMosaicPaintCommand,
   parseMosaicViewCommand,
   queueMosaicTheme,
+  setMosaicBrush,
   setMosaicView,
 } from '../src/lib/nebula-mosaic';
 
@@ -80,6 +82,64 @@ test('Mosaic accepts compact, spaced, named and reversed paint commands', () => 
   assert.deepEqual(parseMosaicPaintCommand('spmt d12 yellow'), expected);
   assert.deepEqual(parseMosaicPaintCommand('spmt yellow d12'), expected);
   assert.deepEqual(parseMosaicPaintCommand('SPMT D 12 YELLOW'), expected);
+});
+
+test('Mosaic brushes are free per-artwork horizontal tools with simple commands', () => {
+  assert.equal(parseMosaicBrushCommand('spmt brush'), 'status');
+  assert.equal(parseMosaicBrushCommand('spmt brush 5'), 5);
+  assert.equal(parseMosaicBrushCommand('spmt mosaic brush 3'), 3);
+  assert.equal(parseMosaicBrushCommand('spmt brush off'), 1);
+  assert.equal(parseMosaicBrushCommand('spmt brush 6'), null);
+
+  const draft = readyMosaic();
+  const equipped = setMosaicBrush(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 4, now: 50,
+  });
+  assert.equal(equipped.brush, 4);
+  const painted = paintMosaicCell(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist',
+    command: parseMosaicPaintCommand('spmt d12y')!, now: 51,
+  });
+  assert.equal(painted.outcome, 'painted');
+  assert.equal(painted.paintedCount, 4);
+  assert.deepEqual(painted.paintedCoordinates, ['D12', 'E12', 'F12', 'G12']);
+  assert.equal(draft.gameSettings.default.gameHub.players['twitch:7'].gamePointsBalance, 4);
+});
+
+test('Mosaic brushes stop at another color and at the active board edge', () => {
+  const draft = readyMosaic();
+  const artwork = draft.gameSettings.default.gameHub.channels.spacemountainlive.mosaic.current;
+  artwork.target[11 * 40 + 5] = 'R';
+  setMosaicBrush(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 5, now: 50,
+  });
+  const stopped = paintMosaicCell(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist',
+    command: parseMosaicPaintCommand('spmt d12y')!, now: 51,
+  });
+  assert.deepEqual(stopped.paintedCoordinates, ['D12', 'E12']);
+  assert.equal(stopped.stoppedAt, 'F12');
+
+  const edge = paintMosaicCell(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist',
+    command: parseMosaicPaintCommand('spmt s13y')!, now: 52,
+  });
+  assert.deepEqual(edge.paintedCoordinates, ['S13', 'T13']);
+});
+
+test('Mosaic brush equipment resets with each new artwork', () => {
+  const draft = readyMosaic();
+  setMosaicBrush(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 5, now: 50,
+  });
+  const queued = queueMosaicTheme(draft, {
+    channel: 'spacemountainlive', userId: '8', username: 'maker', displayName: 'Maker', theme: 'dragon', now: 60,
+  });
+  installMosaicTemplate(draft, 'spacemountainlive', queued.request.id, Array.from({ length: 2_000 }, () => 'Y'), {}, 61);
+  const status = setMosaicBrush(draft, {
+    channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 'status', now: 62,
+  });
+  assert.equal(status.brush, 1);
 });
 
 test('Mosaic show and view commands select one board or the temporary combined artwork', () => {

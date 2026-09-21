@@ -1,4 +1,5 @@
 import {
+  awardGameHubPoints,
   getChannelGameSettings,
   getGameHubStore,
   getOrCreateGameHubPlayer,
@@ -76,6 +77,7 @@ export type NebulaMosaicArtwork = {
   viewMode: 'board' | 'all';
   viewUntil?: string;
   awardedMilestones: string[];
+  brushByPlayer?: Record<string, number>;
   activeIdleMs?: number;
   lastHeartbeatAt?: string;
 };
@@ -92,6 +94,8 @@ export type MosaicPaintCommand = {
   row: number;
   color: MosaicColorCode;
 };
+
+export type MosaicBrushCommand = 1 | 2 | 3 | 4 | 5 | 'status';
 
 const COLOR_ALIASES: Record<string, MosaicColorCode> = {
   r: 'R', red: 'R', b: 'B', blue: 'B', g: 'G', green: 'G', y: 'Y', yellow: 'Y',
@@ -308,6 +312,37 @@ export function parseMosaicPaintCommand(messageValue: unknown): MosaicPaintComma
   };
 }
 
+export function parseMosaicBrushCommand(messageValue: unknown): MosaicBrushCommand | null {
+  let source = String(messageValue || '').trim().toLowerCase();
+  source = source.replace(/^!?@?spmt(?:\s+|$)/i, '').trim();
+  source = source.replace(/^pixel(?:battle)?\s+|^mosaic\s+/i, '').trim();
+  const match = source.match(/^brush(?:\s+(off|[1-5]))?$/);
+  if (!match) return null;
+  if (!match[1]) return 'status';
+  if (match[1] === 'off') return 1;
+  return Number(match[1]) as 1 | 2 | 3 | 4 | 5;
+}
+
+export function setMosaicBrush(
+  state: any,
+  input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; brush: MosaicBrushCommand; now?: number },
+) {
+  const channel = normalizeGameHubChannel(input.channel);
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const artwork = resumeMosaicIfNeeded(state, channel, now);
+  if (!artwork || artwork.status === 'completed') throw new Error('No unfinished Nebula Mosaic is ready. Request the next theme with !mosaic owl.');
+  const joined = joinGameHubGame(state, { ...input, gameId: MOSAIC_GAME_ID });
+  artwork.brushByPlayer = artwork.brushByPlayer && typeof artwork.brushByPlayer === 'object' ? artwork.brushByPlayer : {};
+  const current = Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer[joined.player.id] || 1))));
+  if (input.brush === 'status') return { brush: current, artwork: artwork.theme };
+  artwork.brushByPlayer[joined.player.id] = input.brush;
+  artwork.lastInteractionAt = nowIso(now);
+  artwork.updatedAt = nowIso(now);
+  artwork.activeIdleMs = 0;
+  artwork.lastHeartbeatAt = nowIso(now);
+  return { brush: input.brush, artwork: artwork.theme };
+}
+
 export function parseMosaicViewCommand(messageValue: unknown): 'all' | MosaicBoardNumber | null {
   let source = String(messageValue || '').trim().toLowerCase().replace(/^!?@?spmt(?:\s+|$)/i, '').trim();
   source = source.replace(/^pixel(?:battle)?\s+|^mosaic\s+/i, '').trim();
@@ -372,8 +407,12 @@ function awardMilestone(state: any, artwork: NebulaMosaicArtwork, id: string, bo
   artwork.awardedMilestones.push(id);
   const store = getGameHubStore(state);
   for (const playerId of contributors) {
-    const membership = store.players[playerId]?.joinedGames?.[MOSAIC_GAME_ID];
-    if (membership) membership.score += bonus;
+    const player = store.players[playerId];
+    const membership = player?.joinedGames?.[MOSAIC_GAME_ID];
+    if (membership) {
+      membership.score += bonus;
+      awardGameHubPoints(state, player, bonus, 'Nebula Mosaic milestone', { gameId: MOSAIC_GAME_ID });
+    }
   }
   return { id, bonus, contributorCount: contributors.length };
 }
@@ -436,6 +475,7 @@ export function paintMosaicCell(
   if (!artwork || artwork.status === 'completed') throw new Error('No unfinished Nebula Mosaic is ready. Request the next theme with !mosaic owl.');
   const joined = joinGameHubGame(state, { ...input, gameId: MOSAIC_GAME_ID });
   const origin = boardOrigin(artwork.activeBoard);
+  const brush = Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer?.[joined.player.id] || 1))));
   const x = origin.x + input.command.column;
   const y = origin.y + input.command.row;
   const index = y * MOSAIC_WIDTH + x;
@@ -453,19 +493,48 @@ export function paintMosaicCell(
     return { outcome: 'wrong' as const, expected, score: joined.membership.score, board: artwork.activeBoard, coordinate: input.command.coordinate };
   }
   if (artwork.painted[index] === expected) {
-    return { outcome: 'already-painted' as const, expected, score: joined.membership.score, board: artwork.activeBoard, coordinate: input.command.coordinate };
+    if (brush === 1) return { outcome: 'already-painted' as const, expected, score: joined.membership.score, board: artwork.activeBoard, coordinate: input.command.coordinate, brush };
   }
 
-  artwork.painted[index] = expected;
-  artwork.paintedBy[index] = joined.player.id;
-  joined.membership.score += 1;
+  const paintedCoordinates: string[] = [];
+  const milestones: Array<{ id: string; bonus: number; contributorCount: number }> = [];
+  let stoppedAt = '';
+  for (let offset = 0; offset < brush; offset += 1) {
+    const localColumn = input.command.column + offset;
+    if (localColumn >= MOSAIC_BOARD_WIDTH) break;
+    const candidateIndex = y * MOSAIC_WIDTH + origin.x + localColumn;
+    if (artwork.target[candidateIndex] !== input.command.color) {
+      stoppedAt = `${String.fromCharCode(65 + localColumn)}${input.command.row + 1}`;
+      break;
+    }
+    if (artwork.painted[candidateIndex] === input.command.color) continue;
+    artwork.painted[candidateIndex] = input.command.color;
+    artwork.paintedBy[candidateIndex] = joined.player.id;
+    paintedCoordinates.push(`${String.fromCharCode(65 + localColumn)}${input.command.row + 1}`);
+    milestones.push(...collectNewMilestones(state, artwork, candidateIndex));
+  }
+  if (!paintedCoordinates.length) {
+    return { outcome: 'already-painted' as const, expected, score: joined.membership.score, board: artwork.activeBoard, coordinate: input.command.coordinate, brush, stoppedAt };
+  }
+  joined.membership.score += paintedCoordinates.length;
+  awardGameHubPoints(state, joined.player, paintedCoordinates.length, 'Nebula Mosaic cells painted', { gameId: MOSAIC_GAME_ID, channel });
   joined.membership.lastActiveAt = nowIso(now);
-  const milestones = collectNewMilestones(state, artwork, index);
   if (milestones.some((milestone) => milestone.id === 'complete')) {
     const mosaic = getMosaicChannelState(state, channel);
     mosaic.saves = [artwork, ...mosaic.saves.filter((item) => item.id !== artwork.id)].slice(0, 20);
   }
-  return { outcome: 'painted' as const, expected, score: joined.membership.score, board: artwork.activeBoard, coordinate: input.command.coordinate, milestones };
+  return {
+    outcome: 'painted' as const,
+    expected,
+    score: joined.membership.score,
+    board: artwork.activeBoard,
+    coordinate: input.command.coordinate,
+    paintedCoordinates,
+    paintedCount: paintedCoordinates.length,
+    brush,
+    stoppedAt,
+    milestones,
+  };
 }
 
 export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Date.now()) {

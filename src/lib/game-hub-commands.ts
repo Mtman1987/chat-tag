@@ -84,6 +84,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
   ] },
   { gameId: 'pixelbattle', key: 'mosaic', aliases: ['pixel', 'pixelbattle'], joinDescription: 'Join Nebula Mosaic.', joinTrigger: 'spmt mosaic', commands: [
     { trigger: '!mosaic owl', description: 'Request the next artwork theme free during testing.' },
+    { trigger: 'spmt brush 1-5', description: 'Equip a free horizontal brush for the current artwork; off returns to one cell.' },
     { trigger: 'spmt D12Y', description: 'Paint a square; spaces, full color names and reversed order also work.' },
     { trigger: 'spmt show 1', description: 'Open work board 1, 2, 3 or 4; view works too.' },
     { trigger: 'spmt show all', description: 'Briefly show the complete combined artwork; view works too.' },

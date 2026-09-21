@@ -44,10 +44,12 @@ import {
   finishMosaicForPreview,
   mosaicPublicSnapshot,
   paintMosaicCell,
+  parseMosaicBrushCommand,
   parseMosaicPaintCommand,
   parseMosaicViewCommand,
   queueMosaicTheme,
   resumeMosaicIfNeeded,
+  setMosaicBrush,
   setMosaicView,
   validateMosaicTheme,
 } from '@/lib/nebula-mosaic';
@@ -280,6 +282,29 @@ export async function POST(req: NextRequest) {
   }
 
   const mosaicPaint = parseMosaicPaintCommand(body.message);
+  const mosaicBrush = parseMosaicBrushCommand(body.message);
+  if (mosaicBrush !== null) {
+    if (!activeForDirectRouting.includes('pixelbattle')) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
+    }
+    if (activeActivityGame && activeActivityGame !== 'pixelbattle') {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is waiting in the activity rotation; brushes can be changed when it returns.`) });
+    }
+    try {
+      const equipped = await updateAppState((draft) => setMosaicBrush(draft, {
+        channel, userId, username, displayName, brush: mosaicBrush,
+      }));
+      return NextResponse.json({
+        handled: true,
+        reply: mosaicBrush === 'status'
+          ? `@${displayName} your brush for “${equipped.artwork}” paints ${equipped.brush} cell${equipped.brush === 1 ? '' : 's'} to the right. Change it with spmt brush 1-5.`
+          : `@${displayName} ${equipped.brush === 1 ? 'single-cell brush equipped' : `${equipped.brush}-cell brush equipped`} for “${equipped.artwork}”. Paint normally with commands like spmt d15y.`,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic brush could not be equipped.'}`) });
+    }
+  }
+
   if (mosaicPaint) {
     if (!activeForDirectRouting.includes('pixelbattle')) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
@@ -301,12 +326,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} needs ${expectedName} · −1 point · score ${result.score}.` });
       }
       if (result.outcome === 'already-painted') {
-        return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} on board ${result.board} is already ${expectedName}.` });
+        return NextResponse.json({ handled: true, reply: `@${displayName} your ${result.brush || 1}-cell brush found no new ${expectedName} cells starting at ${result.coordinate} on board ${result.board}.` });
       }
       const bonus = result.milestones.reduce((sum, milestone) => sum + milestone.bonus, 0);
+      const paintedRange = result.paintedCoordinates.length > 1
+        ? `${result.paintedCoordinates[0]}–${result.paintedCoordinates.at(-1)}`
+        : result.paintedCoordinates[0];
       return NextResponse.json({
         handled: true,
-        reply: `@${displayName} painted board ${result.board} ${result.coordinate} ${expectedName} · +1${bonus ? ` · milestone bonuses +${bonus}` : ''} · score ${result.score}.`,
+        reply: `@${displayName} painted board ${result.board} ${paintedRange} ${expectedName} · +${result.paintedCount}${result.stoppedAt ? ` · stopped before ${result.stoppedAt}` : ''}${bonus ? ` · milestone bonuses +${bonus}` : ''} · score ${result.score}.`,
         mosaicMilestones: result.milestones,
       });
     } catch (error: any) {
