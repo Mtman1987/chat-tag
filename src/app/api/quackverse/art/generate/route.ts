@@ -3,6 +3,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getQuackverseVisualCanon } from '@/lib/quackverse-visual-canon';
+import {
+  quackversePresentationDirection,
+  quackversePresentationNegativePrompt,
+  quackversePresentationPlumage,
+  resolveQuackversePresentation,
+} from '@/lib/quackverse-presentation';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { dataDirPath, readAppState, updateAppState } from '@/lib/volume-store';
 import {
@@ -125,10 +131,8 @@ function promptControl(value: unknown, maxLength: number) {
 
 function genderPresentationForCard(card: any) {
   if (String(card?.type || '').toLowerCase() !== 'duck') return '';
-  const ducks = quackverseCards.filter((item) => String(item.type || '').toLowerCase() === 'duck').sort((a, b) => a.id - b.id);
-  const index = ducks.findIndex((item) => item.id === card.id);
-  const presentation = index >= 0 && index % 2 === 0 ? 'feminine-presenting' : 'masculine-presenting';
-  return `Character presentation: ${presentation} adult anthropomorphic waterfowl person. Keep the presentation readable through face, silhouette, posture and styling while preserving species-correct avian anatomy and the card's canonical class identity.`;
+  const canon = visualCanonForCard(card);
+  return quackversePresentationDirection(card, canon);
 }
 
 function canonCommonThreadDirection(card: any, canon: ReturnType<typeof visualCanonForCard>, family: ArtFamily) {
@@ -182,7 +186,7 @@ function buildPrompt(card: any, variant: QuackverseArtVariant, family: ArtFamily
     `Character: "${card.name}". Exactly one anthropomorphic upright ${canon.species} waterfowl person, never a human and never a human in a bird mask.`,
     genderPresentationForCard(card),
     canonCommonThreadDirection(card, canon, family),
-    `Species identity: unmistakable species-correct bill, expressive avian eyes, visible feathers, two arms and two legs. Plumage: ${canon.plumage}.`,
+    `Species identity: unmistakable species-correct bill, expressive avian eyes, visible feathers, two arms and two legs. Sex-specific plumage lock: ${quackversePresentationPlumage(card, canon)}.`,
     `Class/subclass: ${canon.className} / ${ownerSubclass || canon.subclass}. Body: ${canon.build}.`,
     `Signature weapon: ${canon.signatureWeapon}. Armor: ${canon.armorStyle}.`,
     `Palette: ${canon.palette.join(', ')}. Effects: ${canon.vfx}.`,
@@ -210,10 +214,19 @@ async function assetExists(asset?: QuackverseArtAsset | null) {
 async function referenceImagesFor(card: any, origin: string, manifest: ReturnType<typeof normalizeQuackverseArtManifest>): Promise<string[]> {
   const family = familyForCard(card);
   const canon = card.type === 'Duck' ? visualCanonForCard(card) : null;
+  const presentation = canon ? resolveQuackversePresentation(card, canon) : '';
   const candidates = quackverseCards.filter((candidate) => candidate.id !== card.id);
+  const samePresentation = canon
+    ? candidates.filter((candidate) => {
+        if (candidate.type !== 'Duck') return false;
+        const candidateCanon = visualCanonForCard(candidate);
+        return resolveQuackversePresentation(candidate, candidateCanon) === presentation;
+      })
+    : [];
   const ordered = [
-    ...(canon ? candidates.filter((candidate) => candidate.type === 'Duck' && visualCanonForCard(candidate).affinity === canon.affinity) : []),
-    ...candidates.filter((candidate) => family !== 'general' && familyForCard(candidate) === family),
+    ...(canon ? samePresentation.filter((candidate) => visualCanonForCard(candidate).affinity === canon.affinity) : []),
+    ...samePresentation.filter((candidate) => family !== 'general' && familyForCard(candidate) === family),
+    ...samePresentation,
     ...candidates,
   ];
   const urls: string[] = [];
@@ -232,7 +245,7 @@ function normalizeStreamWeaverPayload(data: any) {
   return data?.data && typeof data.data === 'object' ? data.data : data;
 }
 
-async function callStreamWeaverImage(prompt: string, body: any, referenceImages: string[]) {
+async function callStreamWeaverImage(prompt: string, body: any, referenceImages: string[], card?: any) {
   const tenantId = String(body.tenantId || body.streamweaverTenantId || STREAMWEAVER_TENANT_ID).trim();
   if (!tenantId) throw new Error('Quackverse StreamWeaver tenant is not configured.');
   const providerOverride = quackverseProviderOverride(body.providerOverride);
@@ -250,7 +263,7 @@ async function callStreamWeaverImage(prompt: string, body: any, referenceImages:
         model: body.model || undefined,
         providerParams: {
           referenceImages,
-          negativePrompt: QUACKVERSE_NEGATIVE_PROMPT,
+          negativePrompt: [QUACKVERSE_NEGATIVE_PROMPT, card ? quackversePresentationNegativePrompt(card, visualCanonForCard(card)) : ''].filter(Boolean).join(', '),
           seed: Number(body.seed || 0) || undefined,
         },
         providerOverride,
@@ -377,7 +390,7 @@ export async function POST(req: NextRequest) {
         });
         continue;
       }
-      const generated = await callStreamWeaverImage(prompt, body, references);
+      const generated = await callStreamWeaverImage(prompt, body, references, card);
       const image = await fetchGeneratedImage(generated.imageUrl);
       const asset = await persistGeneratedArt(card.id, variant, image.bytes, image.mimeType, generated.provider);
       manifest[String(card.id)] = { ...(manifest[String(card.id)] || {}), [variant]: asset } as any;

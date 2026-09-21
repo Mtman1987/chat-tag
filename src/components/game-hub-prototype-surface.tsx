@@ -214,21 +214,44 @@ function PixelBoard({ channel, gridOnly = false }: { channel: string; gridOnly?:
   </div>;
 }
 
-function TreasureBoard({ events, channel, gridOnly = false }: { events: GameHubChatEvent[]; channel: string; gridOnly?: boolean }) {
-  const day = new Date().toISOString().slice(0, 10);
-  const treasures = useMemo(() => new Set(Array.from({ length: 5 }, (_, index) => hashText(`${channel}:${day}:${index}`) % 64)), [channel, day]);
-  const dug = useMemo(() => {
-    const cells = new Set<number>();
-    for (const event of events) {
-      const args = spmtArgs(event.message, 'treasure', 'treasurehunt');
-      const match = String(args?.[0] || '').match(/^([a-h])([1-8])$/i);
-      if (!match) continue;
-      cells.add((Number(match[2]) - 1) * 8 + (match[1].toLowerCase().charCodeAt(0) - 97));
-    }
-    return cells;
-  }, [events]);
-  const found = [...dug].filter((cell) => treasures.has(cell)).length;
-  return <div className={gridOnly ? 'grid h-full w-full place-items-center' : ''}>{!gridOnly && <div className="mb-2 text-xs">Treasures found <b>{found}/5</b></div>}<div aria-label="Treasure Hunt grid" className={`grid grid-cols-8 gap-1 ${gridOnly ? 'aspect-square w-[min(100%,100vh)]' : ''}`}>{Array.from({ length: 64 }, (_, index) => <span key={index} className={`grid aspect-square place-items-center rounded text-xs ${dug.has(index) ? 'bg-cyan-300/15' : 'bg-white/5'}`}>{dug.has(index) ? (treasures.has(index) ? '💎' : '·') : ''}</span>)}</div>{!gridOnly && <div className="mt-2 text-[10px] text-white/50">Dig with spmt treasure B5 · map rotates daily per channel</div>}</div>;
+type TreasureSnapshot = { width: number; height: number; cells: Array<{ coordinate: string; state: 'hidden' | 'pending' | 'cold' | 'warm' | 'hot' | 'boiling' | 'treasure' }>; foundCount: number; treasureCount: number; complete: boolean; challenge: null | { coordinate: string; clue: 'cold' | 'warm' | 'hot' | 'boiling'; question: string; wrongGuesses: number }; turn: { current: null | { username: string; skips: number }; queue: Array<{ username: string; skips: number }>; expiresAt: string | null; kickVotes: number } };
+
+function TreasureBoard({ channel, gridOnly = false }: { channel: string; gridOnly?: boolean }) {
+  const [snapshot, setSnapshot] = useState<TreasureSnapshot | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/game-hub/treasure-hunt?channel=${encodeURIComponent(channel)}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json() as TreasureSnapshot;
+        if (!cancelled) setSnapshot(body);
+      } catch {}
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 1500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [channel]);
+  if (!snapshot) return <div className="h-full w-full bg-slate-950" />;
+  const columns = Array.from({ length: snapshot.width }, (_, index) => String.fromCharCode(65 + index));
+  const rows = Array.from({ length: snapshot.height }, (_, index) => index + 1);
+  const board = <div aria-label="Treasure Hunt grid" className="grid h-full w-full gap-px overflow-hidden bg-cyan-950 p-px" style={{ gridTemplateColumns: 'minmax(14px,.55fr) repeat(20,minmax(0,1fr))', gridTemplateRows: 'minmax(12px,.48fr) repeat(25,minmax(0,1fr))' }}>
+    <span className="bg-slate-950" />
+    {columns.map((label) => <span key={`treasure-column-${label}`} className="grid min-h-0 min-w-0 place-items-center bg-slate-900 text-[clamp(6px,1.4vw,11px)] font-black text-cyan-100">{label}</span>)}
+    {rows.flatMap((row, rowIndex) => [
+      <span key={`treasure-row-${row}`} className="grid min-h-0 min-w-0 place-items-center bg-slate-900 text-[clamp(6px,1.25vw,10px)] font-black text-cyan-100">{row}</span>,
+      ...columns.map((_, columnIndex) => {
+        const cell = snapshot.cells[rowIndex * snapshot.width + columnIndex];
+        const text = cell.state === 'treasure' ? '◆' : cell.state === 'boiling' ? '🔥' : cell.state === 'hot' ? 'H' : cell.state === 'warm' ? 'W' : cell.state === 'cold' ? 'C' : cell.state === 'pending' ? '?' : '';
+        const background = cell.state === 'treasure' ? '#facc15' : cell.state === 'boiling' ? '#ef4444' : cell.state === 'hot' ? '#fb7185' : cell.state === 'warm' ? '#fb923c' : cell.state === 'cold' ? '#38bdf8' : cell.state === 'pending' ? '#a78bfa' : '#0f172a';
+        return <span key={cell.coordinate} title={cell.coordinate} className="grid min-h-0 min-w-0 place-items-center font-black leading-none text-slate-950" style={{ fontSize: 'clamp(5px,1.2vw,10px)', background }}>{text}</span>;
+      }),
+    ])}
+  </div>;
+  const seconds = snapshot.turn.expiresAt ? Math.max(0, Math.ceil((Date.parse(snapshot.turn.expiresAt) - Date.now()) / 1000)) : 0;
+  const challenge = <div className="shrink-0 bg-slate-950/95 px-2 py-1 text-center text-[clamp(7px,1vw,10px)] leading-tight text-white"><b className="text-cyan-100">{snapshot.turn.current ? `${snapshot.turn.current.username} · ${seconds}s` : 'JOIN THE ROTATION'}</b>{snapshot.challenge ? <> · <b>{snapshot.challenge.coordinate} · {snapshot.challenge.clue.toUpperCase()}</b> · {snapshot.challenge.question} <span className="text-white/55">({snapshot.challenge.wrongGuesses}/3 misses)</span></> : <> · spmt treasure</>}</div>;
+  if (gridOnly) return <div className="grid h-full w-full grid-rows-[minmax(0,1fr)_auto] bg-slate-950">{board}{challenge}</div>;
+  return <div className="grid aspect-[4/5] w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] gap-2"><div className="text-xs">Treasures <b>{snapshot.foundCount}/{snapshot.treasureCount}</b> · Queue {snapshot.turn.queue.map((entry) => entry.username).join(' → ') || 'empty'}{snapshot.complete ? ' · BOARD COMPLETE' : ''}</div>{board}{challenge}</div>;
 }
 
 function WordChain({ events }: { events: GameHubChatEvent[] }) {
@@ -313,7 +336,7 @@ export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly =
     if (game.id === 'chickenroyale') return <RaceBoard events={recent} chicken broadcastOnly={broadcastOnly} />;
     if (game.id === 'petrace') return <RaceBoard events={recent} broadcastOnly={broadcastOnly} />;
     if (game.id === 'pixelbattle') return <PixelBoard channel={channel} gridOnly={broadcastOnly} />;
-    if (game.id === 'treasurehunt') return <TreasureBoard events={recent} channel={channel} gridOnly={broadcastOnly} />;
+    if (game.id === 'treasurehunt') return <TreasureBoard channel={channel} gridOnly={broadcastOnly} />;
     if (game.id === 'wordchain') return <WordChain events={recent} />;
     if (game.id === 'wordstorm') return <WordStorm events={recent} />;
     if (game.id === 'phraseguess') return <PhraseGuess events={recent} channel={channel} />;

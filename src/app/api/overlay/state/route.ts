@@ -5,7 +5,10 @@ import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
 import { getGameHubGameStats, normalizeGameHubChannel, resolveChannelGameIds } from '@/lib/game-hub-state';
 import { mosaicPublicSnapshot } from '@/lib/nebula-mosaic';
 import { chatWarsPublicSnapshot } from '@/lib/chat-wars';
+import { treasureHuntPublicSnapshot } from '@/lib/treasure-hunt';
+import { sharedBingoPublicSnapshot } from '@/lib/shared-bingo';
 import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
+import { getGameHubRuntimeActions } from '@/lib/game-hub-runtime';
 import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
 
 export const dynamic = 'force-dynamic';
@@ -82,6 +85,8 @@ export async function GET(req: NextRequest) {
   );
   const mosaic = overlayChannel ? mosaicPublicSnapshot(state, overlayChannel) : { artwork: null };
   const chatWars = overlayChannel ? chatWarsPublicSnapshot(state, overlayChannel) : null;
+  const treasureHunt = overlayChannel ? treasureHuntPublicSnapshot(state, overlayChannel) : null;
+  const bingo = overlayChannel ? sharedBingoPublicSnapshot(state, overlayChannel) : null;
   const activityOrder = ['chatwars', 'pixelbattle', 'treasurehunt', 'bingo'];
   const activeGames = new Set(overlayChannel ? resolveChannelGameIds(state, overlayChannel) : []);
   const now = Date.now();
@@ -89,6 +94,12 @@ export async function GET(req: NextRequest) {
     const at = Date.parse(String(event?.at || ''));
     return Number.isFinite(at) && now - at <= 30 * 60_000 && Array.isArray(event?.gameIds) ? event.gameIds : [];
   }) : []);
+  if (overlayChannel) {
+    for (const event of getGameHubRuntimeActions(state, overlayChannel, { limit: 250 })) {
+      const at = Date.parse(String(event.at || ''));
+      if (Number.isFinite(at) && now - at <= 30 * 60_000) recentGames.add(event.gameId);
+    }
+  }
   const rotatingGames = activityOrder.filter((gameId) => activeGames.has(gameId)
     && (recentGames.has(gameId) || (gameId === 'pixelbattle' && mosaic.artwork?.status === 'active')));
   const activeGridGame = rotatingGames.length ? rotatingGames[nebulaRotationIndexAt(now, rotatingGames.length)] : null;
@@ -115,6 +126,21 @@ export async function GET(req: NextRequest) {
         })),
       }
       : null;
+  const gridLeaderboard = activeGridLeaderboard || (activeGridGame === 'treasurehunt' && treasureHunt
+    ? {
+      gameId: 'treasurehunt',
+      gameName: 'Treasure Hunt',
+      theme: `${treasureHunt.foundCount}/${treasureHunt.treasureCount} found`,
+      rows: treasureHunt.leaderboard.slice(0, 5).map((entry, index) => ({ rank: index + 1, username: entry.username, score: entry.score })),
+    }
+    : activeGridGame === 'bingo' && bingo
+      ? {
+        gameId: 'bingo',
+        gameName: 'Stream Bingo',
+        theme: `${bingo.chatSquares} chat · ${bingo.stellaSquares} Stella`,
+        rows: bingo.leaderboard.slice(0, 5).map((entry, index) => ({ rank: index + 1, username: entry.username, score: entry.score })),
+      }
+      : null);
   const trackedChannels = Object.keys(state.botChannels || {});
   let liveCount = 0;
   let liveUsers: any[] = [];
@@ -139,7 +165,7 @@ export async function GET(req: NextRequest) {
     leaderboard,
     recentHistory,
     overlayMessages,
-    activeGridLeaderboard,
+    activeGridLeaderboard: gridLeaderboard,
     monthlyWinners,
     timestamp: Date.now(),
   });

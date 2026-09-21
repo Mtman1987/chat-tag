@@ -40,8 +40,8 @@ export function GameHubSurface({
     const query = channel ? `?tenant=${encodeURIComponent(channel)}` : '';
     content = <iframe src={`/quackverse-overlay${query}`} title={`${game.name} overlay`} className="h-full w-full border-0 bg-transparent" />;
   } else if (game.id === 'bingo') {
-    content = <GameHubBingoSurface broadcastOnly={!chrome} />;
-  } else if (game.id === 'chatwars') {
+    content = <GameHubBingoSurface channel={channel || 'chat'} broadcastOnly={!chrome} />;
+  } else if (game.id === 'chatwars' || game.id === 'treasurehunt') {
     content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly={!chrome} />;
   } else if (game.sourcePrototype && !LARGE_STAGE_GAMES.has(game.id)) {
     // Every chat-driven overlay uses a purpose-built read-only state surface.
@@ -50,7 +50,7 @@ export function GameHubSurface({
   } else if (game.sourcePrototype) {
     content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} channel={channel} broadcastOnly />;
   } else {
-    content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} />;
+    content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly={!chrome} />;
   }
 
   if (!chrome) {

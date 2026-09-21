@@ -11,7 +11,6 @@ import { getPublicAppOrigin } from '@/lib/public-origin';
 import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
 import { setGameHubInstructions } from '@/lib/game-hub-instructions';
 import {
-  awardGameHubPoints,
   joinGameHubGame,
   leaveGameHubGame,
   normalizeGameHubChannel,
@@ -29,13 +28,6 @@ import {
   getGamesPointsStanding,
   getPlayerGameSnapshots,
 } from '@/lib/game-hub-chat-summary';
-import {
-  BINGO_CENTER_INDEX,
-  bingoTemplatePhrases,
-  getPersonalBingoBoard,
-  hasBingo,
-  setPersonalBingoCenter,
-} from '@/lib/bingo-game';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import {
@@ -58,6 +50,8 @@ import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
 import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
 import { instantGameOverlayProfileId } from '@/lib/game-hub-overlays';
 import { chatWarsMinimumWordLength, compactChatWarsReveal, getChatWarsPlayer, setChatWarsTeam } from '@/lib/chat-wars';
+import { answerTreasureRiddle, buyTreasurePass, digTreasure, joinTreasureRotation, leaveTreasureRotation, voteKickTreasureTurn } from '@/lib/treasure-hunt';
+import { buyBingoCenterFree, buyBingoStellaFlip, claimSharedBingoSquare, suggestSharedBingoPhrase } from '@/lib/shared-bingo';
 import {
   addDancingParadeEmojis,
   addDancingParadeParticipant,
@@ -98,8 +92,10 @@ function knownAction(gameId: string, args: string[]): boolean {
   if (first === 'start' || first === 'stop' || first === 'leave') return true;
   if (gameId === 'chat-tag') return /^(tag|pass|score|status)$/.test(first);
   if (gameId === 'bingo') {
-    return (first === 'center' && args.length >= 2)
-      || (first === 'claim' && /^([1-9]|1\d|2[0-5])$/.test(args[1] || '') && args.length === 2)
+    return (first === 'claim' && /^[a-e][1-5]$/i.test(args[1] || '') && args.length === 2)
+      || (/^[a-e][1-5]$/i.test(first) && args.length >= 1)
+      || (first === 'flip' && /^[a-e][1-5]$/i.test(args[1] || '') && args.length === 2)
+      || (/^(?:free|center)$/.test(first) && args.length === 1)
       || (first === 'phrases' && args.length === 1);
   }
   if (gameId === 'chaosmode') return /^(explode|glitch|portal|shake)$/.test(first) && args.length === 1;
@@ -112,7 +108,9 @@ function knownAction(gameId: string, args: string[]): boolean {
       || (first === 'submit' && args.length >= 3);
   }
   if (gameId === 'pixelbattle') return /^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)$/.test(first) && /^\d{1,2}$/.test(args[1] || '') && /^\d{1,2}$/.test(args[2] || '') && args.length === 3;
-  if (gameId === 'treasurehunt') return /^[a-h][1-8]$/i.test(first) && args.length === 1;
+  if (gameId === 'treasurehunt') return (/^[a-t](?:2[0-5]|1\d|[1-9])$/i.test(first) && args.length === 1)
+    || (/^(?:answer|solve)$/.test(first) && args.length >= 2)
+    || (/^(?:pass|join|kick|status)$/.test(first) && args.length === 1);
   return false;
 }
 
@@ -774,54 +772,132 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (game.id === 'treasurehunt') {
+    if (!action || action === 'join') {
+      const result = await updateAppState((draft) => {
+        const joined = joinTreasureRotation(draft, { channel, userId, username, displayName });
+        if (joined.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'join', args: [], message: String(body.message || '') });
+        return joined;
+      });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${result.alreadyJoined ? `is already #${result.position}` : `joined at #${result.position}`} in the Treasure Hunt turn rotation${result.current ? ` · ${result.current.displayName} is up now` : ''}.`) });
+    }
+    if (action === 'leave') {
+      const result = await updateAppState((draft) => {
+        const left = leaveTreasureRotation(draft, { channel, userId, username });
+        leaveGameHubGame(draft, normalizeGameHubPlayerId(userId, username), game.id);
+        return left;
+      });
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${result.left ? 'left the Treasure Hunt rotation' : 'was not in the Treasure Hunt rotation'}${result.current ? ` · ${result.current.displayName} is up now` : ''}.` });
+    }
+    if (action === 'status') {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} open the live board for the current turn, queue, riddle, and standings.`) });
+    }
+    if (action === 'kick') {
+      const result = await updateAppState((draft) => voteKickTreasureTurn(draft, { channel, userId, username }));
+      if (result.outcome === 'voted') return NextResponse.json({ handled: true, reply: `@${displayName} voted to skip the absent boiling-turn player · ${result.votes}/${result.needed}.` });
+      if (result.outcome === 'kicked') return NextResponse.json({ handled: true, reply: `Vote passed: ${result.kicked?.displayName || 'the absent player'} was removed from this rotation · ${result.current?.displayName || 'nobody'} is up now.` });
+      if (result.outcome === 'already-voted') return NextResponse.json({ handled: true, reply: `@${displayName} your vote is already counted.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} vote-kick is available to joined players only while an unresolved boiling treasure turn is blocking the rotation.`) });
+    }
+    if (/^(?:answer|solve)$/.test(action)) {
+      const answer = rawActionArgs.slice(1).join(' ');
+      const result = await updateAppState((draft) => {
+        const solved = answerTreasureRiddle(draft, { channel, answer, userId, username, displayName });
+        if (solved.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'answer', args: [answer], message: String(body.message || '') });
+        return solved;
+      });
+      if (result.outcome === 'no-challenge') return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} there is no active riddle. Pick a square with spmt dig B5.`) });
+      if (result.outcome === 'not-turn') return NextResponse.json({ handled: true, reply: `@${displayName} it is ${result.current?.displayName || 'the next player'}’s turn. Discuss the riddle in chat, but only the active player can lock in an answer.` });
+      if (result.outcome === 'wrong') return NextResponse.json({ handled: true, reply: `@${displayName} that is not it · -${result.deduction} Games Points${result.changedRiddle ? ` · three misses, so Stella changed the riddle: ${result.question}` : ` · ${3 - result.wrongGuesses} guesses remain before the riddle changes`}.` });
+      return NextResponse.json({ handled: true, reply: `@${displayName} solved it! +${result.solvePoints} Games Points${result.digPoints ? ` · the digger earned +${result.digPoints}` : ''}${result.treasureCoordinate ? ` · TREASURE unearthed at ${result.treasureCoordinate} (${result.foundCount}/3)` : ''}${result.complete ? ' — BOARD COMPLETE!' : ''}.` });
+    }
+    if (action === 'pass') {
+      const result = await updateAppState((draft) => {
+        const purchase = buyTreasurePass(draft, { channel, userId, username, displayName });
+        if (purchase.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'pass', args: [], message: String(body.message || '') });
+        return purchase;
+      });
+      if (result.outcome === 'purchased') return NextResponse.json({ handled: true, reply: `@${displayName} bought a Treasure Pass for ${result.cost} Games Points: there is an unfound treasure at ${result.coordinate} · ${result.remaining} passes remain this board.` });
+      if (result.outcome === 'insufficient') return NextResponse.json({ handled: true, reply: `@${displayName} a Treasure Pass costs 250 Games Points; you have ${result.balance}.` });
+      if (result.outcome === 'limit') return NextResponse.json({ handled: true, reply: `@${displayName} you already used the five-pass maximum for this board.` });
+      if (result.outcome === 'nothing-new') return NextResponse.json({ handled: true, reply: `@${displayName} every remaining treasure location has already been revealed to you.` });
+      return NextResponse.json({ handled: true, reply: `@${displayName} this board is already complete.` });
+    }
+    const result = await updateAppState((draft) => {
+      const dig = digTreasure(draft, { channel, coordinate: action, userId, username, displayName });
+      if (dig.changed) recordGameHubRuntimeAction(draft, {
+        channel, gameId: game.id, actorId: userId, username, displayName,
+        action: 'dig', args: [action], message: String(body.message || ''),
+      });
+      return dig;
+    });
+    if (result.outcome === 'invalid') return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} choose A1 through T25, for example spmt dig B5.`) });
+    if (result.outcome === 'not-turn') return NextResponse.json({ handled: true, reply: `@${displayName} joined at #${result.position}; ${result.current?.displayName || 'the next player'} chooses the current square.` });
+    if (result.outcome === 'already-dug') return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} was already dug · ${result.dig?.clue}.` });
+    if (result.outcome === 'challenge-active') return NextResponse.json({ handled: true, reply: `@${displayName} finish the active ${result.challenge?.clue.toUpperCase()} riddle at ${result.challenge?.coordinate} first: ${result.challenge?.question} · answer with spmt treasure answer your answer.` });
+    if (result.outcome === 'complete') return NextResponse.json({ handled: true, reply: `@${displayName} today’s Treasure Hunt is complete. A fresh map opens tomorrow.` });
+    return NextResponse.json({ handled: true, reply: `@${displayName} chose ${result.coordinate}: ${result.clue?.toUpperCase()}${result.digPoints ? ` · +${result.digPoints} Games Point` : ' · locked until solved'} · RIDDLE: ${result.question} · answer with spmt treasure answer your answer.` });
+  }
+
   if (game.id === 'bingo' && action === 'phrases') {
-    const phrases = bingoTemplatePhrases(state);
-    const preview = phrases.slice(0, 5).map((phrase, index) => `${index + 1} ${phrase}`).join(' · ');
     return NextResponse.json({
       handled: true,
-      reply: `@${displayName} Bingo phrases: ${preview} · Full card: ${publicOrigin(req)}/games/bingo`.slice(0, 480),
+      reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} Open the player card to see the phrases. The stream board hides them so the streamer cannot cheat.`),
     });
   }
 
-  if (game.id === 'bingo' && action === 'claim') {
-    const displaySquare = Number(actionArgs[1]);
-    const squareIndex = displaySquare - 1;
-    const result = await updateAppState((draft) => {
-      const joined = joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
-      const board = getPersonalBingoBoard(draft, joined.player.id, true)!;
-      if (squareIndex === BINGO_CENTER_INDEX && !board.centerPhrase) {
-        return { error: 'Set your personal center phrase on the Bingo page before claiming square 13.' };
-      }
-      if (board.covered[String(squareIndex)]) return { error: `Square ${displaySquare} is already claimed on your card.` };
-      const alreadyClaimedInStream = Object.values(board.covered).some((square: any) =>
-        normalizeGameHubChannel(square?.streamerChannel) === channel
-      );
-      if (alreadyClaimedInStream) return { error: `You already claimed a Bingo square in #${channel}.` };
-
-      const now = new Date().toISOString();
-      board.covered[String(squareIndex)] = { userId: String(userId || username), username, streamerChannel: channel, claimedAt: now };
-      board.updatedAt = now;
-      joined.membership.lastActiveAt = now;
-      joined.membership.score += 1;
-      awardGameHubPoints(draft, joined.player, 1, 'Bingo square claimed', { gameId: game.id, channel });
-      const newlyWon = hasBingo(board.covered) && !board.wonAt;
-      if (newlyWon) {
-        board.wonAt = now;
-        joined.membership.score += 5;
-        joined.membership.wins += 1;
-        awardGameHubPoints(draft, joined.player, 5, 'Bingo completed', { gameId: game.id, channel });
-      }
-      recordGameHubRuntimeAction(draft, {
-        channel, gameId: game.id, actorId: userId, username, displayName,
-        action: 'claim', args: [String(displaySquare)], message: String(body.message || ''),
+  if (game.id === 'bingo') {
+    if (!action) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} open the shared player card to see phrases; claim a triggered square with spmt bingo B4.`), launchUrl: gamePopoutUrl(req, channel, game.id) });
+    }
+    if (action === 'flip') {
+      const result = await updateAppState((draft) => {
+        const flip = buyBingoStellaFlip(draft, { channel, coordinate: actionArgs[1], userId, username, displayName });
+        if (flip.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'flip', args: [actionArgs[1]], message: String(body.message || '') });
+        return flip;
       });
-      return { newlyWon, gameScore: joined.membership.score };
+      if (result.outcome === 'flipped') return NextResponse.json({ handled: true, reply: `@${displayName} spent ${result.cost} Games Points and flipped ${result.coordinate} from Stella to chat${result.won ? ' — BINGO!' : ''}.` });
+      if (result.outcome === 'insufficient') return NextResponse.json({ handled: true, reply: `@${displayName} flipping a Stella square costs ${result.cost} Games Points; you have ${result.balance}.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} that square is not currently owned by Stella.`) });
+    }
+    if (action === 'free' || action === 'center') {
+      const result = await updateAppState((draft) => {
+        const free = buyBingoCenterFree(draft, { channel, userId, username, displayName });
+        if (free.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'free', args: ['C3'], message: String(body.message || '') });
+        return free;
+      });
+      if (result.outcome === 'freed') return NextResponse.json({ handled: true, reply: `@${displayName} spent ${result.cost} Games Points and made center square C3 a permanent chat free space${result.won ? ' — BINGO!' : ''}.` });
+      if (result.outcome === 'insufficient') return NextResponse.json({ handled: true, reply: `@${displayName} the center free space costs ${result.cost} Games Points; you have ${result.balance}.` });
+      return NextResponse.json({ handled: true, reply: `@${displayName} center square C3 already belongs to chat or the card is complete.` });
+    }
+    const coordinate = action === 'claim' ? actionArgs[1] : action;
+    const phrase = action === 'claim' ? '' : rawActionArgs.slice(1).join(' ').trim();
+    if (phrase) {
+      const result = await updateAppState((draft) => {
+        const suggestion = suggestSharedBingoPhrase(draft, { channel, coordinate, phrase, userId, username, displayName });
+        if (suggestion.changed) recordGameHubRuntimeAction(draft, {
+          channel, gameId: game.id, actorId: userId, username, displayName,
+          action: 'replace', args: [String(coordinate), phrase], message: String(body.message || ''),
+        });
+        return suggestion;
+      });
+      if (result.outcome === 'suggested') return NextResponse.json({ handled: true, reply: `@${displayName} spent ${result.cost} Games Points and changed ${result.coordinate} to “${result.phrase}”. Get the streamer to say it, then claim ${result.coordinate}.` });
+      if (result.outcome === 'insufficient') return NextResponse.json({ handled: true, reply: `@${displayName} changing a Bingo phrase costs ${result.cost} Games Points; you have ${result.balance}.` });
+      if (result.outcome === 'inappropriate') return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} keep replacement phrases short and stream-appropriate.`) });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} that square is already pending or owned by chat. Open, replacement, and Stella squares can be changed.`) });
+    }
+    const result = await updateAppState((draft) => {
+      const claim = claimSharedBingoSquare(draft, { channel, coordinate, userId, username, displayName });
+      if (claim.changed && claim.outcome === 'claimed') recordGameHubRuntimeAction(draft, {
+        channel, gameId: game.id, actorId: userId, username, displayName,
+        action: 'claim', args: [String(coordinate)], message: String(body.message || ''),
+      });
+      return claim;
     });
-    if ('error' in result) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${result.error}`) });
-    return NextResponse.json({
-      handled: true,
-      reply: `@${displayName} claimed Bingo square ${displaySquare}${result.newlyWon ? ' — BINGO! +6 Games Points' : ' · +1 Games Point'} · score ${result.gameScore}.`,
-    });
+    if (result.outcome === 'claimed') return NextResponse.json({ handled: true, reply: `@${displayName} claimed ${result.coordinate} for chat · +${result.points} Games Points${result.won ? ' — BINGO! The streamer and every participant earned bonuses.' : ''}` });
+    if (result.outcome === 'blocked') return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} Stella protected that square. Change its phrase with spmt bingo ${String(coordinate).toUpperCase()} new phrase, or buy it back with spmt bingo flip ${String(coordinate).toUpperCase()}.`) });
+    if (result.outcome === 'complete') return NextResponse.json({ handled: true, reply: `@${displayName} this shared Bingo card is already complete.` });
+    return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${String(coordinate).toUpperCase()} is not ready to claim. Wait for the streamer to say its phrase, then type spmt bingo ${String(coordinate).toUpperCase()}.`) });
   }
 
   if (action === 'leave') {
@@ -842,25 +918,6 @@ export async function POST(req: NextRequest) {
       handled: true,
       reply: left ? message : gameReplyWithPopout(req, channel, game.id, message),
     });
-  }
-
-  if (game.id === 'bingo' && action === 'center') {
-    const phrase = rawActionArgs.slice(1).join(' ').trim();
-    try {
-      await updateAppState((draft) => {
-        const joined = joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
-        setPersonalBingoCenter(draft, {
-          userId: String(userId || username),
-          username,
-          displayName,
-          avatarUrl: '',
-          playerKey: joined.player.id,
-        }, phrase);
-      });
-      return NextResponse.json({ handled: true, reply: `@${displayName} your personal Bingo center is set to “${phrase.slice(0, 120)}”.` });
-    } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'Your Bingo center phrase could not be saved.'}`) });
-    }
   }
 
   if (game.id === 'phraseguess' && action === 'hint') {

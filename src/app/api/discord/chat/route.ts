@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, updateAppState } from '@/lib/volume-store';
-import { sendDiscordMessage } from '@/lib/discord-webhooks';
+import { scheduleDiscordMessageCleanup, sendDiscordMessage } from '@/lib/discord-webhooks';
+import { editDiscordSentMessage } from '@/lib/discord-message-edit';
+import { createQuackversePackMediaEvent, queueQuackversePackGif, waitForQuackversePackGifResult } from '@/lib/quackverse-pack-media';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { getPublicAppOrigin } from '@/lib/public-origin';
@@ -169,32 +171,73 @@ async function sendDiscordPackReply(
     ...replyEmbedIdentity(context),
     timestamp: new Date().toISOString(),
   };
-  const cardEmbeds = packCards.slice(0, 5).map((card: any) => {
-    const cardImageUrl = absolutePublicUrl(
-      req,
-      card?.cardImageUrl || `/api/quackverse/pack-preview?ids=${encodeURIComponent(String(card?.id || ''))}&mode=card`,
-    );
-    return {
-      title: `#${card?.id || '?'} ${card?.name || 'Unknown Card'}`,
-      description: `${card?.rarity || 'Unknown'} · ${card?.type || 'Quackverse'}`,
-      color: 0x00d9ff,
-      ...(cardImageUrl ? { image: { url: cardImageUrl } } : {}),
-    };
-  });
-
+  // Keep the initial Discord response compact. The five cards remain in the
+  // text fields while DSH records the real pack-opening animation in the
+  // background. When that GIF is ready we edit this same Discord message.
   const result = await sendDiscordMessage({
     channelId,
     content: '',
     username: CHAT_TAG_WEBHOOK_NAME,
     avatarUrl: context.chatTagLogoUrl,
-    embeds: [embed, ...cardEmbeds],
+    embeds: [embed],
     allowedMentions: { parse: [] },
     botToken: DISCORD_BOT_TOKEN,
     recordHistorySource: 'discord/chat-pack',
-    cleanupAfterMs: CLEANUP_DELAY_MS,
   });
   if (!result.ok) {
     throw new Error(result.error);
+  }
+  const sentResult = result;
+  if (packData.packId && sentResult.messageId) {
+    void (async () => {
+      try {
+        const event = createQuackversePackMediaEvent({
+          eventId: String(packData.packId),
+          username: userName,
+          cards: packCards.map((card: any) => ({
+            ...card,
+            cardImageUrl: absolutePublicUrl(
+              req,
+              card?.cardImageUrl || ('/api/quackverse/pack-preview?ids=' + encodeURIComponent(String(card?.id || '')) + '&mode=card'),
+            ),
+          })),
+        });
+        await queueQuackversePackGif(event);
+        const render = await waitForQuackversePackGifResult(event.eventId);
+        if (render.gifUrl) {
+          const edited = await editDiscordSentMessage({
+            channelId,
+            result: sentResult,
+            botToken: DISCORD_BOT_TOKEN,
+            embeds: [{ ...embed, image: { url: render.gifUrl } }],
+          });
+          console.log('[Discord Chat] Quackverse pack GIF ready', {
+            packId: event.eventId,
+            messageId: sentResult.messageId,
+            edited,
+            attempts: render.attempts,
+            gifUrl: render.gifUrl,
+          });
+        } else {
+          console.error('[Discord Chat] Quackverse pack GIF unavailable', {
+            packId: event.eventId,
+            messageId: sentResult.messageId,
+            status: render.status,
+            attempts: render.attempts,
+            timedOut: render.timedOut,
+            error: render.error,
+          });
+        }
+        // Whether the renderer succeeded or failed, this temporary pack post
+        // has a terminal lifecycle and cannot sit in Discord indefinitely.
+        scheduleDiscordMessageCleanup(channelId, sentResult, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
+      } catch (error) {
+        console.error('[Discord Chat] Quackverse pack GIF render request failed:', error instanceof Error ? error.message : error);
+        scheduleDiscordMessageCleanup(channelId, sentResult, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
+      }
+    })();
+  } else {
+    scheduleDiscordMessageCleanup(channelId, sentResult, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
   }
   if (context.isPrivate && result.messageId) {
     await finalizePrivateDmDiscordMessage(channelId, result.messageId);

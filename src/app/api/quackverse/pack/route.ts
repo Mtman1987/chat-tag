@@ -4,7 +4,6 @@ import { isAdminUsername } from '@/lib/admin';
 import { getCollectionForUser, normalizeQuackverseUserId, quackverseUserIdFromSession } from '@/lib/quackverse-access';
 import { quackverseCards } from '@/lib/quackverse-data';
 import { openQuackverseBoosterPack } from '@/lib/quackverse-packs';
-import { lookupTwitchUser } from '@/lib/twitch';
 import { makeId, updateAppState, readAppState } from '@/lib/volume-store';
 import { getPublicAppOrigin } from '@/lib/public-origin';
 import { getStreamweaverSecret } from '@/lib/runtime-secrets';
@@ -121,6 +120,8 @@ async function notifyStreamWeaverPackOverlay(input: {
       Authorization: `Bearer ${secret}`,
     },
     body: JSON.stringify({
+      eventId: input.packId,
+      packId: input.packId,
       username: input.username,
       setName: 'Quackverse',
       pack,
@@ -243,8 +244,9 @@ export async function POST(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const normalizedUsername = String(twitchUsername || '').trim().toLowerCase();
   const overlayTenantId = normalizeOverlayTenantId(body?.streamweaverTenantId || body?.tenantId || body?.streamerId);
-  const twitchProfile = normalizedUsername ? await lookupTwitchUser(normalizedUsername).catch(() => null) : null;
-  const userRecordId = String(body?.twitchUserId || twitchProfile?.id || userId.replace(/^user_/, '') || '').trim();
+  // Bot/session identity already carries Twitch's authoritative user id. Pack
+  // opening must not depend on a second external Twitch OAuth/user lookup.
+  const userRecordId = String(body?.twitchUserId || userId.replace(/^user_/, '') || '').trim();
 
   const result = await updateAppState((appState) => {
     // Packs/collection are not room-based; keep them on the legacy `quackverse` state.
@@ -258,7 +260,7 @@ export async function POST(req: NextRequest) {
         ...(rootState.users[userRecordId] || {}),
         id: userRecordId,
         twitchUsername: normalizedUsername,
-        avatarUrl: twitchProfile?.profile_image_url || body?.avatarUrl || body?.avatar || rootState.users[userRecordId]?.avatarUrl || '',
+        avatarUrl: body?.avatarUrl || body?.avatar || rootState.users[userRecordId]?.avatarUrl || '',
       };
     }
 

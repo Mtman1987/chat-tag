@@ -586,7 +586,7 @@ export function recordGameHubChatActivity(
   const scoredGameIds: string[] = [];
 
   for (const gameId of activeGameIds) {
-    if (gameId === 'chatwars') continue;
+    if (gameId === 'chatwars' || gameId === 'treasurehunt' || gameId === 'bingo') continue;
     const membership = player.joinedGames[gameId];
     if (!membership?.active) continue;
     const lastScoreAt = Date.parse(String(membership.lastScoreAt || 0));

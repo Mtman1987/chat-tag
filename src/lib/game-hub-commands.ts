@@ -30,9 +30,12 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt pack', description: 'Open a Quackverse booster pack; the reveal appears on stream.' },
     { trigger: 'spmt quackpack', description: 'Open a Quackverse booster pack; the reveal appears on stream.' },
   ] },
-  { gameId: 'bingo', key: 'bingo', aliases: [], joinDescription: 'Open your Bingo card.', joinTrigger: 'spmt card', commands: [
-    { trigger: 'spmt claim 12', description: 'Claim a Bingo square.' },
-    { trigger: 'spmt phrases', description: 'Show the current Bingo phrases.' },
+  { gameId: 'bingo', key: 'bingo', aliases: [], joinDescription: 'Open the shared Bingo card.', joinTrigger: 'spmt card', commands: [
+    { trigger: 'spmt bingo B4', description: 'Claim a phrase the streamer just said.' },
+    { trigger: 'spmt bingo B4 new phrase', description: 'Spend 100 Games Points to change an available phrase.' },
+    { trigger: 'spmt bingo flip B4', description: 'Spend 250 Games Points to flip a Stella square to chat.' },
+    { trigger: 'spmt bingo free', description: 'Spend 500 Games Points to make center C3 a chat-owned free space.' },
+    { trigger: 'spmt phrases', description: 'Open the player card with all phrases.' },
   ] },
   { gameId: 'chaosmode', key: 'chaos', aliases: ['chaosmode'], joinDescription: 'Join Chaos Mode.', joinTrigger: 'spmt chaos', commands: [
     { trigger: 'spmt explode', description: 'Trigger an explosion effect.' },
@@ -85,7 +88,11 @@ const SPECS: CanonicalGameCommandSpec[] = [
   ] },
   { gameId: 'rhythmpulse', key: 'rhythm', aliases: ['rhythmpulse'], joinDescription: 'Join Rhythm Pulse.', joinTrigger: 'spmt rhythm', commands: [] },
   { gameId: 'treasurehunt', key: 'treasure', aliases: ['treasurehunt'], joinDescription: 'Join Treasure Hunt.', joinTrigger: 'spmt treasure', commands: [
+    { trigger: 'spmt treasure', description: 'Join the end of the turn rotation.' },
     { trigger: 'spmt dig B5', description: 'Dig a coordinate on the treasure map.' },
+    { trigger: 'spmt treasure answer your answer', description: 'Answer the active riddle.' },
+    { trigger: 'spmt treasure kick', description: 'Vote to remove an absent player blocking a boiling treasure turn.' },
+    { trigger: 'spmt treasure pass', description: 'Spend a fixed 250 Games Points to reveal one treasure coordinate; maximum five per board.' },
   ] },
   { gameId: 'wordchain', key: 'wordchain', aliases: ['chain'], joinDescription: 'Join Word Chain.', joinTrigger: 'spmt chain', commands: [] },
   { gameId: 'wordstorm', key: 'wordstorm', aliases: ['storm'], joinDescription: 'Join Word Storm.', joinTrigger: 'spmt storm', commands: [] },
@@ -170,6 +177,7 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
   if (root === 'phrases') return { recognized: true, mode: 'single', intents: activeIntent('bingo', ['phrases']) };
   if (root === 'paint') return { recognized: true, mode: 'single', intents: activeIntent('pixelbattle', rest) };
   if (root === 'dig') return { recognized: true, mode: 'single', intents: activeIntent('treasurehunt', rest) };
+  if (root === 'answer' || root === 'solve') return { recognized: true, mode: 'single', intents: activeIntent('treasurehunt', [root, ...rest]) };
   const match = direct[root];
   if (!match) return { recognized: false, mode: 'single', intents: [] };
   return { recognized: true, mode: 'single', intents: activeIntent(match[0], match[1]) };

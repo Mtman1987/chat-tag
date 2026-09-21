@@ -49,7 +49,7 @@ test('Games Hub catalogs 18 peer games after retiring Color Wars and Memory Lane
   assert.equal(new Set(GAME_HUB_CATALOG.map((game) => game.id)).size, 18);
   for (const expected of ['chat-tag', 'quackverse', 'bingo']) assert.ok(getGameHubGame(expected), `missing ${expected}`);
   const recovered = GAME_HUB_CATALOG.filter((game) => game.sourcePrototype?.startsWith('games/'));
-  assert.equal(recovered.length, 14);
+  assert.equal(recovered.length, 13);
   for (const expected of [
     'chaosmode', 'chatgarden', 'chatwars', 'chickenroyale', 'colorsymphony',
     'dancingparade', 'emojirain', 'emojitower',
@@ -61,7 +61,7 @@ test('Games Hub catalogs 18 peer games after retiring Color Wars and Memory Lane
 test('all recovered Library games ship as embedded Nebula pages with parent event support', () => {
   const directory = path.join(root, 'public/nebula-arcade/games');
   const files = fs.readdirSync(directory).filter((file) => file.endsWith('.html')).sort();
-  assert.equal(files.length, 14);
+  assert.equal(files.length, 13);
   for (const file of files) {
     const source = fs.readFileSync(path.join(directory, file), 'utf8');
     assert.match(source, /window\.parent/);
@@ -105,7 +105,9 @@ test('every Games Hub chat command uses the spmt namespace', () => {
   assert.ok(chatTag.some((command) => command.trigger === 'spmt join'));
   assert.ok(chatTag.some((command) => command.trigger === 'spmt tag @user'));
   const bingo = canonicalPlayerCommands(getGameHubGame('bingo')!);
-  assert.ok(bingo.some((command) => command.trigger === 'spmt claim 12'));
+  assert.ok(bingo.some((command) => command.trigger === 'spmt bingo B4'));
+  assert.ok(bingo.some((command) => command.trigger === 'spmt bingo flip B4'));
+  assert.ok(bingo.some((command) => command.trigger === 'spmt bingo free'));
 });
 
 test('direct commands preserve Chat Tag and route colors only to Chat Wars', () => {
@@ -529,36 +531,27 @@ test('activity bell removes Bingo notifications and replaces them with Games Hub
   assert.match(activity, /recentPlayers/);
 });
 
-test('Bingo uses canonical identity, personal boards, personal center rules, and shared Games Points', () => {
-  const bingo = read('src/app/api/bingo/state/route.ts');
-  const card = read('src/components/bingo-card.tsx');
-  const model = read('src/lib/bingo-game.ts');
-  const generate = read('src/app/api/bingo/generate/route.ts');
+test('Bingo uses a shared anti-cheat board, transcript triggers, Stella defense, and tiered Games Points purchases', () => {
+  const stateRoute = read('src/app/api/game-hub/shared-bingo/route.ts');
+  const transcript = read('src/app/api/game-hub/bingo-transcript/route.ts');
+  const surface = read('src/components/game-hub-bingo-surface.tsx');
+  const model = read('src/lib/shared-bingo.ts');
   const command = read('src/app/api/game-hub/command/route.ts');
-  assert.match(bingo, /getSessionUserFromRequest/);
-  assert.match(bingo, /requireAdminRequest/);
-  assert.match(bingo, /alreadyClaimedInStream/);
-  assert.match(bingo, /getPersonalBingoBoard/);
-  assert.match(bingo, /BINGO_CENTER_INDEX/);
-  assert.match(bingo, /setPersonalBingoCenter/);
-  assert.match(bingo, /newlyWon/);
-  assert.match(bingo, /joinGameHubGame/);
-  assert.match(bingo, /awardGameHubPoints/);
-  assert.match(bingo, /gameId: 'bingo'/);
-  assert.doesNotMatch(bingo, /postOrUpdateChatTagEmbed/);
-  assert.doesNotMatch(bingo, /getScoringSettings/);
-  assert.doesNotMatch(bingo, /player\.bingoPoints/);
-  assert.match(model, /BINGO_CENTER_PLACEHOLDER/);
-  assert.match(model, /personalBoards/);
-  assert.match(model, /hasBingo/);
-  assert.doesNotMatch(model, /FREE SPACE/);
-  assert.match(card, /centerNeedsPhrase/);
-  assert.match(card, /handleSetCenterPhrase/);
-  assert.match(card, /isFreeSpace=\{false\}/);
-  assert.match(card, /Your personal center square/);
-  assert.match(card, /user\?\.isAdmin/);
-  assert.match(generate, /resetPersonalBingoProgress/);
-  assert.match(command, /game\.id === 'bingo' && action === 'center'/);
+  assert.match(stateRoute, /getSessionUserFromRequest/);
+  assert.match(stateRoute, /settleExpiredBingoClaims/);
+  assert.match(transcript, /isBotRequest/);
+  assert.match(transcript, /ingestBingoTranscript/);
+  assert.match(transcript, /queueStellaSpeech/);
+  assert.match(model, /BINGO_CLAIM_WINDOW_MS = 15_000/);
+  assert.match(model, /BINGO_PHRASE_CHANGE_COST = 100/);
+  assert.match(model, /BINGO_STELLA_FLIP_COST = 250/);
+  assert.match(model, /BINGO_CENTER_FREE_COST = 500/);
+  assert.match(model, /completeBingoIfWon/);
+  assert.match(model, /Streamer Bingo bonus/);
+  assert.match(surface, /broadcastOnly/);
+  assert.match(surface, /cell\.coordinate/);
+  assert.match(command, /buyBingoStellaFlip/);
+  assert.match(command, /buyBingoCenterFree/);
 });
 
 test('Bingo revival uses the same Play slot and restores the old route safely', () => {
@@ -566,7 +559,7 @@ test('Bingo revival uses the same Play slot and restores the old route safely', 
   const play = read('src/components/game-hub-play-panel.tsx');
   const legacy = read('src/app/bingo/page.tsx');
   assert.match(detail, /GameHubPlayPanel/);
-  assert.match(play, /BingoCard/);
+  assert.match(play, /GameHubBingoSurface/);
   assert.match(play, /ChatTagGame/);
   assert.match(play, /QuackverseCardGame/);
   assert.match(play, /GameHubPrototypeSurface/);
@@ -603,13 +596,13 @@ test('all chat games separate broadcast visuals from full popout controls', () =
   assert.match(surface, /LARGE_STAGE_GAMES = new Set\(\['wordchain', 'phraseguess'\]\)/);
   assert.match(surface, /game\.sourcePrototype && !LARGE_STAGE_GAMES\.has\(game\.id\)/);
   assert.match(surface, /GameHubPrototypeSurface[\s\S]*broadcastOnly/);
-  assert.match(surface, /GameHubBingoSurface broadcastOnly=\{!chrome\}/);
+  assert.match(surface, /GameHubBingoSurface channel=\{channel \|\| 'chat'\} broadcastOnly=\{!chrome\}/);
   assert.match(prototype, /PixelBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
   assert.match(prototype, /TreasureBoard[\s\S]*gridOnly=\{broadcastOnly\}/);
   assert.match(prototype, /fetch\(`\/api\/game-hub\/mosaic\?channel=/);
   assert.doesNotMatch(prototype, /<button[\s\S]*PixelBoard/);
   assert.match(prototype, /broadcastOnly \? 'grid w-full p-0' : 'p-4'/);
-  assert.match(bingo, /!broadcastOnly &&[\s\S]*24 shared phrases/);
+  assert.match(bingo, /!broadcastOnly &&[\s\S]*Shared card/);
   assert.match(bingo, /aria-label="Bingo grid"/);
   assert.match(frame, /embedded: '1'/);
   assert.match(frame, /if \(broadcastOnly\) query\.set\('broadcast', '1'\)/);
