@@ -10,6 +10,7 @@ import {
   settleTreasureTurn,
   TREASURE_HEIGHT,
   TREASURE_PASS_COST,
+  TREASURE_PUZZLE_COUNT,
   TREASURE_TURN_MS,
   TREASURE_WIDTH,
   treasureHuntPublicSnapshot,
@@ -22,6 +23,7 @@ function state() { return { gameSettings: { default: {} } } as any; }
 test('Treasure Hunt uses the full 20x25 A1-T25 board', () => {
   assert.equal(TREASURE_WIDTH, 20);
   assert.equal(TREASURE_HEIGHT, 25);
+  assert.ok(TREASURE_PUZZLE_COUNT >= TREASURE_WIDTH * TREASURE_HEIGHT, 'one board cannot exhaust the puzzle bank');
   assert.deepEqual(parseTreasureCoordinate('T25'), { coordinate: 'T25', index: 499, row: 24, column: 19 });
   assert.equal(parseTreasureCoordinate('U1'), null);
 });

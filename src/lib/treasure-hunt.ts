@@ -74,6 +74,16 @@ const WORD_PUZZLES = [
   ['diamond', 'hard gemstone made of carbon'], ['lantern', 'portable light in a case'], ['backpack', 'bag carried on your back'], ['footsteps', 'marks or sounds left while walking'],
   ['whisper', 'speak very softly'], ['mystery', 'something difficult to explain or understand'], ['strategy', 'careful plan for reaching a goal'], ['riddle', 'question designed as a puzzle'],
   ['victory', 'success in a contest'], ['friendship', 'bond between friends'], ['moonlight', 'light reaching us from the moon'], ['starlight', 'light reaching us from stars'],
+  ['anchor', 'heavy object that keeps a ship in place'], ['beacon', 'signal light used as a guide'], ['canyon', 'deep valley with steep sides'], ['castle', 'large fortified home'],
+  ['comet', 'icy space object with a glowing tail'], ['crystal', 'solid with a repeating natural pattern'], ['eclipse', 'one space object blocks another from view'], ['expedition', 'organized journey with a purpose'],
+  ['firefly', 'small insect that glows'], ['horizon', 'line where earth and sky appear to meet'], ['island', 'land completely surrounded by water'], ['jungle', 'dense tropical forest'],
+  ['labyrinth', 'complicated maze of passages'], ['lighthouse', 'coastal tower that guides ships'], ['magnet', 'object that attracts certain metals'], ['mapmaker', 'person who creates maps'],
+  ['oasis', 'fertile place with water in a desert'], ['observatory', 'building used to study the sky'], ['parachute', 'canopy that slows a fall'], ['pyramid', 'structure with triangular sides'],
+  ['rainbow', 'arc of colors made by light and water'], ['rocket', 'vehicle propelled by exhaust'], ['sapphire', 'usually blue precious gemstone'], ['shadow', 'dark shape made when light is blocked'],
+  ['snowflake', 'single ice crystal falling from a cloud'], ['submarine', 'vessel that travels underwater'], ['sunrise', 'the sun appearing in the morning'], ['thunder', 'sound caused by lightning'],
+  ['tornado', 'violently rotating column of air'], ['volcano', 'mountain that can erupt lava'], ['waterfall', 'water dropping over a steep edge'], ['wildfire', 'uncontrolled fire across vegetation'],
+  ['amulet', 'small object worn as a charm'], ['blueprint', 'technical plan for building something'], ['hourglass', 'timer using sand between glass bulbs'], ['keyhole', 'opening made to receive a key'],
+  ['seashell', 'hard outer covering left by a sea animal'], ['staircase', 'set of steps between levels'], ['trapdoor', 'hidden or hinged door in a floor'], ['windmill', 'machine powered by moving air'],
 ] as const;
 
 function hash(value: string) { let output = 2166136261; for (let i = 0; i < value.length; i += 1) { output ^= value.charCodeAt(i); output = Math.imul(output, 16777619); } return output >>> 0; }
@@ -94,9 +104,15 @@ function puzzleBank(): Riddle[] {
       { question: `MISSING VOWELS: Restore “${word.replace(/[aeiou]/gi, '_')}”.`, answers: [word] },
       { question: `BACKWARDS WORD: Reverse “${word.split('').reverse().join('')}”.`, answers: [word] },
       { question: `WORD CLUE: ${clue}.`, answers: [word] },
+      { question: `LETTER NUMBERS: Decode “${word.split('').map((letter) => letter.charCodeAt(0) - 96).join('-')}”.`, answers: [word] },
+      { question: `SHIFT BACK ONE: Every letter moved forward once. Decode “${word.replace(/[a-z]/g, (letter) => String.fromCharCode(97 + ((letter.charCodeAt(0) - 96) % 26)))}”.`, answers: [word] },
+      { question: `DOUBLE TALK: Collapse each pair in “${word.split('').map((letter) => `${letter}${letter}`).join('')}”.`, answers: [word] },
+      { question: `SWAPPED HALVES: Put “${word.slice(Math.floor(word.length / 2))} ${word.slice(0, Math.floor(word.length / 2))}” back in order.`, answers: [word] },
     ]),
   ];
 }
+const PUZZLES = puzzleBank();
+export const TREASURE_PUZZLE_COUNT = PUZZLES.length;
 function roundIdAt(now: number) { return new Date(now).toISOString().slice(0, 10); }
 function coordinateAt(index: number) { return `${String.fromCharCode(65 + (index % TREASURE_WIDTH))}${Math.floor(index / TREASURE_WIDTH) + 1}`; }
 function normalizeAnswer(value: unknown) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim(); }
@@ -214,7 +230,7 @@ function clueFor(cell: number, remaining: number[]): Clue {
 }
 
 function riddleFor(game: TreasureHuntState, coordinate: string, cycle: number) {
-  const puzzles = puzzleBank();
+  const puzzles = PUZZLES;
   if (game.usedPuzzleIndices.length >= puzzles.length) game.usedPuzzleIndices = [];
   let index = hash(`${game.roundId}:${coordinate}:${cycle}`) % puzzles.length;
   while (game.usedPuzzleIndices.includes(index)) index = (index + 1) % puzzles.length;
