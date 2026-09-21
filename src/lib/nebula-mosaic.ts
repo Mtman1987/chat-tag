@@ -311,7 +311,7 @@ export function parseMosaicPaintCommand(messageValue: unknown): MosaicPaintComma
 export function parseMosaicViewCommand(messageValue: unknown): 'all' | MosaicBoardNumber | null {
   let source = String(messageValue || '').trim().toLowerCase().replace(/^!?@?spmt(?:\s+|$)/i, '').trim();
   source = source.replace(/^pixel(?:battle)?\s+|^mosaic\s+/i, '').trim();
-  const match = source.match(/^view\s+(all|[1-4])$/);
+  const match = source.match(/^(?:view|show)\s+(all|[1-4])$/);
   if (!match) return null;
   return match[1] === 'all' ? 'all' : Number(match[1]) as MosaicBoardNumber;
 }

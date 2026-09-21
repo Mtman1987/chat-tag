@@ -81,9 +81,12 @@ test('Mosaic accepts compact, spaced, named and reversed paint commands', () => 
   assert.deepEqual(parseMosaicPaintCommand('SPMT D 12 YELLOW'), expected);
 });
 
-test('Mosaic view commands select one board or the temporary combined artwork', () => {
+test('Mosaic show and view commands select one board or the temporary combined artwork', () => {
   assert.equal(parseMosaicViewCommand('spmt view 3'), 3);
   assert.equal(parseMosaicViewCommand('spmt view all'), 'all');
+  assert.equal(parseMosaicViewCommand('spmt show 3'), 3);
+  assert.equal(parseMosaicViewCommand('spmt show all'), 'all');
+  assert.equal(parseMosaicViewCommand('spmt mosaic show 2'), 2);
   const draft = readyMosaic();
   setMosaicView(draft, 'spacemountainlive', 4, 10);
   assert.equal(mosaicPublicSnapshot(draft, 'spacemountainlive', 11).artwork?.activeBoard, 4);
