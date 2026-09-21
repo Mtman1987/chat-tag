@@ -370,10 +370,14 @@ test('compact replies preserve useful text before a link and stay under Twitch l
 test('game commands return the per-game learn-by-doing popout', () => {
   const command = read('src/app/api/game-hub/command/route.ts');
   assert.match(command, /function gamePopoutUrl/);
+  assert.match(command, /function gameReplyWithPopout/);
+  assert.match(command, /getPublicAppOrigin\(req\)/);
   assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\?channel=/);
   assert.match(command, /\^\(\?:control\|controls\|popout\)\$/);
   assert.match(command, /Learn and play:/);
   assert.match(command, /learn by playing, see its rules and commands/);
+  assert.match(command, /Only the streamer or a moderator can \$\{action\} \$\{game\.name\}[\s\S]*gameReplyWithPopout/);
+  assert.match(command, /gameReplyWithPopout\(req, channel, game\.id, `@\$\{displayName\} \$\{game\.name\} is not ACTIVE/);
   assert.match(command, /launchUrl: url/);
 });
 

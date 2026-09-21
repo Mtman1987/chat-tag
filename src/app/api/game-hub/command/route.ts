@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
 import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
-  canonicalCommandSummary,
   canonicalJoinCommand,
   canonicalPlayerCommands,
   resolveDirectGameCommand,
   resolveGameHubCommandKey,
 } from '@/lib/game-hub-commands';
+import { getPublicAppOrigin } from '@/lib/public-origin';
 import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
 import { setGameHubInstructions } from '@/lib/game-hub-instructions';
 import {
@@ -113,7 +113,7 @@ function knownAction(gameId: string, args: string[]): boolean {
 }
 
 function publicOrigin(req: NextRequest) {
-  return req.nextUrl.origin.replace(/\/$/, '');
+  return getPublicAppOrigin(req).replace(/\/$/, '');
 }
 
 function guideUrl(req: NextRequest, channel: string) {
@@ -122,6 +122,10 @@ function guideUrl(req: NextRequest, channel: string) {
 
 function gamePopoutUrl(req: NextRequest, channel: string, gameId: string) {
   return `${publicOrigin(req)}/games/${encodeURIComponent(gameId)}?channel=${encodeURIComponent(channel)}`;
+}
+
+function gameReplyWithPopout(req: NextRequest, channel: string, gameId: string, message: string) {
+  return fitCompactReplyWithLink(message, [], gamePopoutUrl(req, channel, gameId));
 }
 
 function scoreUrl(req: NextRequest, channel: string, username: string) {
@@ -169,7 +173,7 @@ export async function POST(req: NextRequest) {
 
   if (command === 'mosaic' && /^(?:finish|complete)$/.test(String(parts[1] || '').toLowerCase()) && parts.length === 2) {
     if (!canControl) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Only the streamer or a moderator can finish a Mosaic preview.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Only the streamer or a moderator can finish a Mosaic preview.`) });
     }
     try {
       const artwork = await updateAppState((draft) => {
@@ -185,7 +189,7 @@ export async function POST(req: NextRequest) {
         reply: `@${displayName} completed and saved “${artwork.theme}” for preview. The overlay now shows the full Mosaic.`,
       });
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That Mosaic could not be completed.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic could not be completed.'}`) });
     }
   }
 
@@ -194,10 +198,10 @@ export async function POST(req: NextRequest) {
     try {
       theme = validateMosaicTheme(parts.slice(1).join(' '));
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Choose a valid Mosaic theme.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'Choose a valid Mosaic theme.'}`) });
     }
     if (MOSAIC_XP_COST > 0 && !String(userId || '').trim()) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Link your Twitch identity before spending SPMT XP on a Mosaic theme.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Link your Twitch identity before spending SPMT XP on a Mosaic theme.`) });
     }
     const mosaicRequestKey = `mosaic:${channel}:${String(body.messageId || body.eventId || Date.now())}:${String(userId)}`;
     if (MOSAIC_XP_COST > 0) {
@@ -209,7 +213,7 @@ export async function POST(req: NextRequest) {
         metadata: { channel, theme },
       });
       if (charge.skipped || charge.ok !== true) {
-        return NextResponse.json({ handled: true, reply: `@${displayName} the ${MOSAIC_XP_COST.toLocaleString()} SPMT XP charge could not be completed, so nothing was queued.` });
+        return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} the ${MOSAIC_XP_COST.toLocaleString()} SPMT XP charge could not be completed, so nothing was queued.`) });
       }
     }
     try {
@@ -240,17 +244,17 @@ export async function POST(req: NextRequest) {
           metadata: { channel, theme, reason: 'queue-rejected' },
         }).catch(() => null);
       }
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That Mosaic could not be queued.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic could not be queued.'}`) });
     }
   }
 
   const mosaicView = parseMosaicViewCommand(body.message);
   if (mosaicView !== null) {
     if (!activeForDirectRouting.includes('pixelbattle')) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
     }
     if (activeActivityGame && activeActivityGame !== 'pixelbattle') {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Nebula Mosaic is waiting in the activity rotation; commands currently belong to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'}.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is waiting in the activity rotation; commands currently belong to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'}.`) });
     }
     try {
       await updateAppState((draft) => {
@@ -265,17 +269,17 @@ export async function POST(req: NextRequest) {
         ? `@${displayName} showing the complete Mosaic for 15 seconds.`
         : `@${displayName} opened Mosaic board ${mosaicView}.` });
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That Mosaic view is unavailable.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic view is unavailable.'}`) });
     }
   }
 
   const mosaicPaint = parseMosaicPaintCommand(body.message);
   if (mosaicPaint) {
     if (!activeForDirectRouting.includes('pixelbattle')) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
     }
     if (activeActivityGame && activeActivityGame !== 'pixelbattle') {
-      return NextResponse.json({ handled: true, reply: `@${displayName} that coordinate belongs to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'} right now. Nebula Mosaic will return in the rotation.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} that coordinate belongs to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'} right now. Nebula Mosaic will return in the rotation.`) });
     }
     try {
       const result = await updateAppState((draft) => {
@@ -300,13 +304,20 @@ export async function POST(req: NextRequest) {
         mosaicMilestones: result.milestones,
       });
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That square could not be painted.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That square could not be painted.'}`) });
     }
   }
 
   if (command === 'instructions') {
     if (!canControl) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Only the streamer or a moderator can change the instruction overlay.` });
+      return NextResponse.json({
+        handled: true,
+        reply: fitCompactReplyWithLink(
+          `@${displayName} Only the streamer or a moderator can change the instruction overlay.`,
+          [],
+          guideUrl(req, channel),
+        ),
+      });
     }
     const requested = String(parts[1] || '').trim().toLowerCase();
     if (/^(hide|off|clear)$/.test(requested)) {
@@ -397,7 +408,14 @@ export async function POST(req: NextRequest) {
   const direct = resolveDirectGameCommand(parts, activeForDirectRouting);
   if (direct.recognized) {
     if (!direct.intents.length) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} That Nebula Arcade game is not ACTIVE in #${channel}.` });
+      return NextResponse.json({
+        handled: true,
+        reply: fitCompactReplyWithLink(
+          `@${displayName} That Nebula Arcade game is not ACTIVE in #${channel}.`,
+          [],
+          guideUrl(req, channel),
+        ),
+      });
     }
     if (direct.mode === 'choose') {
       const choices = direct.intents.map((candidate, index) => ({
@@ -445,7 +463,14 @@ export async function POST(req: NextRequest) {
   if (command === 'help' || command === 'rules' || command === 'games') {
     const activeIds = activeForDirectRouting;
     if (!activeIds.length) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} No Nebula Arcade games are ACTIVE in #${channel}.` });
+      return NextResponse.json({
+        handled: true,
+        reply: fitCompactReplyWithLink(
+          `@${displayName} No Nebula Arcade games are ACTIVE in #${channel}.`,
+          [],
+          guideUrl(req, channel),
+        ),
+      });
     }
     const segments = activeIds.map((gameId) => {
       const game = getGameHubGame(gameId);
@@ -464,7 +489,14 @@ export async function POST(req: NextRequest) {
     const state = directState;
     const activeIds = activeForDirectRouting;
     if (!activeIds.length) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} No Nebula Arcade games are ACTIVE in #${channel}.` });
+      return NextResponse.json({
+        handled: true,
+        reply: fitCompactReplyWithLink(
+          `@${displayName} No Nebula Arcade games are ACTIVE in #${channel}.`,
+          [],
+          guideUrl(req, channel),
+        ),
+      });
     }
     const snapshots = getPlayerGameSnapshots(state, activeIds, { userId, username });
     return NextResponse.json({
@@ -559,7 +591,11 @@ export async function POST(req: NextRequest) {
     if (!knownAction(game.id, actionArgs)) {
       return NextResponse.json({
         handled: true,
-        reply: `@${displayName} ${game.name}: ${canonicalCommandSummary(game)}`.slice(0, 480),
+        reply: fitCompactReplyWithLink(
+          `@${displayName} ${game.name}:`,
+          canonicalPlayerCommands(game).map((item) => item.trigger),
+          gamePopoutUrl(req, channel, game.id),
+        ),
       });
     }
 
@@ -585,7 +621,7 @@ export async function POST(req: NextRequest) {
 
   if (action === 'start' || action === 'stop') {
     if (!canControl) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} Only the streamer or a moderator can ${action} ${game.name}.` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} Only the streamer or a moderator can ${action} ${game.name}.`) });
     }
 
     // Quackverse is a two-player browser game, not a persistent stream stage.
@@ -644,7 +680,7 @@ export async function POST(req: NextRequest) {
   const state = await readAppState();
   const activeGameIds = resolveChannelGameIds(state, channel);
   if (!activeGameIds.includes(game.id)) {
-    return NextResponse.json({ handled: true, reply: `@${displayName} ${game.name} is not ACTIVE in #${channel}.` });
+    return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${game.name} is not ACTIVE in #${channel}.`) });
   }
 
   if (/^(?:help|rules|control|controls|popout)$/.test(action)) {
@@ -706,7 +742,7 @@ export async function POST(req: NextRequest) {
       });
       return { newlyWon, gameScore: joined.membership.score };
     });
-    if ('error' in result) return NextResponse.json({ handled: true, reply: `@${displayName} ${result.error}` });
+    if ('error' in result) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${result.error}`) });
     return NextResponse.json({
       handled: true,
       reply: `@${displayName} claimed Bingo square ${displaySquare}${result.newlyWon ? ' — BINGO! +6 Games Points' : ' · +1 Games Point'} · score ${result.gameScore}.`,
@@ -726,7 +762,11 @@ export async function POST(req: NextRequest) {
     if (game.id === 'chat-tag') {
       return NextResponse.json({ handled: false, rewriteCommand: legacyChatTagRewrite(actionArgs), gameHubHandled: true });
     }
-    return NextResponse.json({ handled: true, reply: `@${displayName} ${left ? `left ${game.name}.` : `was not joined to ${game.name}.`}` });
+    const message = `@${displayName} ${left ? `left ${game.name}.` : `was not joined to ${game.name}.`}`;
+    return NextResponse.json({
+      handled: true,
+      reply: left ? message : gameReplyWithPopout(req, channel, game.id, message),
+    });
   }
 
   if (game.id === 'bingo' && action === 'center') {
@@ -744,7 +784,7 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ handled: true, reply: `@${displayName} your personal Bingo center is set to “${phrase.slice(0, 120)}”.` });
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Your Bingo center phrase could not be saved.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'Your Bingo center phrase could not be saved.'}`) });
     }
   }
 
@@ -764,7 +804,7 @@ export async function POST(req: NextRequest) {
         reply: `@${displayName} unlocked Phrase Guess hint ${purchase.tier}/3 for ${purchase.cost} Games Points · ${purchase.balance} remaining.`,
       });
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That hint could not be unlocked.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'That hint could not be unlocked.'}`) });
     }
   }
 
@@ -780,7 +820,7 @@ export async function POST(req: NextRequest) {
         reply: `@${displayName} added “${submission.entry.phrase}” to Phrase Guess · ${submission.inventorySize} community phrase${submission.inventorySize === 1 ? '' : 's'} available. You earn 5 Games Points when it is solved.`,
       });
     } catch (error: any) {
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That phrase could not be submitted.'}` });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'That phrase could not be submitted.'}`) });
     }
   }
 
