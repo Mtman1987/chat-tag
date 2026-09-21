@@ -50,6 +50,12 @@ test('activity overlays can read the public Chat Wars battlefield', async () => 
   assert.equal(response.headers.get('x-middleware-next'), '1');
 });
 
+test('main word-game overlays can read the public stage snapshot', async () => {
+  const response = await middleware(request('/api/game-hub/word-stage?channel=spacemountainlive&game=wordchain'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-middleware-next'), '1');
+});
+
 test('anonymous Chat Tag writes stay protected', async () => {
   const response = await middleware(request('/api/tag', { method: 'POST' }));
   assert.equal(response.status, 401);

@@ -534,11 +534,13 @@ test('rules and score stay ACTIVE-scoped while leader mirrors StreamWeaver-style
   assert.match(scope, /resolveChannelGameIds/);
 });
 
-test('read-only game scope, Bingo board, and guide pages stay public for OBS and chat links', () => {
+test('read-only game scope, word stage, Bingo board, and guide pages stay public for OBS and chat links', () => {
   const middleware = read('src/middleware.ts');
   assert.match(middleware, /'\/games'/);
   assert.match(middleware, /isPublicGameScopeRead/);
   assert.match(middleware, /pathname === '\/api\/game-hub\/channel'/);
+  assert.match(middleware, /isPublicWordStageRead/);
+  assert.match(middleware, /pathname === '\/api\/game-hub\/word-stage'/);
   assert.match(middleware, /isPublicBingoStateRead/);
   assert.match(middleware, /pathname === '\/api\/bingo\/state'/);
 });

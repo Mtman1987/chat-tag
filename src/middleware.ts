@@ -205,6 +205,7 @@ export async function middleware(request: NextRequest) {
   const isPublicTagRead = request.method === 'GET' && pathname === '/api/tag';
   const isPublicLiveMembersRead = request.method === 'GET' && pathname === '/api/discord/live-members';
   const isPublicGameScopeRead = request.method === 'GET' && pathname === '/api/game-hub/channel';
+  const isPublicWordStageRead = request.method === 'GET' && pathname === '/api/game-hub/word-stage';
   const isPublicGameInstructionsRead = request.method === 'GET' && pathname === '/api/game-hub/instructions';
   const isPublicShowcaseManifestRead = request.method === 'GET' && pathname === '/api/game-hub/showcase-manifest';
   const isPublicParadeStateRead = request.method === 'GET' && pathname === '/api/game-hub/parade';
@@ -223,6 +224,7 @@ export async function middleware(request: NextRequest) {
     || isPublicTagRead
     || isPublicLiveMembersRead
     || isPublicGameScopeRead
+    || isPublicWordStageRead
     || isPublicGameInstructionsRead
     || isPublicShowcaseManifestRead
     || isPublicParadeStateRead
