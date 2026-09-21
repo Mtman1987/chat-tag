@@ -4,6 +4,7 @@ import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
   canonicalCommandSummary,
   canonicalJoinCommand,
+  canonicalPlayerCommands,
   resolveDirectGameCommand,
   resolveGameHubCommandKey,
 } from '@/lib/game-hub-commands';
@@ -117,6 +118,10 @@ function publicOrigin(req: NextRequest) {
 
 function guideUrl(req: NextRequest, channel: string) {
   return `${publicOrigin(req)}/games/rules?channel=${encodeURIComponent(channel)}`;
+}
+
+function gamePopoutUrl(req: NextRequest, channel: string, gameId: string) {
+  return `${publicOrigin(req)}/games/${encodeURIComponent(gameId)}?channel=${encodeURIComponent(channel)}`;
 }
 
 function scoreUrl(req: NextRequest, channel: string, username: string) {
@@ -366,6 +371,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (/^(?:control|controls|popout)$/.test(command)) {
+    const requested = resolveGameHubCommandKey(parts[1]);
+    const fallbackId = activeActivityGame
+      || activeForDirectRouting.find((gameId) => gameId !== 'chat-tag')
+      || activeForDirectRouting[0];
+    const game = requested ? getGameHubGame(requested.gameId) : getGameHubGame(fallbackId);
+    if (!game) {
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} Name a game after spmt controls, or browse the active-game guide: ${guideUrl(req, channel)}`.slice(0, 480),
+      });
+    }
+    const url = gamePopoutUrl(req, channel, game.id);
+    return NextResponse.json({
+      handled: true,
+      reply: `@${displayName} open ${game.name} to learn by playing, see its rules and commands, and use streamer controls: ${url}`.slice(0, 480),
+      launchUrl: url,
+    });
+  }
+
   // Player-facing Nebula Arcade commands are short ("spmt explode",
   // "spmt pet dog", "spmt dig B5"). Namespaced forms remain an internal
   // compatibility transport so old links and bot rewrites keep working.
@@ -596,10 +621,14 @@ export async function POST(req: NextRequest) {
       });
       return resolveChannelGameIds(state, channel);
     });
+    const url = gamePopoutUrl(req, channel, game.id);
     return NextResponse.json({
       handled: true,
-      reply: `${game.name} is now ${action === 'start' ? 'ACTIVE' : 'STOPPED'} in #${channel}.`,
+      reply: action === 'start'
+        ? `${game.name} is now ACTIVE in #${channel}. Learn, play, and control it here: ${url}`.slice(0, 480)
+        : `${game.name} is now STOPPED in #${channel}.`,
       activeGameIds: activeIds,
+      ...(action === 'start' ? { launchUrl: url } : {}),
     });
   }
 
@@ -618,10 +647,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ handled: true, reply: `@${displayName} ${game.name} is not ACTIVE in #${channel}.` });
   }
 
+  if (/^(?:help|rules|control|controls|popout)$/.test(action)) {
+    const url = gamePopoutUrl(req, channel, game.id);
+    return NextResponse.json({
+      handled: true,
+      reply: fitCompactReplyWithLink(`@${displayName} ${game.name}:`, canonicalPlayerCommands(game).map((item) => item.trigger), url),
+      launchUrl: url,
+    });
+  }
+
   if (!knownAction(game.id, actionArgs)) {
     return NextResponse.json({
       handled: true,
-      reply: `@${displayName} ${game.name}: ${canonicalCommandSummary(game)}`.slice(0, 480),
+      reply: fitCompactReplyWithLink(`@${displayName} ${game.name}:`, canonicalPlayerCommands(game).map((item) => item.trigger), gamePopoutUrl(req, channel, game.id)),
     });
   }
 
@@ -770,9 +808,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (!actionArgs.length) {
+    const url = gamePopoutUrl(req, channel, game.id);
     return NextResponse.json({
       handled: true,
-      reply: `@${displayName} ${result.alreadyJoined ? `you are already playing ${game.name}.` : `joined ${game.name}!`} ${canonicalJoinCommand(game)}`,
+      reply: `@${displayName} ${result.alreadyJoined ? `you are already playing ${game.name}.` : `joined ${game.name}!`} Learn and play: ${url}`.slice(0, 480),
+      launchUrl: url,
     });
   }
 

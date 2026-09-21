@@ -367,6 +367,16 @@ test('compact replies preserve useful text before a link and stay under Twitch l
   assert.match(reply, /\+\d+ more/);
 });
 
+test('game commands return the per-game learn-by-doing popout', () => {
+  const command = read('src/app/api/game-hub/command/route.ts');
+  assert.match(command, /function gamePopoutUrl/);
+  assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\?channel=/);
+  assert.match(command, /\^\(\?:control\|controls\|popout\)\$/);
+  assert.match(command, /Learn and play:/);
+  assert.match(command, /learn by playing, see its rules and commands/);
+  assert.match(command, /launchUrl: url/);
+});
+
 test('score snapshots expose real Chat Tag and personal Bingo counters', () => {
   const state: any = {
     gameSettings: {
