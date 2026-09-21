@@ -96,11 +96,13 @@ test('Mosaic chat requests wake saved boards and start generation without the ov
   assert.match(mosaic, /recoveryVersion/);
 });
 
-test('system games release their panel after thirty minutes without play', () => {
+test('event system games release after inactivity while an active main word game appears immediately', () => {
   const overlay = readFileSync(new URL('../src/app/overlay/game-hub/[profileId]/page.tsx', import.meta.url), 'utf8');
   assert.match(overlay, /NEBULA_ACTIVITY_IDLE_MS = 30 \* 60_000/);
+  assert.match(overlay, /ALWAYS_VISIBLE_SYSTEM_PROFILES = new Set\(\['system-spacemountainlive-main'\]\)/);
   assert.match(overlay, /activityNow - at > NEBULA_ACTIVITY_IDLE_MS/);
   assert.match(overlay, /profile\.id\.startsWith\('system-'\)/);
+  assert.match(overlay, /!ALWAYS_VISIBLE_SYSTEM_PROFILES\.has\(profile\.id\)/);
   assert.match(overlay, /recentlyPlayed\.has\(gameId\)/);
   assert.match(overlay, /setInterval\(\(\) => setActivityNow\(Date\.now\(\)\), 15_000\)/);
 });

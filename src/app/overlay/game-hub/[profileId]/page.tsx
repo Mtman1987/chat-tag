@@ -33,6 +33,7 @@ type RuntimeAction = {
 };
 
 const NEBULA_ACTIVITY_IDLE_MS = 30 * 60_000;
+const ALWAYS_VISIBLE_SYSTEM_PROFILES = new Set(['system-spacemountainlive-main']);
 
 function isSpmtCommand(message: string) {
   return /^!?@?spmt(?:\s|$)/i.test(String(message || '').trim());
@@ -167,7 +168,11 @@ export default function GameHubOverlayPage() {
     if (!profile) return [];
     const active = new Set(activeGameIds);
     const suspended = new Set(suspendedGameIds);
-    const requireRecentPlay = profile.id.startsWith('system-');
+    // The main Word Chain/Phrase Guess stage is controlled directly by the
+    // ACTIVE toggle, so it must appear as soon as a streamer starts a game.
+    // Event-style system overlays still release themselves after inactivity.
+    const requireRecentPlay = profile.id.startsWith('system-')
+      && !ALWAYS_VISIBLE_SYSTEM_PROFILES.has(profile.id);
     const recentlyPlayed = new Set(events.flatMap((event) => {
       const at = Date.parse(event.at);
       if (!Number.isFinite(at) || activityNow - at > NEBULA_ACTIVITY_IDLE_MS) return [];
