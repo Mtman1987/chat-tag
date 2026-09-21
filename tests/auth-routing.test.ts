@@ -44,6 +44,12 @@ test('OBS can read the public Nebula instruction state', async () => {
   assert.equal(response.headers.get('x-middleware-next'), '1');
 });
 
+test('activity overlays can read the public Chat Wars battlefield', async () => {
+  const response = await middleware(request('/api/game-hub/chat-wars?channel=spacemountainlive'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-middleware-next'), '1');
+});
+
 test('anonymous Chat Tag writes stay protected', async () => {
   const response = await middleware(request('/api/tag', { method: 'POST' }));
   assert.equal(response.status, 401);

@@ -208,6 +208,7 @@ export async function middleware(request: NextRequest) {
   const isPublicGameInstructionsRead = request.method === 'GET' && pathname === '/api/game-hub/instructions';
   const isPublicShowcaseManifestRead = request.method === 'GET' && pathname === '/api/game-hub/showcase-manifest';
   const isPublicParadeStateRead = request.method === 'GET' && pathname === '/api/game-hub/parade';
+  const isPublicChatWarsStateRead = request.method === 'GET' && pathname === '/api/game-hub/chat-wars';
   const isPublicMosaicRuntime = pathname === '/api/game-hub/mosaic'
     && (request.method === 'GET' || request.method === 'POST');
   const isPublicBingoStateRead = request.method === 'GET' && pathname === '/api/bingo/state';
@@ -223,6 +224,7 @@ export async function middleware(request: NextRequest) {
     || isPublicGameInstructionsRead
     || isPublicShowcaseManifestRead
     || isPublicParadeStateRead
+    || isPublicChatWarsStateRead
     || isPublicMosaicRuntime
     || isPublicBingoStateRead
     || isPublicQuackverseArtRead
