@@ -94,7 +94,9 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt treasure kick', description: 'Vote to remove an absent player blocking a boiling treasure turn.' },
     { trigger: 'spmt treasure pass', description: 'Spend a fixed 250 Games Points to reveal one treasure coordinate; maximum five per board.' },
   ] },
-  { gameId: 'wordchain', key: 'wordchain', aliases: ['chain'], joinDescription: 'Join Word Chain.', joinTrigger: 'spmt chain', commands: [] },
+  { gameId: 'wordchain', key: 'wordchain', aliases: ['chain'], joinDescription: 'Join Word Chain.', joinTrigger: 'spmt chain', commands: [
+    { trigger: 'spmt chain theme Space: rocket, planet, comet, telescope', description: 'Add a community theme with at least four starter words.' },
+  ] },
   { gameId: 'wordstorm', key: 'wordstorm', aliases: ['storm'], joinDescription: 'Join Word Storm.', joinTrigger: 'spmt storm', commands: [] },
 ];
 

@@ -18,6 +18,7 @@ interface OverlayState {
   recentHistory: any[];
   overlayMessages?: any[];
   activeGridLeaderboard?: { gameId: string; gameName: string; theme?: string; rows: Array<{ rank: number; username: string; score: number }> } | null;
+  activeWordLeaderboard?: { gameId: string; gameName: string; theme?: string; rows: Array<{ rank: number; username: string; score: number }> } | null;
   monthlyWinners: any[];
   timestamp: number;
 }
@@ -44,6 +45,7 @@ const EMPTY_OVERLAY_STATE: OverlayState = {
   recentHistory: [],
   overlayMessages: [],
   activeGridLeaderboard: null,
+  activeWordLeaderboard: null,
   monthlyWinners: [],
   timestamp: 0,
 };
@@ -145,7 +147,7 @@ export default function OverlayPage() {
   const prevOverlayMessageTs = useRef<number | null>(null);
   const prevIt = useRef<string | null>(null);
   const lastHistoryShow = useRef<number>(0);
-  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'live'>('leaderboard');
+  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'word' | 'live'>('leaderboard');
   const dataRef = useRef<OverlayState | null>(null);
   const broadcastRef = useRef<Broadcast | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -362,13 +364,14 @@ export default function OverlayPage() {
   );
 
   const fireGridLeaderboardBroadcast = useCallback(
-    (leaderboard: NonNullable<OverlayState['activeGridLeaderboard']>) => {
+    (leaderboard: NonNullable<OverlayState['activeGridLeaderboard'] | OverlayState['activeWordLeaderboard']>) => {
       if (!leaderboard.rows.length || broadcastRef.current) return;
       const lines = [
         `${leaderboard.gameName}${leaderboard.theme ? ` · ${leaderboard.theme}` : ''}`,
         ...leaderboard.rows.slice(0, 4).map((row) => `#${row.rank} ${row.username} ${row.score} pts`),
       ];
-      fireBroadcast({ type: 'history', lines, icon: '🧩', color: '#22d3ee', glow: '#8b5cf6', sound: 'leaderboard' }, 15000);
+      const wordGame = leaderboard.gameId === 'wordchain' || leaderboard.gameId === 'phraseguess';
+      fireBroadcast({ type: 'history', lines, icon: wordGame ? '🔤' : '🧩', color: '#22d3ee', glow: '#8b5cf6', sound: 'leaderboard' }, 15000);
       lastHistoryShow.current = Date.now();
     },
     [fireBroadcast],
@@ -675,9 +678,17 @@ export default function OverlayPage() {
       }
 
       if (nextCycleMode.current === 'grid') {
-        nextCycleMode.current = 'history';
+        nextCycleMode.current = 'word';
         if (loungeCompact && current.activeGridLeaderboard?.rows?.length) {
           fireGridLeaderboardBroadcast(current.activeGridLeaderboard);
+          return;
+        }
+      }
+
+      if (nextCycleMode.current === 'word') {
+        nextCycleMode.current = 'history';
+        if (loungeCompact && current.activeWordLeaderboard?.rows?.length) {
+          fireGridLeaderboardBroadcast(current.activeWordLeaderboard);
           return;
         }
       }

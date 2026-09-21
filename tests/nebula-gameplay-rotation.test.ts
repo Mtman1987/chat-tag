@@ -119,6 +119,7 @@ test('Word Chain and Phrase Guess use six-minute stage rounds with minimal embed
   const wordChain = readFileSync(new URL('../public/nebula-arcade/games/wordchain.html', import.meta.url), 'utf8');
   const phraseGuess = readFileSync(new URL('../public/nebula-arcade/games/phraseguess.html', import.meta.url), 'utf8');
   assert.match(wordChain, /const ROUND_SECONDS = 6 \* 60/);
+  assert.equal((wordChain.match(/const ROUND_SECONDS = 6 \* 60/g) || []).length, 1);
   assert.match(wordChain, /const ROUNDS_PER_CYCLE = 5/);
   assert.match(wordChain, /currentRoundSlot = Math\.floor\(Date\.now\(\) \/ \(ROUND_SECONDS \* 1000\)\)/);
   assert.match(wordChain, /eventAt < roundOpenedAt/);
@@ -136,6 +137,20 @@ test('Word Chain and Phrase Guess use six-minute stage rounds with minimal embed
   assert.match(phraseGuess, /nebula-phrase-round/);
   assert.match(phraseGuess, /body\.broadcast \.controls/);
   assert.match(phraseGuess, /if \(embedded\)[\s\S]*startGame\(\)/);
+});
+
+test('main word game broadcast stages and Chat Tag leaderboard rotation are wired', () => {
+  const surface = readFileSync(new URL('../src/components/game-hub-surface.tsx', import.meta.url), 'utf8');
+  const stage = readFileSync(new URL('../src/components/game-hub-word-stage.tsx', import.meta.url), 'utf8');
+  const overlayState = readFileSync(new URL('../src/app/api/overlay/state/route.ts', import.meta.url), 'utf8');
+  const chatTagOverlay = readFileSync(new URL('../src/app/overlay/[userId]/page.tsx', import.meta.url), 'utf8');
+  const command = readFileSync(new URL('../src/app/api/game-hub/command/route.ts', import.meta.url), 'utf8');
+  assert.match(surface, /GameHubWordStage/);
+  assert.match(stage, /Next word starts with/);
+  assert.match(stage, /Guess normally in chat/);
+  assert.match(overlayState, /activeWordLeaderboard/);
+  assert.match(chatTagOverlay, /current\.activeWordLeaderboard/);
+  assert.match(command, /submitWordChainTheme/);
 });
 
 test('Word Chain neutral answers use a bounded parent majority vote', () => {

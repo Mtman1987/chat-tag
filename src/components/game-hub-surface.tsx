@@ -4,6 +4,7 @@ import type { GameHubGame } from '@/lib/game-hub-registry';
 import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
 import { GameHubBingoSurface } from '@/components/game-hub-bingo-surface';
 import { NebulaGameFrame } from '@/components/nebula-game-frame';
+import { GameHubWordStage } from '@/components/game-hub-word-stage';
 
 type ScopedGameEvent = GameHubChatEvent & { gameIds?: string[] };
 
@@ -47,6 +48,8 @@ export function GameHubSurface({
     // Every chat-driven overlay uses a purpose-built read-only state surface.
     // Full prototype controls, rules and scores stay in the Nebula popout.
     content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly />;
+  } else if (!chrome && LARGE_STAGE_GAMES.has(game.id)) {
+    content = <GameHubWordStage gameId={game.id as 'wordchain' | 'phraseguess'} channel={channel || 'chat'} />;
   } else if (game.sourcePrototype) {
     content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} channel={channel} broadcastOnly />;
   } else {

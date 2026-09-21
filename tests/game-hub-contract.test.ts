@@ -32,12 +32,15 @@ import {
   PHRASE_GUESS_PHRASES,
   WORD_CHAIN_THEMES,
   getOrCreateGameHubPlayer,
+  phraseGuessPublicSnapshot,
   phraseGuessRoundAt,
   phraseGuessRoundForChannel,
   purchasePhraseGuessHint,
   recordPhraseGuessAttempt,
   recordWordChainMessage,
   submitPhraseGuessPhrase,
+  submitWordChainTheme,
+  wordChainPublicSnapshot,
   wordChainRoundAt,
 } from '../src/lib/game-hub-state';
 
@@ -262,6 +265,27 @@ test('Word Chain settles canonical words, combos, and neutral majority votes dur
   assert.equal(afterVote.outcome, 'accepted');
   assert.equal(stored('11').gamePointsBalance, 23);
   assert.equal(stored('12').gamePointsBalance, 8);
+});
+
+test('main word games ship seeded libraries, community additions, and broadcast snapshots', () => {
+  assert.ok(PHRASE_GUESS_PHRASES.length >= 20);
+  assert.ok(Object.keys(WORD_CHAIN_THEMES).length >= 8);
+  const state: any = { gameSettings: { default: {} } };
+  const creator = { userId: '31', username: 'maker', displayName: 'Maker', channel: 'space', now: 0 };
+  const player = getOrCreateGameHubPlayer(state, creator);
+  player.joinedGames.wordchain = { joinedAt: new Date(0).toISOString(), active: true, score: 0, wins: 0, plays: 1 };
+  player.joinedGames.phraseguess = { joinedAt: new Date(0).toISOString(), active: true, score: 0, wins: 0, plays: 1 };
+  const theme = submitWordChainTheme(state, { ...creator, name: 'Weather', words: 'storm, rain, snow, thunder' });
+  assert.equal(theme.entry.words.length, 4);
+  assert.equal(theme.inventorySize, 1);
+  assert.throws(() => submitWordChainTheme(state, { ...creator, name: 'Weather', words: 'cloud, mist, wind, hail', now: 1 }), /already exists/i);
+  const chain = wordChainPublicSnapshot(state, 'space', 0);
+  assert.equal(chain.theme, 'Animals');
+  assert.equal(chain.currentWord, 'TIGER');
+  assert.equal(chain.requiredLetter, 'R');
+  const phrase = phraseGuessPublicSnapshot(state, 'space', 0);
+  assert.ok(phrase.maskedPhrase.includes('•'));
+  assert.equal(phrase.secondsLeft, 360);
 });
 
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {

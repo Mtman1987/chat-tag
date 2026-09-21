@@ -19,6 +19,7 @@ import {
   resolveChannelGameIds,
   setChannelGameRunning,
   submitPhraseGuessPhrase,
+  submitWordChainTheme,
 } from '@/lib/game-hub-state';
 import {
   allPlayedGameIds,
@@ -107,6 +108,7 @@ function knownAction(gameId: string, args: string[]): boolean {
     return (first === 'hint' && args.length === 1)
       || (first === 'submit' && args.length >= 3);
   }
+  if (gameId === 'wordchain') return first === 'theme' && args.length >= 3;
   if (gameId === 'pixelbattle') return /^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)$/.test(first) && /^\d{1,2}$/.test(args[1] || '') && /^\d{1,2}$/.test(args[2] || '') && args.length === 3;
   if (gameId === 'treasurehunt') return (/^[a-t](?:2[0-5]|1\d|[1-9])$/i.test(first) && args.length === 1)
     || (/^(?:answer|solve)$/.test(first) && args.length >= 2)
@@ -953,6 +955,33 @@ export async function POST(req: NextRequest) {
       });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'That phrase could not be submitted.'}`) });
+    }
+  }
+
+  if (game.id === 'wordchain' && action === 'theme') {
+    const rawTheme = rawActionArgs.slice(1).join(' ');
+    const separator = rawTheme.indexOf(':');
+    if (separator < 1) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} use: spmt chain theme Space: rocket, planet, comet, telescope`) });
+    }
+    const name = rawTheme.slice(0, separator).trim();
+    const words = rawTheme.slice(separator + 1).trim();
+    try {
+      const submission = await updateAppState((draft) => {
+        joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
+        const added = submitWordChainTheme(draft, { channel, userId, username, displayName, name, words });
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: game.id, actorId: userId, username, displayName,
+          action: 'theme', args: [added.entry.name, ...added.entry.words], message: String(body.message || ''),
+        });
+        return added;
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} added Word Chain theme “${submission.entry.name}” with ${submission.entry.words.length} starter words · ${submission.inventorySize} community theme${submission.inventorySize === 1 ? '' : 's'} available.`,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'That theme could not be submitted.'}`) });
     }
   }
 

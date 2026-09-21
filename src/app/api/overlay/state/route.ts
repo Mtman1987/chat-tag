@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
-import { getGameHubGameStats, normalizeGameHubChannel, resolveChannelGameIds } from '@/lib/game-hub-state';
+import { getGameHubGameStats, normalizeGameHubChannel, phraseGuessPublicSnapshot, resolveChannelGameIds, wordChainPublicSnapshot } from '@/lib/game-hub-state';
 import { mosaicPublicSnapshot } from '@/lib/nebula-mosaic';
 import { chatWarsPublicSnapshot } from '@/lib/chat-wars';
 import { treasureHuntPublicSnapshot } from '@/lib/treasure-hunt';
@@ -141,6 +141,23 @@ export async function GET(req: NextRequest) {
         rows: bingo.leaderboard.slice(0, 5).map((entry, index) => ({ rank: index + 1, username: entry.username, score: entry.score })),
       }
       : null);
+  const mainOrder = ['wordchain', 'phraseguess'];
+  const rotatingWordGames = mainOrder.filter((gameId) => activeGames.has(gameId) && recentGames.has(gameId));
+  const activeWordGame = rotatingWordGames.length ? rotatingWordGames[nebulaRotationIndexAt(now, rotatingWordGames.length)] : null;
+  const activeWordLeaderboard = activeWordGame
+    ? {
+      gameId: activeWordGame,
+      gameName: activeWordGame === 'wordchain' ? 'Word Chain' : 'Phrase Guess',
+      theme: activeWordGame === 'wordchain'
+        ? wordChainPublicSnapshot(state, overlayChannel, now).theme
+        : `${phraseGuessPublicSnapshot(state, overlayChannel, now).hintsUsed}/3 hints`,
+      rows: getGameHubGameStats(state, activeWordGame).leaderboard.slice(0, 5).map((entry, index) => ({
+        rank: index + 1,
+        username: entry.displayName || entry.username,
+        score: entry.score,
+      })),
+    }
+    : null;
   const trackedChannels = Object.keys(state.botChannels || {});
   let liveCount = 0;
   let liveUsers: any[] = [];
@@ -166,6 +183,7 @@ export async function GET(req: NextRequest) {
     recentHistory,
     overlayMessages,
     activeGridLeaderboard: gridLeaderboard,
+    activeWordLeaderboard,
     monthlyWinners,
     timestamp: Date.now(),
   });

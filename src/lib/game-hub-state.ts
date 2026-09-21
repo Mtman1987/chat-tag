@@ -19,6 +19,18 @@ export const PHRASE_GUESS_PHRASES = [
   "You can't handle the truth",
   "I'm the king of the world",
   "Here's looking at you kid",
+  'A picture is worth a thousand words',
+  'Better late than never',
+  'Every cloud has a silver lining',
+  'Practice makes perfect',
+  'The early bird catches the worm',
+  'Two heads are better than one',
+  'When in doubt dance it out',
+  'Adventure is waiting around the corner',
+  'Shoot for the moon and land among the stars',
+  'Great things begin with small steps',
+  'There is no place like home',
+  'Keep your eyes on the prize',
 ] as const;
 export const WORD_CHAIN_ROUND_MS = 6 * 60_000;
 export const WORD_CHAIN_VOTE_MS = 20_000;
@@ -27,6 +39,10 @@ export const WORD_CHAIN_THEMES = {
   Food: ['PIZZA', 'BURGER', 'SALAD', 'TACO', 'ORANGE', 'EGG', 'GRAPE', 'ENCHILADA', 'APPLE', 'EDAMAME', 'ECLAIR', 'RICE', 'EMPANADA', 'AVOCADO', 'OLIVE', 'NOODLE', 'LASAGNA', 'ASPARAGUS', 'SOUP', 'POTATO'],
   Gaming: ['MARIO', 'ZELDA', 'SONIC', 'PACMAN', 'ARCADE', 'ESPORT', 'TETRIS', 'SIMULATOR', 'RACING', 'GAME', 'EMOTE', 'ENGINE', 'NPC', 'COMBO', 'ONLINE', 'ENEMY', 'YOSHI', 'ITEM', 'MULTIPLAYER', 'RESPAWN'],
   Nature: ['TREE', 'OCEAN', 'MOUNTAIN', 'RIVER', 'RAINFOREST', 'TORNADO', 'ORCHID', 'DESERT', 'THUNDER', 'REEF', 'FLOWER', 'ROCK', 'KOI', 'ISLAND', 'DAISY', 'YARROW', 'WILLOW', 'WATERFALL', 'LAKE', 'EARTH'],
+  Space: ['ROCKET', 'TELESCOPE', 'EARTH', 'HUBBLE', 'ECLIPSE', 'EXOPLANET', 'TITAN', 'NEBULA', 'ASTEROID', 'DUST', 'COSMOS', 'PLANET', 'TRITON', 'NOVA', 'AURORA', 'ASTRONAUT', 'TEKTITE', 'EUROPA', 'APOLLO', 'ORBIT'],
+  Music: ['RHYTHM', 'MELODY', 'YODEL', 'LYRIC', 'CHORUS', 'SONG', 'GUITAR', 'RECORD', 'DRUM', 'MUSIC', 'CONCERT', 'TUNE', 'ENCORE', 'ECHO', 'OCTAVE', 'ENSEMBLE', 'EARPHONE', 'EQUALIZER', 'REMIX', 'XYLOPHONE'],
+  Movies: ['CINEMA', 'ACTOR', 'REEL', 'LIGHTS', 'SCENE', 'EDIT', 'TRAILER', 'ROLE', 'EXTRA', 'AWARD', 'DIRECTOR', 'ROMANCE', 'EPIC', 'CAMERA', 'ANIMATION', 'NOIR', 'REMAKE', 'ENDING', 'GENRE', 'EFFECTS'],
+  Travel: ['PASSPORT', 'TRAIN', 'NAVIGATE', 'EXPLORE', 'EUROPE', 'EXCURSION', 'NOMAD', 'DESTINATION', 'NIGHTLIFE', 'ESCAPE', 'EXPEDITION', 'DRIVE', 'EMBARK', 'KAYAK', 'LANDMARK', 'TOUR', 'RESORT', 'TRAIL', 'LUGGAGE', 'ADVENTURE'],
 } as const;
 const LEDGER_LIMIT = 500;
 
@@ -73,9 +89,19 @@ export type GameHubChannelSettings = {
     submitterDisplayName: string;
     submittedAt: string;
   }>;
+  wordChainThemeInventory?: Array<{
+    id: string;
+    name: string;
+    normalized: string;
+    words: string[];
+    submitterPlayerId: string;
+    submitterDisplayName: string;
+    submittedAt: string;
+  }>;
   wordChainRound?: {
     roundSlot: number;
-    theme: keyof typeof WORD_CHAIN_THEMES;
+    theme: string;
+    themeWords?: string[];
     currentWord: string;
     usedWords: string[];
     lastContributorPlayerId?: string;
@@ -458,16 +484,62 @@ export function wordChainRoundAt(nowValue: number) {
   return { roundSlot, theme, seed: words[seedIndex] };
 }
 
+function wordChainThemeCatalog(settings: GameHubChannelSettings) {
+  const builtIn = Object.entries(WORD_CHAIN_THEMES).map(([name, words]) => ({ name, words: [...words] }));
+  const community = (settings.wordChainThemeInventory || []).map((entry) => ({ name: entry.name, words: entry.words }));
+  return [...builtIn, ...community];
+}
+
+export function submitWordChainTheme(
+  state: any,
+  input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; name: unknown; words: unknown; now?: number },
+) {
+  const channel = normalizeGameHubChannel(input.channel);
+  if (!channel) throw new Error('A channel is required.');
+  const name = String(input.name || '').replace(/[^a-z0-9 '&-]/gi, '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  const normalized = name.toLowerCase();
+  const words = [...new Set(String(input.words || '').split(/[\s,]+/).map(normalizedWordChainMessage)
+    .filter((word) => /^[A-Z]{3,20}$/.test(word)))].slice(0, 40);
+  if (name.length < 2) throw new Error('Give the theme a short name.');
+  if (words.length < 4) throw new Error('Add at least four starter words separated by commas.');
+  const settings = getChannelGameSettings(state, channel);
+  settings.wordChainThemeInventory ||= [];
+  if (Object.keys(WORD_CHAIN_THEMES).some((entry) => entry.toLowerCase() === normalized)
+    || settings.wordChainThemeInventory.some((entry) => entry.normalized === normalized)) {
+    throw new Error('That Word Chain theme already exists.');
+  }
+  const player = getOrCreateGameHubPlayer(state, input);
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const submittedAt = new Date(now).toISOString();
+  const entry = {
+    id: `theme:${player.id}:${now}`,
+    name,
+    normalized,
+    words,
+    submitterPlayerId: player.id,
+    submitterDisplayName: player.displayName,
+    submittedAt,
+  };
+  settings.wordChainThemeInventory = [...settings.wordChainThemeInventory, entry].slice(-50);
+  settings.updatedAt = submittedAt;
+  return { entry, inventorySize: settings.wordChainThemeInventory.length };
+}
+
 function normalizedWordChainMessage(value: unknown): string {
   return String(value || '').trim().toUpperCase();
 }
 
 function wordChainStateForRound(settings: GameHubChannelSettings, now: number) {
-  const round = wordChainRoundAt(now);
+  const roundSlot = Math.floor(now / WORD_CHAIN_ROUND_MS);
+  const catalog = wordChainThemeCatalog(settings);
+  const selected = catalog[roundSlot % catalog.length];
+  const seed = selected.words[Math.floor(roundSlot / catalog.length) % selected.words.length];
+  const round = { roundSlot, theme: selected.name, seed, themeWords: selected.words };
   if (settings.wordChainRound?.roundSlot === round.roundSlot) return settings.wordChainRound;
   settings.wordChainRound = {
     roundSlot: round.roundSlot,
     theme: round.theme,
+    themeWords: round.themeWords,
     currentWord: round.seed,
     usedWords: [round.seed],
     comboMultiplier: 1,
@@ -547,7 +619,9 @@ export function recordWordChainMessage(
   if (round.usedWords.includes(normalized)) return { changed: Boolean(finalized), outcome: 'used' as const, finalized };
 
   const verdictKey = `${round.theme}:${normalized}`;
-  const canonical = (WORD_CHAIN_THEMES[round.theme] as readonly string[]).includes(normalized);
+  const builtInWords = WORD_CHAIN_THEMES[round.theme as keyof typeof WORD_CHAIN_THEMES] as readonly string[] | undefined;
+  const communityWords = settings.wordChainThemeInventory?.find((entry) => entry.name === round.theme)?.words;
+  const canonical = (round.themeWords || builtInWords || communityWords || []).includes(normalized);
   const cachedVerdict = settings.wordChainVerdicts?.[verdictKey];
   if (canonical || cachedVerdict === true) {
     const applied = applyWordChainWord(state, channel, round, player, normalized, now);
@@ -566,6 +640,54 @@ export function recordWordChainMessage(
     votes: {},
   };
   return { changed: true, outcome: 'vote-opened' as const, closesAt: round.pending.closesAt, finalized };
+}
+
+function stablePhraseMask(phrase: string, roundSlot: number, revealPercent: number) {
+  const characters = [...phrase];
+  const letterIndexes = characters.map((character, index) => /[a-z0-9]/i.test(character) ? index : -1).filter((index) => index >= 0);
+  const ranked = [...letterIndexes].sort((left, right) => {
+    const hash = (index: number) => ((index + 17) * 1103515245 + (roundSlot + 31) * 12345) >>> 0;
+    return hash(left) - hash(right);
+  });
+  const visibleCount = Math.max(1, Math.ceil(letterIndexes.length * Math.max(0, Math.min(100, revealPercent)) / 100));
+  const visible = new Set(ranked.slice(0, visibleCount));
+  return characters.map((character, index) => /[a-z0-9]/i.test(character) && !visible.has(index) ? '•' : character).join('');
+}
+
+export function phraseGuessPublicSnapshot(state: any, channelValue: unknown, nowValue = Date.now()) {
+  const now = Math.max(0, Math.floor(Number(nowValue)));
+  const round = phraseGuessRoundForChannel(state, channelValue, now);
+  const elapsed = now - round.roundSlot * PHRASE_GUESS_ROUND_MS;
+  const revealSteps = Math.floor(elapsed / 45_000);
+  const revealPercent = 10 + revealSteps * 10 + Math.max(0, Number(round.hintsUsed || 0)) * 10;
+  const solved = Boolean(round.winnerPlayerId);
+  return {
+    roundSlot: round.roundSlot,
+    maskedPhrase: solved ? (round.phrase || '') : stablePhraseMask(round.phrase || '', round.roundSlot, revealPercent),
+    secondsLeft: Math.max(0, Math.ceil((PHRASE_GUESS_ROUND_MS - elapsed) / 1000)),
+    hintsUsed: Math.max(0, Number(round.hintsUsed || 0)),
+    solved,
+    submitterDisplayName: round.submitterDisplayName || '',
+    leaderboard: getGameHubGameStats(state, 'phraseguess').leaderboard.slice(0, 5),
+  };
+}
+
+export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowValue = Date.now()) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const now = Math.max(0, Math.floor(Number(nowValue)));
+  const round = wordChainStateForRound(getChannelGameSettings(state, channel), now);
+  const elapsed = now - round.roundSlot * WORD_CHAIN_ROUND_MS;
+  return {
+    roundSlot: round.roundSlot,
+    roundNumber: round.roundSlot % 5 + 1,
+    theme: round.theme,
+    currentWord: round.currentWord,
+    requiredLetter: round.currentWord.at(-1) || '',
+    chainLength: round.usedWords.length,
+    secondsLeft: Math.max(0, Math.ceil((WORD_CHAIN_ROUND_MS - elapsed) / 1000)),
+    vote: round.pending ? { word: round.pending.word, closesAt: round.pending.closesAt } : null,
+    leaderboard: getGameHubGameStats(state, 'wordchain').leaderboard.slice(0, 5),
+  };
 }
 
 export function recordGameHubChatActivity(
