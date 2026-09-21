@@ -41,6 +41,8 @@ export function GameHubSurface({
     content = <iframe src={`/quackverse-overlay${query}`} title={`${game.name} overlay`} className="h-full w-full border-0 bg-transparent" />;
   } else if (game.id === 'bingo') {
     content = <GameHubBingoSurface broadcastOnly={!chrome} />;
+  } else if (game.id === 'chatwars') {
+    content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly={!chrome} />;
   } else if (game.sourcePrototype && !LARGE_STAGE_GAMES.has(game.id)) {
     // Every chat-driven overlay uses a purpose-built read-only state surface.
     // Full prototype controls, rules and scores stay in the Nebula popout.

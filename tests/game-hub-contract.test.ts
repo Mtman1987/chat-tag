@@ -44,15 +44,15 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
-test('Games Hub catalogs 20 peer games including Bingo and all 17 recovered games', () => {
-  assert.equal(GAME_HUB_CATALOG.length, 20);
-  assert.equal(new Set(GAME_HUB_CATALOG.map((game) => game.id)).size, 20);
+test('Games Hub catalogs 18 peer games after retiring Color Wars and Memory Lane', () => {
+  assert.equal(GAME_HUB_CATALOG.length, 18);
+  assert.equal(new Set(GAME_HUB_CATALOG.map((game) => game.id)).size, 18);
   for (const expected of ['chat-tag', 'quackverse', 'bingo']) assert.ok(getGameHubGame(expected), `missing ${expected}`);
   const recovered = GAME_HUB_CATALOG.filter((game) => game.sourcePrototype?.startsWith('games/'));
-  assert.equal(recovered.length, 17);
+  assert.equal(recovered.length, 14);
   for (const expected of [
     'chaosmode', 'chatgarden', 'chatwars', 'chickenroyale', 'colorsymphony',
-    'colorwars', 'dancingparade', 'emojirain', 'emojitower', 'memorylane',
+    'dancingparade', 'emojirain', 'emojitower',
     'petrace', 'phraseguess', 'pixelbattle', 'rhythmpulse', 'treasurehunt',
     'wordchain', 'wordstorm',
   ]) assert.ok(getGameHubGame(expected), `missing ${expected}`);
@@ -61,7 +61,7 @@ test('Games Hub catalogs 20 peer games including Bingo and all 17 recovered game
 test('all recovered Library games ship as embedded Nebula pages with parent event support', () => {
   const directory = path.join(root, 'public/nebula-arcade/games');
   const files = fs.readdirSync(directory).filter((file) => file.endsWith('.html')).sort();
-  assert.equal(files.length, 17);
+  assert.equal(files.length, 14);
   for (const file of files) {
     const source = fs.readFileSync(path.join(directory, file), 'utf8');
     assert.match(source, /window\.parent/);
@@ -91,7 +91,7 @@ test('Discord showcase ships one animated frame for every Nebula Arcade game', (
 });
 
 test('every Games Hub chat command uses the spmt namespace', () => {
-  assert.equal(GAME_HUB_COMMAND_SPECS.length, 20);
+  assert.equal(GAME_HUB_COMMAND_SPECS.length, 18);
   for (const game of GAME_HUB_CATALOG) {
     const playerCommands = canonicalPlayerCommands(game);
     const streamerCommands = canonicalStreamerCommands(game);
@@ -108,7 +108,7 @@ test('every Games Hub chat command uses the spmt namespace', () => {
   assert.ok(bingo.some((command) => command.trigger === 'spmt claim 12'));
 });
 
-test('direct commands preserve Chat Tag, choose conflicts, and broadcast compatible colors', () => {
+test('direct commands preserve Chat Tag and route colors only to Chat Wars', () => {
   const joined = resolveDirectGameCommand(['join'], ['chatgarden']);
   assert.equal(joined.mode, 'choose');
   assert.deepEqual(joined.intents.map((item) => item.gameId), ['chat-tag', 'chatgarden']);
@@ -117,9 +117,9 @@ test('direct commands preserve Chat Tag, choose conflicts, and broadcast compati
   assert.equal(tagOnly.mode, 'single');
   assert.equal(tagOnly.intents[0].command, 'spmt chattag');
 
-  const colors = resolveDirectGameCommand(['red'], ['chatwars', 'colorwars']);
-  assert.equal(colors.mode, 'broadcast');
-  assert.deepEqual(colors.intents.map((item) => item.gameId), ['chatwars', 'colorwars']);
+  const colors = resolveDirectGameCommand(['red'], ['chatwars']);
+  assert.equal(colors.mode, 'single');
+  assert.deepEqual(colors.intents.map((item) => item.gameId), ['chatwars']);
 
   const chaos = resolveDirectGameCommand(['explode'], ['chaosmode']);
   assert.equal(chaos.intents[0].command, 'spmt chaos explode');
@@ -140,7 +140,6 @@ test('Nebula translates every legacy prototype command without changing ordinary
     ['chaosmode', 'spmt portal', '!portal'],
     ['chaosmode', 'spmt shake', '!shake'],
     ['chatwars', 'spmt red', '!red'],
-    ['colorwars', 'spmt yellow', '!yellow'],
     ['chickenroyale', 'spmt chicken', '!join'],
     ['chickenroyale', 'spmt hatch', '!join'],
     ['chickenroyale', 'spmt chicken start', '!start'],
@@ -158,7 +157,7 @@ test('Nebula translates every legacy prototype command without changing ordinary
   for (const [gameId, command, expected] of cases) {
     assert.equal(nebulaPrototypeMessage(gameId, command), expected, `${gameId}: ${command}`);
   }
-  for (const gameId of ['chatgarden', 'colorsymphony', 'emojirain', 'memorylane', 'rhythmpulse', 'wordstorm']) {
+  for (const gameId of ['chatgarden', 'colorsymphony', 'emojirain', 'rhythmpulse', 'wordstorm']) {
     assert.equal(nebulaPrototypeMessage(gameId, 'purple memories 🌱'), 'purple memories 🌱');
   }
   assert.equal(nebulaPrototypeMessage('wordchain', 'spmt chain'), 'spmt chain');
@@ -266,16 +265,16 @@ test('Word Chain settles canonical words, combos, and neutral majority votes dur
 test('overlay game selection is deduped, valid, Bingo-aware and bounded', () => {
   const ids = normalizeGameHubGameIds([
     'bingo', 'chat-tag', 'chat-tag', 'nope', 'quackverse', 'emojirain', 'wordstorm',
-    'petrace', 'chatwars', 'colorwars', 'treasurehunt', 'pixelbattle', 'chaosmode',
+    'petrace', 'chatwars', 'treasurehunt', 'pixelbattle', 'chaosmode',
   ]);
-  assert.equal(ids.length, 11);
+  assert.equal(ids.length, 10);
   assert.deepEqual(ids.slice(0, 3), ['bingo', 'chat-tag', 'quackverse']);
   assert.ok(!ids.includes('nope'));
 });
 
 test('overlay profiles default to one all-game rotating Nebula surface and remain cloneable', () => {
   const blank = createGameOverlayProfile('12345', { ownerLogin: 'SpaceMountainLive' });
-  assert.equal(blank.gameIds.length, 20);
+  assert.equal(blank.gameIds.length, 18);
   assert.equal(blank.layout, 'rotation');
   assert.ok(blank.gameIds.includes('chat-tag'));
 
@@ -303,7 +302,7 @@ test('SpaceMountain Lounge splits large word stages from compact activity games'
   const route = read('src/app/api/overlay/game-hub/[profileId]/route.ts');
   assert.match(route, /'system-spacemountainlive-main'[\s\S]*gameIds: \['wordchain', 'phraseguess'\][\s\S]*layout: 'rotation'/);
   assert.match(route, /'system-spacemountainlive-activity'/);
-  for (const gameId of ['chatwars', 'colorwars', 'memorylane', 'pixelbattle', 'treasurehunt', 'bingo']) {
+  for (const gameId of ['chatwars', 'pixelbattle', 'treasurehunt', 'bingo']) {
     assert.match(route, new RegExp(`['"]${gameId}['"]`));
   }
   for (const disabledGameId of ['chaosmode', 'chatgarden', 'chickenroyale', 'colorsymphony', 'emojitower', 'petrace', 'rhythmpulse', 'wordstorm']) {
@@ -498,7 +497,7 @@ test('rules and score stay ACTIVE-scoped while leader mirrors StreamWeaver-style
   assert.match(score, /resolveChannelGameIds/);
   assert.match(score, /getPlayerGameSnapshots/);
   assert.match(score, /Historical scores in stopped games remain stored/);
-  assert.match(leader, /All 20 games/);
+  assert.match(leader, /All 18 games/);
   assert.match(leader, /spmt leader/);
   assert.match(pointsLeaderboard, /Games Points leaderboard/);
   assert.match(pointsLeaderboard, /spmt pleader/);

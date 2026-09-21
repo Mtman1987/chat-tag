@@ -12,7 +12,6 @@ export function nebulaPrototypeMessage(gameIdValue: string, messageValue: string
     chaosmode: ['chaos', 'chaosmode'],
     chatwars: ['chatwars', 'wars'],
     chickenroyale: ['chicken', 'chickenroyale', 'royale'],
-    colorwars: ['colorwars', 'colors'],
     dancingparade: ['parade', 'dancingparade'],
     emojitower: ['tower', 'emojitower'],
     petrace: ['pet', 'petrace', 'pets', 'race'],
@@ -24,7 +23,7 @@ export function nebulaPrototypeMessage(gameIdValue: string, messageValue: string
   const action = parts[0] || '';
 
   if (gameId === 'chaosmode' && /^(explode|glitch|portal|shake)$/.test(action)) return `!${action}`;
-  if ((gameId === 'chatwars' || gameId === 'colorwars') && /^(red|blue|green|yellow)$/.test(action)) return `!${action}`;
+  if (gameId === 'chatwars' && /^(red|blue|green|yellow)$/.test(action)) return `!${action}`;
   if (gameId === 'chickenroyale') {
     if (action === 'launch' || action === 'start') return '!start';
     if (/^(join|chicken|royale|hatch)$/.test(action)) return '!join';

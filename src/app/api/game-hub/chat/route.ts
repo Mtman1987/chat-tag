@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
+import { getBotSecret } from '@/lib/runtime-secrets';
 import { getGameHubGame } from '@/lib/game-hub-registry';
 import { appendNebulaChatEvent } from '@/lib/game-hub-event-bus';
+import { recordChatWarsMessage } from '@/lib/chat-wars';
 import {
   GAME_SCORE_INTERVAL_MS,
   getGameHubStore,
@@ -14,6 +16,40 @@ import {
 import { readAppState, updateAppStateIfChanged, type JsonObject } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
+
+const STREAMWEAVER_URL = String(
+  process.env.STREAMWEAVER_URL || process.env.STREAMWEAVE_URL || 'https://streamweaver-new.fly.dev',
+).replace(/\/$/, '');
+
+async function queueStellaHalftime(halftime: any) {
+  const counts = halftime?.counts || {};
+  const ranked = ['red', 'blue', 'green', 'yellow'].sort((a, b) => Number(counts[b] || 0) - Number(counts[a] || 0));
+  const leader = ranked[0];
+  const trailer = ranked[ranked.length - 1];
+  const text = `Halftime, space cadets! ${leader} team, enjoy the lead but do not get comfortable. ${trailer} team, the comeback engines are warming up. Everybody stretch your typing fingers; the second battlefield opens in one minute!`;
+  try {
+    const secret = getBotSecret();
+    if (!secret) return false;
+    const generated = await fetch(`${STREAMWEAVER_URL}/api/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-bot-secret': secret },
+      body: JSON.stringify({ text, tenantId: 'spacemountainlive' }),
+    });
+    if (!generated.ok) return false;
+    const body = await generated.json().catch(() => null) as any;
+    const audioUrl = String(body?.audioDataUri || '');
+    if (!audioUrl) return false;
+    const queued = await fetch(`${STREAMWEAVER_URL}/api/tts/current?tenant=spacemountainlive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-bot-secret': secret },
+      body: JSON.stringify({ audioUrl, text }),
+    });
+    return queued.ok;
+  } catch (error) {
+    console.warn('[ChatWars] Stella halftime failed', error);
+    return false;
+  }
+}
 
 function normalizeChannel(value: unknown): string {
   return String(value || '').trim().toLowerCase().replace(/^#/, '').slice(0, 80);
@@ -71,12 +107,14 @@ export async function POST(req: NextRequest) {
 
   const now = Date.now();
   const scoreWriteDue = participatingGameIds.some((gameId) => {
+    if (gameId === 'chatwars') return false;
     const lastScoreAt = Date.parse(String(snapshotPlayer?.joinedGames?.[gameId]?.lastScoreAt || 0));
     return !Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS;
   });
   const phraseGuessAttemptDue = participatingGameIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
   const wordChainAttemptDue = participatingGameIds.includes('wordchain') && !/^\s*!?@?spmt\b/i.test(message);
-  const activity = scoreWriteDue || phraseGuessAttemptDue || wordChainAttemptDue
+  const chatWarsAttemptDue = participatingGameIds.includes('chatwars') && !/^\s*!?@?spmt\b/i.test(message);
+  const activity = scoreWriteDue || phraseGuessAttemptDue || wordChainAttemptDue || chatWarsAttemptDue
     ? await updateAppStateIfChanged((state) => {
       const result = recordGameHubChatActivity(state, {
         channel,
@@ -91,12 +129,19 @@ export async function POST(req: NextRequest) {
       const wordChain = wordChainAttemptDue
         ? recordWordChainMessage(state, { channel, userId: body.userId, username, displayName: cleanText(body.displayName || username, 80), message })
         : { changed: false, outcome: 'ignored' as const };
+      const chatWars = chatWarsAttemptDue
+        ? recordChatWarsMessage(state, { channel, userId: body.userId, username, displayName: cleanText(body.displayName || username, 80), message })
+        : { changed: false, outcome: 'ignored' as const };
       return {
-        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed || wordChain.changed,
-        result: { ...result, participatingGameIds, eventGameIds, phraseGuess, wordChain },
+        changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed || wordChain.changed || chatWars.changed,
+        result: { ...result, participatingGameIds, eventGameIds, phraseGuess, wordChain, chatWars },
       };
     })
-    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const }, wordChain: { changed: false, outcome: 'ignored' as const } };
+    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const }, wordChain: { changed: false, outcome: 'ignored' as const }, chatWars: { changed: false, outcome: 'ignored' as const } };
+
+  const stellaHalftimeQueued = activity.chatWars?.outcome === 'halftime-started'
+    ? await queueStellaHalftime(activity.chatWars.halftime)
+    : undefined;
 
   return NextResponse.json({
     accepted: true,
@@ -107,5 +152,7 @@ export async function POST(req: NextRequest) {
     pointsAwarded: activity.pointsAwarded,
     phraseGuess: activity.phraseGuess,
     wordChain: activity.wordChain,
+    chatWars: activity.chatWars,
+    ...(stellaHalftimeQueued !== undefined ? { stellaHalftimeQueued } : {}),
   });
 }

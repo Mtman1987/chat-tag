@@ -57,6 +57,7 @@ import { awardSpmtXp } from '@/lib/spmt-client';
 import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
 import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
 import { instantGameOverlayProfileId } from '@/lib/game-hub-overlays';
+import { chatWarsMinimumWordLength, compactChatWarsReveal, getChatWarsPlayer, setChatWarsTeam } from '@/lib/chat-wars';
 import {
   addDancingParadeEmojis,
   addDancingParadeParticipant,
@@ -68,7 +69,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 const LEGACY_CHAT_TAG_ROOT_COMMANDS = new Set(['help', 'rules', 'score']);
-const ACTIVITY_GAME_ORDER = ['chatwars', 'colorwars', 'memorylane', 'pixelbattle', 'treasurehunt', 'bingo'];
+const ACTIVITY_GAME_ORDER = ['chatwars', 'pixelbattle', 'treasurehunt', 'bingo'];
 const ACTIVITY_RECENT_MS = 30 * 60_000;
 
 function currentActivityGameId(state: any, channel: string, activeGameIds: string[], now = Date.now()) {
@@ -102,7 +103,7 @@ function knownAction(gameId: string, args: string[]): boolean {
       || (first === 'phrases' && args.length === 1);
   }
   if (gameId === 'chaosmode') return /^(explode|glitch|portal|shake)$/.test(first) && args.length === 1;
-  if (gameId === 'chatwars' || gameId === 'colorwars') return /^(red|blue|green|yellow)$/.test(first) && args.length === 1;
+  if (gameId === 'chatwars') return /^(red|blue|green|yellow|show|view|reveal)$/.test(first) && args.length === 1;
   if (gameId === 'dancingparade') return first === 'dance' && args.length === 1;
   if (gameId === 'emojitower') return first === 'drop' && args.length === 1;
   if (gameId === 'petrace') return /^(dog|cat|rabbit|turtle|hamster)$/.test(first) && args.length === 1;
@@ -716,6 +717,45 @@ export async function POST(req: NextRequest) {
   const activeGameIds = resolveChannelGameIds(state, channel);
   if (!activeGameIds.includes(game.id)) {
     return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${game.name} is not ACTIVE in #${channel}.`) });
+  }
+
+  if (game.id === 'chatwars' && /^(?:show|view|reveal)$/.test(action)) {
+    return NextResponse.json({
+      handled: true,
+      reply: `@${displayName} showing the full Chat Wars battlefield and standings for 15 seconds.`,
+      overlayEvent: {
+        type: 'chat-wars-reveal',
+        message: 'Chat Wars battlefield',
+        payload: compactChatWarsReveal(state, channel),
+      },
+    });
+  }
+
+  if (game.id === 'chatwars' && /^(?:red|blue|green|yellow)$/.test(action)) {
+    const enlistment = await updateAppState((draft) => {
+      const result = setChatWarsTeam(draft, { channel, userId, username, displayName, team: action });
+      recordGameHubRuntimeAction(draft, {
+        channel, gameId: game.id, actorId: userId, username, displayName,
+        action: 'team', args: [action], message: String(body.message || ''),
+      });
+      return result;
+    });
+    return NextResponse.json({
+      handled: true,
+      reply: enlistment.locked
+        ? `@${displayName} you are already fighting for ${enlistment.team} in this Chat Wars campaign · level ${enlistment.level}.`
+        : `@${displayName} joined ${enlistment.team} for Chat Wars! Talk normally to claim territory · level ${enlistment.level}.`,
+    });
+  }
+
+  if (game.id === 'chatwars' && !actionArgs.length) {
+    const player = getChatWarsPlayer(state, { channel, userId, username });
+    return NextResponse.json({
+      handled: true,
+      reply: player
+        ? `@${displayName} fights for ${player.team} · level ${player.level}. Keep talking normally; words of ${chatWarsMinimumWordLength(player.level)}+ letters currently count.`
+        : `@${displayName} choose a Chat Wars team with spmt red, spmt blue, spmt green, or spmt yellow.`,
+    });
   }
 
   if (/^(?:help|rules|control|controls|popout)$/.test(action)) {

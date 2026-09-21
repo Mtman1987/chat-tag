@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readAppState, toMillis } from '@/lib/volume-store';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
-import { getGameHubGameStats, normalizeGameHubChannel } from '@/lib/game-hub-state';
+import { getGameHubGameStats, normalizeGameHubChannel, resolveChannelGameIds } from '@/lib/game-hub-state';
 import { mosaicPublicSnapshot } from '@/lib/nebula-mosaic';
+import { chatWarsPublicSnapshot } from '@/lib/chat-wars';
+import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
+import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +81,18 @@ export async function GET(req: NextRequest) {
     overlayOwner.twitchUsername || overlayOwner.username || String(userId).replace(/^user_/, ''),
   );
   const mosaic = overlayChannel ? mosaicPublicSnapshot(state, overlayChannel) : { artwork: null };
-  const activeGridLeaderboard = mosaic.artwork?.status === 'active'
+  const chatWars = overlayChannel ? chatWarsPublicSnapshot(state, overlayChannel) : null;
+  const activityOrder = ['chatwars', 'pixelbattle', 'treasurehunt', 'bingo'];
+  const activeGames = new Set(overlayChannel ? resolveChannelGameIds(state, overlayChannel) : []);
+  const now = Date.now();
+  const recentGames = new Set(overlayChannel ? getNebulaChatEvents(overlayChannel, '', 250).flatMap((event: any) => {
+    const at = Date.parse(String(event?.at || ''));
+    return Number.isFinite(at) && now - at <= 30 * 60_000 && Array.isArray(event?.gameIds) ? event.gameIds : [];
+  }) : []);
+  const rotatingGames = activityOrder.filter((gameId) => activeGames.has(gameId)
+    && (recentGames.has(gameId) || (gameId === 'pixelbattle' && mosaic.artwork?.status === 'active')));
+  const activeGridGame = rotatingGames.length ? rotatingGames[nebulaRotationIndexAt(now, rotatingGames.length)] : null;
+  const activeGridLeaderboard = activeGridGame === 'pixelbattle' && mosaic.artwork?.status === 'active'
     ? {
       gameId: 'pixelbattle',
       gameName: 'Nebula Mosaic',
@@ -89,7 +103,18 @@ export async function GET(req: NextRequest) {
         score: entry.score,
       })),
     }
-    : null;
+    : activeGridGame === 'chatwars' && chatWars
+      ? {
+        gameId: 'chatwars',
+        gameName: 'Chat Wars',
+        theme: '',
+        rows: chatWars.leaderboard.slice(0, 5).map((entry, index) => ({
+          rank: index + 1,
+          username: `${entry.username} · ${entry.team} L${entry.level}`,
+          score: entry.score,
+        })),
+      }
+      : null;
   const trackedChannels = Object.keys(state.botChannels || {});
   let liveCount = 0;
   let liveUsers: any[] = [];

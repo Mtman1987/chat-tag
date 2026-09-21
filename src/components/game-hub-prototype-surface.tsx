@@ -65,33 +65,43 @@ function emojiTokens(message: string): string[] {
   try { return message.match(/\p{Extended_Pictographic}/gu) || []; } catch { return []; }
 }
 
-function TeamBoard({ events, gameKey, paint = false, broadcastOnly = false }: { events: GameHubChatEvent[]; gameKey: 'chatwars' | 'colorwars'; paint?: boolean; broadcastOnly?: boolean }) {
-  const state = useMemo(() => {
-    const memberships = new Map<string, string>();
-    const scores = Object.fromEntries(TEAM_NAMES.map((team) => [team, 0])) as Record<string, number>;
-    for (const event of events) {
-      const args = spmtArgs(event.message, gameKey, gameKey === 'chatwars' ? 'wars' : 'colors');
-      const team = args ? TEAM_NAMES.find((name) => args[0] === name) : undefined;
-      if (team) {
-        memberships.set(event.username, team);
-        scores[team] += paint ? 2 : 1;
-        continue;
-      }
-      const current = memberships.get(event.username);
-      if (current && !isSpmtCommand(event.message)) scores[current] += 1;
-    }
-    return { memberships, scores };
-  }, [events, gameKey, paint]);
-  const total = Math.max(1, Object.values(state.scores).reduce((sum, value) => sum + value, 0));
-  return (
-    <div className={`grid gap-2 ${broadcastOnly ? 'h-full content-center' : ''}`}>
-      {TEAM_NAMES.map((team) => {
-        const pct = Math.round((state.scores[team] / total) * 100);
-        return <div key={team} className="grid grid-cols-[62px_1fr_42px] items-center gap-2 text-xs"><span className="capitalize">{team}</span><span className="h-3 overflow-hidden rounded-full bg-white/10"><i className="block h-full rounded-full" style={{ width: `${pct}%`, background: COLORS[team] }} /></span><b>{pct}%</b></div>;
-      })}
-      {!broadcastOnly && <div className="text-[10px] text-white/50">{state.memberships.size} team players · spmt {gameKey} red|blue|green|yellow</div>}
+type ChatWarsSnapshot = {
+  width: number;
+  height: number;
+  tiles: Array<'gray' | 'red' | 'blue' | 'green' | 'yellow'>;
+  counts: Record<'red' | 'blue' | 'green' | 'yellow', number>;
+  leaderboard: Array<{ username: string; team: string; level: number; score: number }>;
+};
+
+function ChatWarsBoard({ channel, gridOnly = false }: { channel: string; gridOnly?: boolean }) {
+  const [snapshot, setSnapshot] = useState<ChatWarsSnapshot | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch(`/api/game-hub/chat-wars?channel=${encodeURIComponent(channel)}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const body = await response.json() as ChatWarsSnapshot;
+        if (!cancelled) setSnapshot(body);
+      } catch {}
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 1500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [channel]);
+
+  if (!snapshot) return <div className="h-full w-full bg-slate-950" />;
+  const grid = <div aria-label="Chat Wars territory grid" className="grid h-full w-full gap-px overflow-hidden bg-slate-800 p-px" style={{ gridTemplateColumns: `repeat(${snapshot.width}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${snapshot.height}, minmax(0, 1fr))` }}>
+    {snapshot.tiles.map((team, index) => <span key={index} className="min-h-0 min-w-0" style={{ background: team === 'gray' ? '#111827' : COLORS[team] }} />)}
+  </div>;
+  if (gridOnly) return grid;
+  const total = Math.max(1, snapshot.width * snapshot.height);
+  return <div className="grid aspect-[4/5] w-full max-w-[420px] grid-rows-[1fr_auto] gap-3">
+    {grid}
+    <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-black uppercase">
+      {TEAM_NAMES.map((team) => <span key={team} style={{ color: COLORS[team] }}>{team} {Math.round((snapshot.counts[team] / total) * 100)}%</span>)}
     </div>
-  );
+  </div>;
 }
 
 type MosaicSnapshot = {
@@ -299,8 +309,7 @@ export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly =
       const plants = passive.flatMap((event) => PLANTS.filter(([pattern]) => pattern.test(event.message)).map(([, icon]) => ({ icon, user: event.displayName }))).slice(-24);
       return <div className="flex min-h-36 flex-wrap content-end items-end justify-center gap-2 rounded-xl bg-gradient-to-b from-sky-950/40 to-emerald-950/40 p-3">{plants.length ? plants.map((plant, index) => <span key={`${plant.user}-${index}`} className="text-3xl" title={plant.user}>{plant.icon}</span>) : broadcastOnly ? null : <span className="self-center text-sm text-white/40">Mention flowers, trees, grass or mushrooms.</span>}</div>;
     }
-    if (game.id === 'chatwars') return <TeamBoard events={recent} gameKey="chatwars" broadcastOnly={broadcastOnly} />;
-    if (game.id === 'colorwars') return <TeamBoard events={recent} gameKey="colorwars" paint broadcastOnly={broadcastOnly} />;
+    if (game.id === 'chatwars') return <ChatWarsBoard channel={channel} gridOnly={broadcastOnly} />;
     if (game.id === 'chickenroyale') return <RaceBoard events={recent} chicken broadcastOnly={broadcastOnly} />;
     if (game.id === 'petrace') return <RaceBoard events={recent} broadcastOnly={broadcastOnly} />;
     if (game.id === 'pixelbattle') return <PixelBoard channel={channel} gridOnly={broadcastOnly} />;
@@ -326,10 +335,6 @@ export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly =
         if (action === 'leave') dancers.delete(event.username);
       }
       return <div className="flex min-h-36 flex-wrap items-end justify-center gap-4">{dancers.size ? [...dancers.values()].map((event) => <div key={event.username} className="text-center"><div className="animate-bounce text-4xl">🕺</div><div className="text-[10px]">{event.displayName}</div></div>) : broadcastOnly ? null : <span className="self-center text-sm text-white/40">spmt parade to join.</span>}</div>;
-    }
-    if (game.id === 'memorylane') {
-      const memories = passive.filter((event) => event.message.length >= 24).slice(-5);
-      return <div className="grid gap-2">{memories.length ? memories.map((event) => <div key={event.id} className="rotate-[-1deg] rounded bg-white p-2 text-slate-900 shadow"><div className="text-[10px] font-bold">{event.displayName}</div><div className="line-clamp-2 text-xs">{event.message}</div></div>) : broadcastOnly ? null : <span className="text-sm text-white/40">Share a story or memory in chat.</span>}</div>;
     }
     if (game.id === 'colorsymphony') {
       const notes = passive.flatMap((event) => Object.keys(COLORS).filter((color) => new RegExp(`\\b${color}\\b`, 'i').test(event.message)).map((color) => ({ color, id: `${event.id}-${color}` }))).slice(-16);

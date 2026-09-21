@@ -22,8 +22,8 @@ interface OverlayState {
   timestamp: number;
 }
 
-type BroadcastType = 'tag' | 'ffa' | 'newit' | 'history' | 'message';
-interface Broadcast { type: BroadcastType; lines: string[]; icon: string; color: string; glow: string; sound?: ChatTagSoundKey; }
+type BroadcastType = 'tag' | 'ffa' | 'newit' | 'history' | 'message' | 'chat-wars';
+interface Broadcast { type: BroadcastType; lines: string[]; icon: string; color: string; glow: string; sound?: ChatTagSoundKey; payload?: any; }
 interface OverlayMessage {
   type?: string;
   message?: string;
@@ -235,6 +235,7 @@ export default function OverlayPage() {
         newit: [493.88, 659.25, 739.99],
         history: [392.0, 523.25],
         message: [587.33, 698.46],
+        'chat-wars': [261.63, 392.0, 523.25],
       };
 
       tones[type].forEach((freq, index) => {
@@ -409,6 +410,16 @@ export default function OverlayPage() {
           sound: 'leaderboard',
           lines: (payload.rows || []).map((row: any) => `#${row.rank} ${row.username} ${row.score} pts`),
         };
+      case 'chat-wars-reveal':
+        return {
+          type: 'chat-wars',
+          icon: '⚔️',
+          color: '#22d3ee',
+          glow: '#8b5cf6',
+          sound: 'leaderboard',
+          lines: ['CHAT WARS'],
+          payload,
+        };
       case 'score-card':
         return {
           type: 'history',
@@ -570,7 +581,7 @@ export default function OverlayPage() {
       }
       const event = previewEvents[kind];
       const built = event ? buildBroadcastFromOverlayMessage(event) : null;
-      if (built) queueBroadcast(built, built.type === 'history' ? 15000 : 13000);
+      if (built) queueBroadcast(built, built.type === 'history' ? 15000 : built.type === 'chat-wars' ? 15000 : 13000);
     };
 
     const onMessage = (event: MessageEvent) => {
@@ -606,7 +617,7 @@ export default function OverlayPage() {
           for (const entry of newOverlayMessages) {
             const nextBroadcast = buildBroadcastFromOverlayMessage(entry);
             if (!nextBroadcast) continue;
-            queueBroadcast(nextBroadcast, nextBroadcast.type === 'history' ? 15000 : 13000);
+            queueBroadcast(nextBroadcast, nextBroadcast.type === 'history' ? 15000 : nextBroadcast.type === 'chat-wars' ? 15000 : 13000);
           }
         }
         prevOverlayMessageTs.current = latestMessageTs;
@@ -726,6 +737,22 @@ export default function OverlayPage() {
           zIndex: 50, padding: loungeCompact ? '4% 5%' : '3%', animation: 'broadcastIn 0.3s ease-out',
         }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: `radial-gradient(ellipse at center, ${broadcast.glow}22 0%, transparent 70%)`, pointerEvents: 'none' }} />
+          {broadcast.type === 'chat-wars' ? (
+            <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: '1.2%', width: '96%', height: '94%' }}>
+              <div style={{ textAlign: 'center', fontSize: loungeCompact ? 'min(5vw, 6vh)' : 'min(4vw, 5vh)', fontWeight: 950, letterSpacing: '.08em', textShadow: `0 0 2vw ${broadcast.glow}` }}>
+                CHAT WARS · {broadcast.payload?.phase === 'halftime' ? 'HALFTIME' : `HALF ${broadcast.payload?.activeHalf || 1}`}
+              </div>
+              <div aria-label="Full Chat Wars battlefield" style={{ display: 'grid', minHeight: 0, minWidth: 0, gridTemplateColumns: `repeat(${broadcast.payload?.width || 40}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${broadcast.payload?.height || 25}, minmax(0, 1fr))`, gap: 1, padding: 2, border: '2px solid #67e8f9', borderRadius: 8, background: '#0f172a', boxShadow: `0 0 2vw ${broadcast.glow}` }}>
+                {Array.from(String(broadcast.payload?.tiles || '')).map((tile, index) => (
+                  <span key={index} style={{ minWidth: 0, minHeight: 0, background: tile === 'r' ? '#ef4444' : tile === 'b' ? '#3b82f6' : tile === 'g' ? '#22c55e' : tile === 'y' ? '#eab308' : '#374151' }} />
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '3%', minHeight: 0, fontSize: loungeCompact ? 'min(2.8vw, 3.2vh)' : 'min(2.2vw, 2.8vh)', fontWeight: 850, lineHeight: 1.15 }}>
+                <div>{(broadcast.payload?.teams || []).map((entry: any) => <div key={entry.team} style={{ color: entry.team === 'red' ? '#f87171' : entry.team === 'blue' ? '#60a5fa' : entry.team === 'green' ? '#4ade80' : '#fde047' }}>{String(entry.team).toUpperCase()} {entry.score}</div>)}</div>
+                <div>{(broadcast.payload?.players || []).slice(0, 4).map((entry: any, index: number) => <div key={`${entry.username}-${index}`}>#{index + 1} {entry.username} · {entry.score} pts · L{entry.level}</div>)}</div>
+              </div>
+            </div>
+          ) : <>
           <div style={{
             fontSize: loungeCompact ? 'min(9vw,18vh)' : (broadcast.type === 'history' ? 'min(18vw,18vh)' : 'min(21.6vw,21.6vh)'),
             marginBottom: loungeCompact ? 0 : '1vh',
@@ -754,6 +781,7 @@ export default function OverlayPage() {
             </div>
           ))}
           <div style={{ width: '40%', height: '0.6vh', marginTop: '1.5vh', background: `linear-gradient(90deg, transparent, ${broadcast.color}, transparent)`, animation: 'lineGrow 0.5s ease-out 0.2s both' }} />
+          </>}
         </div>
       )}
 

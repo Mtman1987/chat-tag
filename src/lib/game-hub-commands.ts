@@ -48,6 +48,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt blue', description: 'Join or fight for blue.' },
     { trigger: 'spmt green', description: 'Join or fight for green.' },
     { trigger: 'spmt yellow', description: 'Join or fight for yellow.' },
+    { trigger: 'spmt wars view', description: 'Reveal both battlefields and the standings for 15 seconds.' },
   ] },
   { gameId: 'chickenroyale', key: 'chicken', aliases: ['chickenroyale', 'royale'], joinDescription: 'Enter Chicken Royale.', joinTrigger: 'spmt chicken', commands: [
     { trigger: 'spmt hatch', description: 'Enter Chicken Royale.' },
@@ -55,12 +56,6 @@ const SPECS: CanonicalGameCommandSpec[] = [
   ] },
   { gameId: 'colorsymphony', key: 'symphony', aliases: ['colorsymphony'], joinDescription: 'Join Color Symphony.', joinTrigger: 'spmt symphony', commands: [
     { trigger: 'spmt harmony', description: 'Join the shared symphony.' },
-  ] },
-  { gameId: 'colorwars', key: 'colorwars', aliases: ['colors'], joinDescription: 'Join Color Wars.', joinTrigger: 'spmt colors', commands: [
-    { trigger: 'spmt red', description: 'Paint for red.' },
-    { trigger: 'spmt blue', description: 'Paint for blue.' },
-    { trigger: 'spmt green', description: 'Paint for green.' },
-    { trigger: 'spmt yellow', description: 'Paint for yellow.' },
   ] },
   { gameId: 'dancingparade', key: 'parade', aliases: ['dancingparade'], joinDescription: 'Join the active Cosmic Conga Line.', joinTrigger: 'spmt join', commands: [
     { trigger: 'spmt <emoji>', description: 'Add up to five emoji to the shared parade.' },
@@ -70,7 +65,6 @@ const SPECS: CanonicalGameCommandSpec[] = [
   { gameId: 'emojitower', key: 'tower', aliases: ['emojitower'], joinDescription: 'Join Emoji Tower.', joinTrigger: 'spmt tower', commands: [
     { trigger: 'spmt drop', description: 'Drop the next tower block.' },
   ] },
-  { gameId: 'memorylane', key: 'memory', aliases: ['memorylane'], joinDescription: 'Join Memory Lane.', joinTrigger: 'spmt memory', commands: [] },
   { gameId: 'petrace', key: 'petrace', aliases: ['pets'], joinDescription: 'Enter Pet Race.', joinTrigger: 'spmt pet', commands: [
     { trigger: 'spmt pet dog', description: 'Enter as a dog.' },
     { trigger: 'spmt pet cat', description: 'Enter as a cat.' },
@@ -153,8 +147,7 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
   }
 
   if (/^(red|blue|green|yellow)$/.test(root)) {
-    const intents = ['chatwars', 'colorwars'].flatMap((gameId) => activeIntent(gameId, [root]));
-    return { recognized: true, mode: intents.length > 1 ? 'broadcast' : 'single', intents };
+    return { recognized: true, mode: 'single', intents: activeIntent('chatwars', [root]) };
   }
 
   const direct: Record<string, [string, string[]]> = {
@@ -162,9 +155,9 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
     chaos: ['chaosmode', []], explode: ['chaosmode', ['explode']], glitch: ['chaosmode', ['glitch']], portal: ['chaosmode', ['portal']], shake: ['chaosmode', ['shake']],
     garden: ['chatgarden', []], grow: ['chatgarden', []], wars: ['chatwars', []],
     chicken: ['chickenroyale', []], royale: ['chickenroyale', []], hatch: ['chickenroyale', []], launch: ['chickenroyale', ['start']],
-    symphony: ['colorsymphony', []], harmony: ['colorsymphony', []], colors: ['colorwars', []],
+    symphony: ['colorsymphony', []], harmony: ['colorsymphony', []],
     parade: ['dancingparade', []], dance: ['dancingparade', ['dance']], rain: ['emojirain', []],
-    tower: ['emojitower', []], drop: ['emojitower', ['drop']], memory: ['memorylane', []],
+    tower: ['emojitower', []], drop: ['emojitower', ['drop']],
     phrase: ['phraseguess', []], hint: ['phraseguess', ['hint']], pixel: ['pixelbattle', []], mosaic: ['pixelbattle', []], rhythm: ['rhythmpulse', []],
     treasure: ['treasurehunt', []], chain: ['wordchain', []], storm: ['wordstorm', []],
   };

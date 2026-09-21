@@ -23,7 +23,7 @@ export async function GET(
     },
     'system-spacemountainlive-activity': {
       name: 'SpaceMountainLive Activity Games',
-      gameIds: ['chatwars', 'colorwars', 'memorylane', 'pixelbattle', 'treasurehunt', 'bingo'],
+      gameIds: ['chatwars', 'pixelbattle', 'treasurehunt', 'bingo'],
       layout: 'rotation',
     },
     'system-spacemountainlive-rain': {

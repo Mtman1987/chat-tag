@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Discord's animated 20-game Nebula Arcade showcase asset."""
+"""Generate Discord's animated Nebula Arcade showcase asset."""
 
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -19,11 +19,9 @@ GAMES = [
     ("Chat Wars", "strategy", "Color teams fight for territory"),
     ("Chicken Royale", "race", "Last chicken standing wins"),
     ("Color Symphony", "music", "Color words become music and light"),
-    ("Color Wars", "strategy", "Paint the board for your team"),
     ("Dancing Parade", "party", "Chatters dance in one parade"),
     ("Emoji Rain", "party", "Every emoji falls into the overlay"),
     ("Emoji Tower", "party", "Stack the tallest community tower"),
-    ("Memory Lane", "creative", "Stories become drifting memory cards"),
     ("Pet Race", "race", "Enter a pet in a quick live race"),
     ("Phrase Guess", "word", "Race to solve the hidden phrase"),
     ("Nebula Mosaic", "creative", "Complete AI-generated artwork together"),
@@ -90,7 +88,7 @@ def frame_for(index: int, game):
     image.paste(icon, (77, 48), icon)
     draw = ImageDraw.Draw(image, "RGBA")
     draw.text((175, 57), "NEBULA ARCADE", font=font(32, True), fill=(245, 248, 255, 255))
-    draw.text((177, 98), "ONE BOT  •  TWENTY GAMES", font=font(15, True), fill=(*accent, 230))
+    draw.text((177, 98), "ONE BOT  •  EIGHTEEN GAMES", font=font(15, True), fill=(*accent, 230))
     rounded_text(draw, (955, 69), f"{index + 1:02d} / {len(GAMES)}", (255, 255, 255, 245), (*accent, 55), font(18, True))
 
     rounded_text(draw, (85, 188), category.upper(), (*accent, 255), (*accent, 35), font(15, True), padding=(18, 8))

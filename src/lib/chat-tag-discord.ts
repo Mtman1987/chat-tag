@@ -268,7 +268,7 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
           ...announcementFields,
         ],
         author: {
-          name: 'Nebula Arcade · 20 Games',
+          name: 'Nebula Arcade · 18 Games',
           ...(iconUrl ? { icon_url: iconUrl } : {}),
         },
         ...(showcaseUrl ? { image: { url: showcaseUrl } } : {}),
@@ -285,7 +285,7 @@ export function buildChatTagEmbed(gameState: any, publicOrigin = getPublicAppOri
               {
                 type: 2,
                 style: 5,
-                label: 'Open all 20 games',
+                label: 'Open all 18 games',
                 emoji: { name: '🎮' },
                 url: gamesUrl,
               },

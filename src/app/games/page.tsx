@@ -7,11 +7,11 @@ import { NebulaArcadeShowcase } from '@/components/nebula-arcade-showcase';
 const showcaseImage = 'https://chat-tag-new.fly.dev/brand/nebula-arcade-games-showcase.gif?v=2';
 
 export const metadata: Metadata = {
-  title: 'Nebula Arcade · 20 Games',
+  title: 'Nebula Arcade · 18 Games',
   description: 'One bot, one rotating overlay, and 20 equal community games built for live chat.',
   openGraph: {
-    title: 'Nebula Arcade · 20 Games',
-    description: 'See all 20 live-chat games in the Nebula Arcade rotation.',
+    title: 'Nebula Arcade · 18 Games',
+    description: 'See all 18 live-chat games in the Nebula Arcade rotation.',
     url: 'https://chat-tag-new.fly.dev/games',
     siteName: 'Nebula Arcade',
     type: 'website',
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Nebula Arcade · 20 Games',
-    description: 'See all 20 live-chat games in the Nebula Arcade rotation.',
+    title: 'Nebula Arcade · 18 Games',
+    description: 'See all 18 live-chat games in the Nebula Arcade rotation.',
     images: [showcaseImage],
   },
 };

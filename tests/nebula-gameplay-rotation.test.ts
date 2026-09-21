@@ -5,9 +5,9 @@ import { GAME_HUB_CATALOG } from '../src/lib/game-hub-registry';
 import { NEBULA_GAMEPLAY_ROTATION_MS, buildChatTagEmbed, nebulaGameplayImageUrl } from '../src/lib/chat-tag-discord';
 import { nebulaNextRotationDelayMs, nebulaRotationIndexAt, nebulaRotationIntervalMs } from '../src/lib/nebula-rotation';
 
-test('showcase catalog exposes all 20 games for gameplay capture', () => {
-  assert.equal(GAME_HUB_CATALOG.length, 20);
-  assert.equal(new Set(GAME_HUB_CATALOG.map((game) => game.id)).size, 20);
+test('showcase catalog exposes all 18 games for gameplay capture', () => {
+  assert.equal(GAME_HUB_CATALOG.length, 18);
+  assert.equal(new Set(GAME_HUB_CATALOG.map((game) => game.id)).size, 18);
 });
 
 test('showcase manifest auto-discovers HTML games and fingerprints their source', () => {

@@ -61,7 +61,7 @@ export default async function GamesHubLeaderProfilePage({
 
         <section className="space-y-3">
           <div>
-            <h2 className="font-headline text-xl text-white">All 20 games</h2>
+            <h2 className="font-headline text-xl text-white">All 18 games</h2>
             <p className="mt-1 text-xs text-slate-500">Played history is preserved even after leaving or when a streamer stops that game.</p>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">

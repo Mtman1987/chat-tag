@@ -1901,23 +1901,24 @@ console.log = (...args) => {
       const activityChannel = (resolvedChannel !== senderLogin) ? resolvedChannel : undefined;
       // Forward chat to DSH for leaderboard points
       forwardToDSH({ type: 'chat', twitchLogin: senderLogin, twitchId: tags['user-id'], username: tags['display-name'] || senderLogin, channel: resolvedChannel });
-      // Chat Tag and Games Hub only need a recent-presence heartbeat. Sending
-      // both volume-backed API writes for every IRC message saturated the web
-      // process and made even health/read endpoints miss the bot's timeout.
+      // Games such as Chat Wars score each eligible message, so game chat cannot
+      // share Chat Tag's throttled presence heartbeat. The route exits without
+      // a write when no game is active.
+      apiCall('/api/game-hub/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: resolvedChannel,
+          userId: tags['user-id'] || '',
+          username: senderLogin,
+          displayName: tags['display-name'] || senderLogin,
+          message,
+          color: tags.color || '',
+          badges: tags.badges || {},
+        }),
+      }).catch(() => {});
+      // Chat Tag itself still only needs the lower-frequency heartbeat.
       if (shouldForwardChatActivity(senderUserId, resolvedChannel)) {
-        apiCall('/api/game-hub/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            channel: resolvedChannel,
-            userId: tags['user-id'] || '',
-            username: senderLogin,
-            displayName: tags['display-name'] || senderLogin,
-            message,
-            color: tags.color || '',
-            badges: tags.badges || {},
-          }),
-        }).catch(() => {});
         apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
