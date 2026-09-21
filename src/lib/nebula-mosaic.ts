@@ -334,6 +334,28 @@ export function setMosaicView(state: any, channelValue: unknown, view: 'all' | M
   return current;
 }
 
+export function finishMosaicForPreview(state: any, channelValue: unknown, now = Date.now()) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const mosaic = getMosaicChannelState(state, channel);
+  const artwork = resumeMosaicIfNeeded(state, channel, now);
+  if (!artwork) throw new Error('No Nebula Mosaic is ready to finish.');
+
+  // This is an owner/mod preview shortcut, not gameplay. Reveal the stored
+  // target without granting 2,000 artificial paint points or milestone awards.
+  artwork.painted = [...artwork.target];
+  artwork.paintedBy = artwork.paintedBy.map((playerId, index) =>
+    playerId && artwork.painted[index] === artwork.target[index] ? playerId : '');
+  artwork.status = 'completed';
+  artwork.updatedAt = nowIso(now);
+  artwork.lastInteractionAt = nowIso(now);
+  artwork.activeIdleMs = 0;
+  artwork.lastHeartbeatAt = nowIso(now);
+  artwork.viewMode = 'all';
+  delete artwork.viewUntil;
+  mosaic.saves = [artwork, ...mosaic.saves.filter((item) => item.id !== artwork.id)].slice(0, 20);
+  return artwork;
+}
+
 function boardOrigin(board: MosaicBoardNumber) {
   return {
     x: board === 2 || board === 4 ? MOSAIC_BOARD_WIDTH : 0,
@@ -466,7 +488,9 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     retryAt: latestRequest.retryAt || '',
   } : null;
   if (!artwork) return { artwork: null, queueLength, generation };
-  const viewMode = artwork.viewMode === 'all' && Date.parse(String(artwork.viewUntil || 0)) > now ? 'all' : 'board';
+  const viewMode = artwork.status === 'completed'
+    ? 'all'
+    : artwork.viewMode === 'all' && Date.parse(String(artwork.viewUntil || 0)) > now ? 'all' : 'board';
   const progress = artwork.painted.reduce((count, color, index) => count + (color === artwork.target[index] ? 1 : 0), 0);
   const boardOriginValue = boardOrigin(artwork.activeBoard);
   const boardTarget: string[] = [];

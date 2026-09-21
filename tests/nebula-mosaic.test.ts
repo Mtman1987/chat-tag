@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   claimNextMosaicRequest,
   failMosaicRequest,
+  finishMosaicForPreview,
   MOSAIC_XP_COST,
   installMosaicTemplate,
   mosaicPublicSnapshot,
@@ -93,6 +94,25 @@ test('Mosaic show and view commands select one board or the temporary combined a
   setMosaicView(draft, 'spacemountainlive', 'all', 20);
   assert.equal(mosaicPublicSnapshot(draft, 'spacemountainlive', 21).artwork?.viewMode, 'all');
   assert.equal(mosaicPublicSnapshot(draft, 'spacemountainlive', 20_000).artwork?.viewMode, 'board');
+});
+
+test('Mosaic preview completion fills and saves the hidden target without awarding gameplay points', () => {
+  const draft = readyMosaic();
+  const artwork = draft.gameSettings.default.gameHub.channels.spacemountainlive.mosaic.current;
+  artwork.painted[0] = artwork.target[0];
+  artwork.paintedBy[0] = 'twitch:7';
+
+  const completed = finishMosaicForPreview(draft, 'spacemountainlive', 50);
+  const snapshot = mosaicPublicSnapshot(draft, 'spacemountainlive', 60);
+  assert.equal(completed.status, 'completed');
+  assert.deepEqual(completed.painted, completed.target);
+  assert.equal(completed.paintedBy[0], 'twitch:7');
+  assert.equal(completed.paintedBy.slice(1).every((value: string) => value === ''), true);
+  assert.equal(snapshot.artwork?.progress, 2_000);
+  assert.equal(snapshot.artwork?.viewMode, 'all');
+  assert.equal(snapshot.artwork?.width, 40);
+  assert.equal(snapshot.artwork?.height, 50);
+  assert.equal(draft.gameSettings.default.gameHub.channels.spacemountainlive.mosaic.saves[0].id, completed.id);
 });
 
 test('Mosaic scores correct and incorrect colors and persists exact board progress', () => {

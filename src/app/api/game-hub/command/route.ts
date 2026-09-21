@@ -40,6 +40,7 @@ import { lookupTwitchUser } from '@/lib/twitch';
 import {
   MOSAIC_COLORS,
   MOSAIC_XP_COST,
+  finishMosaicForPreview,
   mosaicPublicSnapshot,
   paintMosaicCell,
   parseMosaicPaintCommand,
@@ -160,6 +161,28 @@ export async function POST(req: NextRequest) {
   const activeForDirectRouting = resolveChannelGameIds(directState, channel);
   const activeActivityGame = currentActivityGameId(directState, channel, activeForDirectRouting);
   const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
+
+  if (command === 'mosaic' && /^(?:finish|complete)$/.test(String(parts[1] || '').toLowerCase()) && parts.length === 2) {
+    if (!canControl) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Only the streamer or a moderator can finish a Mosaic preview.` });
+    }
+    try {
+      const artwork = await updateAppState((draft) => {
+        const completed = finishMosaicForPreview(draft, channel);
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: 'pixelbattle', actorId: userId, username, displayName,
+          action: 'preview-complete', args: [completed.id], message: String(body.message || ''),
+        });
+        return completed;
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} completed and saved “${artwork.theme}” for preview. The overlay now shows the full Mosaic.`,
+      });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'That Mosaic could not be completed.'}` });
+    }
+  }
 
   if (command === 'mosaic' && parts.length > 1) {
     let theme = '';
