@@ -54,6 +54,7 @@ import {
 import { awardSpmtXp } from '@/lib/spmt-client';
 import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
 import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
+import { instantGameOverlayProfileId } from '@/lib/game-hub-overlays';
 import {
   addDancingParadeEmojis,
   addDancingParadeParticipant,
@@ -122,6 +123,11 @@ function guideUrl(req: NextRequest, channel: string) {
 
 function gamePopoutUrl(req: NextRequest, channel: string, gameId: string) {
   return `${publicOrigin(req)}/games/${encodeURIComponent(gameId)}?channel=${encodeURIComponent(channel)}`;
+}
+
+function instantGameOverlayUrl(req: NextRequest, channel: string, gameId: string) {
+  const profileId = instantGameOverlayProfileId(channel, gameId);
+  return profileId ? `${publicOrigin(req)}/overlay/game-hub/${profileId}` : '';
 }
 
 function gameReplyWithPopout(req: NextRequest, channel: string, gameId: string, message: string) {
@@ -658,13 +664,14 @@ export async function POST(req: NextRequest) {
       return resolveChannelGameIds(state, channel);
     });
     const url = gamePopoutUrl(req, channel, game.id);
+    const overlayUrl = instantGameOverlayUrl(req, channel, game.id);
     return NextResponse.json({
       handled: true,
       reply: action === 'start'
-        ? `${game.name} is now ACTIVE in #${channel}. Learn, play, and control it here: ${url}`.slice(0, 480)
+        ? `${game.name} is ACTIVE in #${channel}. Open to play or watch: ${url} · Streamer: copy into an OBS Browser Source: ${overlayUrl}`.slice(0, 480)
         : `${game.name} is now STOPPED in #${channel}.`,
       activeGameIds: activeIds,
-      ...(action === 'start' ? { launchUrl: url } : {}),
+      ...(action === 'start' ? { launchUrl: url, overlayUrl } : {}),
     });
   }
 

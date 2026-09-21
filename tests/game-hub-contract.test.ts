@@ -17,6 +17,8 @@ import {
 import {
   cloneGameOverlayProfile,
   createGameOverlayProfile,
+  instantGameOverlayProfile,
+  instantGameOverlayProfileId,
   patchGameOverlayProfile,
 } from '../src/lib/game-hub-overlays';
 import {
@@ -369,7 +371,9 @@ test('compact replies preserve useful text before a link and stay under Twitch l
 
 test('game commands return the per-game learn-by-doing popout', () => {
   const command = read('src/app/api/game-hub/command/route.ts');
+  const overlayRoute = read('src/app/api/overlay/game-hub/[profileId]/route.ts');
   assert.match(command, /function gamePopoutUrl/);
+  assert.match(command, /function instantGameOverlayUrl/);
   assert.match(command, /function gameReplyWithPopout/);
   assert.match(command, /getPublicAppOrigin\(req\)/);
   assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\?channel=/);
@@ -379,6 +383,27 @@ test('game commands return the per-game learn-by-doing popout', () => {
   assert.match(command, /Only the streamer or a moderator can \$\{action\} \$\{game\.name\}[\s\S]*gameReplyWithPopout/);
   assert.match(command, /gameReplyWithPopout\(req, channel, game\.id, `@\$\{displayName\} \$\{game\.name\} is not ACTIVE/);
   assert.match(command, /launchUrl: url/);
+  assert.match(command, /copy into an OBS Browser Source/);
+  assert.match(command, /overlayUrl/);
+  assert.match(overlayRoute, /instantGameOverlayProfile\(id\)/);
+});
+
+test('instant game overlays are transparent, focused, and channel isolated', () => {
+  const id = instantGameOverlayProfileId('Friend_Channel', 'pixelbattle');
+  assert.equal(id, 'instant.friend_channel.pixelbattle');
+  assert.deepEqual(instantGameOverlayProfile(id), {
+    id,
+    ownerUserId: 'twitch-channel:friend_channel',
+    ownerLogin: 'friend_channel',
+    name: 'Nebula Mosaic for #friend_channel',
+    gameIds: ['pixelbattle'],
+    layout: 'focus',
+    transparent: true,
+    createdAt: 'instant',
+    updatedAt: 'instant',
+  });
+  assert.equal(instantGameOverlayProfileId('friend_channel', 'not-a-game'), null);
+  assert.equal(instantGameOverlayProfile('instant.friend_channel.not-a-game'), null);
 });
 
 test('score snapshots expose real Chat Tag and personal Bingo counters', () => {

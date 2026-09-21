@@ -23,6 +23,33 @@ function normalizeLogin(value: unknown): string {
   return String(value || '').trim().toLowerCase().replace(/^#/, '').slice(0, 80);
 }
 
+export function instantGameOverlayProfileId(channelValue: unknown, gameIdValue: unknown): string | null {
+  const ownerLogin = normalizeLogin(channelValue);
+  const gameId = String(gameIdValue || '').trim().toLowerCase();
+  if (!/^[a-z0-9_]{1,25}$/.test(ownerLogin)) return null;
+  if (!GAME_HUB_CATALOG.some((game) => game.id === gameId)) return null;
+  return `instant.${ownerLogin}.${gameId}`;
+}
+
+export function instantGameOverlayProfile(profileIdValue: unknown): GameOverlayProfile | null {
+  const id = String(profileIdValue || '').trim().toLowerCase();
+  const match = id.match(/^instant\.([a-z0-9_]{1,25})\.([a-z0-9-]{1,40})$/);
+  if (!match || instantGameOverlayProfileId(match[1], match[2]) !== id) return null;
+  const game = GAME_HUB_CATALOG.find((item) => item.id === match[2]);
+  if (!game) return null;
+  return {
+    id,
+    ownerUserId: `twitch-channel:${match[1]}`,
+    ownerLogin: match[1],
+    name: `${game.name} for #${match[1]}`,
+    gameIds: [game.id],
+    layout: 'focus',
+    transparent: true,
+    createdAt: 'instant',
+    updatedAt: 'instant',
+  };
+}
+
 export function normalizeGameOverlayProfile(value: JsonObject): GameOverlayProfile | null {
   const id = String(value?.id || '').trim();
   const ownerUserId = String(value?.ownerUserId || '').trim();

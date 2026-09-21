@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readAppState } from '@/lib/volume-store';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
-import { normalizeGameOverlayProfile } from '@/lib/game-hub-overlays';
+import { instantGameOverlayProfile, normalizeGameOverlayProfile } from '@/lib/game-hub-overlays';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +39,7 @@ export async function GET(
   };
 
   const system = systemProfiles[id];
+  const instant = instantGameOverlayProfile(id);
   const store = (state.gameSettings.default?.gameHubOverlayProfiles || {}) as Record<string, any>;
   const profile = system ? {
     id,
@@ -50,7 +51,7 @@ export async function GET(
     transparent: true,
     createdAt: 'system',
     updatedAt: 'system',
-  } : normalizeGameOverlayProfile(store[id]);
+  } : instant || normalizeGameOverlayProfile(store[id]);
   if (!profile) return NextResponse.json({ error: 'Overlay was not found.' }, { status: 404 });
 
   const games = profile.gameIds
