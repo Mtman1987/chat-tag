@@ -42,6 +42,8 @@ export function GameHubSurface({
     content = <iframe src={`/quackverse-overlay${query}`} title={`${game.name} overlay`} className="h-full w-full border-0 bg-transparent" />;
   } else if (game.id === 'bingo') {
     content = <GameHubBingoSurface channel={channel || 'chat'} broadcastOnly={!chrome} />;
+  } else if (!chrome && game.id === 'dancingparade') {
+    content = <NebulaGameFrame game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly />;
   } else if (game.id === 'chatwars' || game.id === 'treasurehunt') {
     content = <GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel || 'chat'} broadcastOnly={!chrome} />;
   } else if (game.sourcePrototype && !LARGE_STAGE_GAMES.has(game.id)) {
