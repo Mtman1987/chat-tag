@@ -683,3 +683,18 @@ test('Quackverse launches as a browser room while the community overlay stays pa
   assert.match(commands, /spmt pack[\s\S]*reveal appears on stream/);
   assert.doesNotMatch(profile, /gameIds: \['quackverse', 'bingo'/);
 });
+
+
+test('SpaceMountain parade overlay is full-screen and Overlay Bay test raids use the real raid start route', () => {
+  const surface = read('src/components/game-hub-surface.tsx');
+  const overlay = read('src/app/overlay/game-hub/[profileId]/page.tsx');
+  const parade = read('src/app/api/game-hub/parade/route.ts');
+  const bot = read('bot.js');
+  assert.match(surface, /!chrome && game\.id === 'dancingparade'[\s\S]*NebulaGameFrame/);
+  assert.match(overlay, /system-spacemountainlive-parade/);
+  assert.match(overlay, /ALWAYS_VISIBLE_SYSTEM_PROFILES/);
+  assert.match(parade, /x-spmt-overlay-test/);
+  assert.match(parade, /api\/oauth\/userinfo/);
+  assert.match(parade, /username\) === 'spacemountainlive'/);
+  assert.match(bot, /handleRaidSupport[\s\S]*api\/game-hub\/parade[\s\S]*trigger: 'raid'/);
+});
