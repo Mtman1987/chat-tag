@@ -28,6 +28,27 @@ function normalizeChannel(value: unknown) {
   return String(value || '').trim().toLowerCase().replace(/^#/, '').slice(0, 80);
 }
 
+async function isSpaceMountainOverlayTestRaid(req: NextRequest, body: any) {
+  if (String(req.headers.get('x-spmt-overlay-test') || '').toLowerCase() !== 'raid') return false;
+  if (String(body?.action || '').toLowerCase() !== 'start') return false;
+  if (String(body?.trigger || '').toLowerCase() !== 'raid') return false;
+  if (normalizeChannel(body?.channel) !== 'spacemountainlive') return false;
+  const authorization = String(req.headers.get('authorization') || '').trim();
+  if (!authorization.startsWith('Bearer ')) return false;
+  try {
+    const response = await fetch('https://spmt.live/api/oauth/userinfo', {
+      headers: { Authorization: authorization, Accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return false;
+    const user = await response.json().catch(() => null) as any;
+    return normalizeChannel(user?.username) === 'spacemountainlive';
+  } catch {
+    return false;
+  }
+}
+
 async function queueStellaIntro() {
   try {
     const secret = getBotSecret();
@@ -120,10 +141,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isBotRequest(req)) {
+  const body = await req.json().catch(() => ({})) as any;
+  if (!isBotRequest(req) && !await isSpaceMountainOverlayTestRaid(req, body)) {
     return NextResponse.json({ error: 'Bot service authentication required.' }, { status: 401 });
   }
-  const body = await req.json().catch(() => ({})) as any;
   const action = String(body?.action || '').trim().toLowerCase();
 
   if (action === 'start') {

@@ -33,7 +33,7 @@ type RuntimeAction = {
 };
 
 const NEBULA_ACTIVITY_IDLE_MS = 30 * 60_000;
-const ALWAYS_VISIBLE_SYSTEM_PROFILES = new Set(['system-spacemountainlive-main']);
+const ALWAYS_VISIBLE_SYSTEM_PROFILES = new Set(['system-spacemountainlive-main', 'system-spacemountainlive-parade']);
 
 function isSpmtCommand(message: string) {
   return /^!?@?spmt(?:\s|$)/i.test(String(message || '').trim());
