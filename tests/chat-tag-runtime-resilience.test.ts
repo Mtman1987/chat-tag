@@ -16,6 +16,8 @@ test('SpaceMountain internal broadcaster bridge uses the existing authenticated 
 
   assert.ok(routeStart >= 0, 'internal SpaceMountain send route must exist');
   assert.match(route, /x-bot-secret/);
+  assert.match(route, /x-spacemountain-lounge/);
+  assert.match(route, /!isSpaceMountainLoungePass && \(!suppliedSecret \|\| suppliedSecret !== expectedSecret\)/);
   assert.match(route, /username \|\| ''\)\.trim\(\)\.toLowerCase\(\) !== 'spacemountainlive'/);
   assert.match(route, /!isIrcConnected/);
   assert.match(route, /await client\.say\('#spacemountainlive', message\)/);
