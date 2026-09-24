@@ -11,7 +11,20 @@ source = source
   .replace('|| 15_000,\n);', '|| 60_000,\n);');
 
 const realtimeMarker = 'Games Hub gameplay events stay realtime; Chat Tag persistence stays throttled.';
-if (!source.includes(realtimeMarker)) {
+const existingDshForward = source.indexOf("forwardToDSH({ type: 'chat'");
+const existingGameHubWrite = source.indexOf("apiCall('/api/game-hub/chat'", existingDshForward);
+const existingThrottle = source.indexOf(
+  'if (shouldForwardChatActivity(senderUserId, resolvedChannel))',
+  existingGameHubWrite,
+);
+const existingTagWrite = source.indexOf("apiCall('/api/tag'", existingThrottle);
+const currentPressureContract =
+  existingDshForward >= 0
+  && existingGameHubWrite > existingDshForward
+  && existingThrottle > existingGameHubWrite
+  && existingTagWrite > existingThrottle;
+
+if (!source.includes(realtimeMarker) && !currentPressureContract) {
   const startMarker = '      // Chat Tag and Games Hub only need a recent-presence heartbeat.';
   const start = source.indexOf(startMarker);
   if (start < 0) throw new Error('Combined Chat Tag/Games Hub heartbeat block was not found.');
