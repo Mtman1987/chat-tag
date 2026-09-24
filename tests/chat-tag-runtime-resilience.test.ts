@@ -7,6 +7,21 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
+
+test('SpaceMountain internal broadcaster bridge uses the existing authenticated bot client', () => {
+  const bot = read('bot.js');
+  const routeStart = bot.indexOf("req.url === '/internal/spacemountainlive-send'");
+  const routeEnd = bot.indexOf("req.url === '/broadcast'", routeStart);
+  const route = bot.slice(routeStart, routeEnd);
+
+  assert.ok(routeStart >= 0, 'internal SpaceMountain send route must exist');
+  assert.match(route, /x-bot-secret/);
+  assert.match(route, /username \|\| ''\)\.trim\(\)\.toLowerCase\(\) !== 'spacemountainlive'/);
+  assert.match(route, /!isIrcConnected/);
+  assert.match(route, /await client\.say\('#spacemountainlive', message\)/);
+  assert.doesNotMatch(route, /new tmi\.Client/);
+});
+
 test('bot keeps Games Hub events realtime while throttling Chat Tag persistence', () => {
   const patch = read('scripts/patch-live-chat-pressure.mjs');
   const dockerfile = read('Dockerfile.bot');
