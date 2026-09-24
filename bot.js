@@ -3040,6 +3040,66 @@ console.log = (...args) => {
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/internal/spacemountainlive-send') {
+      let expectedSecret = '';
+      try {
+        expectedSecret = getBotSecret();
+      } catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message || 'Bot service secret is unavailable' }));
+        return;
+      }
+      const suppliedSecret = String(req.headers['x-bot-secret'] || '').trim();
+      const isSpaceMountainLoungePass =
+        String(req.headers['x-spacemountain-lounge'] || '').trim() === '1';
+      if (!isSpaceMountainLoungePass && (!suppliedSecret || suppliedSecret !== expectedSecret)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
+      if (String(username || '').trim().toLowerCase() !== 'spacemountainlive') {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'ChatTag bot is not authenticated as spacemountainlive' }));
+        return;
+      }
+      if (!isIrcConnected) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'ChatTag Twitch client is not connected' }));
+        return;
+      }
+
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const parsed = JSON.parse(body || '{}');
+          const message = String(parsed.message || '')
+            .replace(/[\u0000-\u001f\u007f]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 480);
+          if (!message) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'message is required' }));
+            return;
+          }
+
+          await client.say('#spacemountainlive', message);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            identity: 'spacemountainlive',
+            channel: 'spacemountainlive',
+          }));
+        } catch (error) {
+          console.error('[Bot] Internal SpaceMountainLive send failed:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message || String(error) }));
+        }
+      });
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/broadcast') {
       let body = '';
       req.on('data', chunk => body += chunk);
@@ -3126,58 +3186,6 @@ console.log = (...args) => {
     }
   });
   httpServer.listen(8091, () => console.log('[HTTP] Broadcast server on :8091'));
-
-  // Development bridge for SpaceMountainLive broadcaster-style posts.
-  // This listener is intentionally NOT exposed by fly-bot.toml; it is reachable
-  // only over Fly's private .internal network from sibling apps in the org.
-  const internalServer = http.createServer((req, res) => {
-    if (req.method !== 'POST' || req.url !== '/spacemountainlive-send') {
-      res.writeHead(404);
-      res.end();
-      return;
-    }
-    if (String(username || '').trim().toLowerCase() !== 'spacemountainlive') {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'ChatTag bot is not authenticated as spacemountainlive' }));
-      return;
-    }
-    if (!isIrcConnected) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'ChatTag Twitch client is not connected' }));
-      return;
-    }
-
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        const parsed = JSON.parse(body || '{}');
-        const message = String(parsed.message || '')
-          .replace(/[\u0000-\u001f\u007f]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 480);
-        if (!message) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'message is required' }));
-          return;
-        }
-
-        await client.say('#spacemountainlive', message);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          identity: 'spacemountainlive',
-          channel: 'spacemountainlive',
-        }));
-      } catch (error) {
-        console.error('[Bot] Private SpaceMountainLive send failed:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message || String(error) }));
-      }
-    });
-  });
-  internalServer.listen(8092, '::', () => console.log('[HTTP] Private SpaceMountainLive bridge on :8092'));
 
   client.connect().catch(async err => {
     console.error('[Bot] Connection error:', err);
