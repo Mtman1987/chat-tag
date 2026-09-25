@@ -6,6 +6,7 @@ import type { GameHubGame } from '@/lib/game-hub-catalog';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
 import { GameHubPlayPanel } from '@/components/game-hub-play-panel';
+import { BingoTranscriptControl } from '@/components/bingo-transcript-control';
 
 type MosaicSnapshot = {
   artwork: null | {
@@ -21,8 +22,9 @@ type MosaicSnapshot = {
 
 const CLASSIC: Record<string,string> = {R:'#ef4444',B:'#3b82f6',G:'#22c55e',Y:'#eab308',P:'#a855f7',O:'#f97316',PK:'#ec4899',W:'#f8fafc',K:'#111827',C:'#06b6d4'};
 const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Commlink'] as const;
+const bingoTabs = ['Live','Mic','Command','Guide','Commlink'] as const;
 const basicTabs = ['Live','Command','Guide','Commlink'] as const;
-type Tab = typeof mosaicTabs[number] | typeof basicTabs[number];
+type Tab = typeof mosaicTabs[number] | typeof bingoTabs[number] | typeof basicTabs[number];
 
 function channelOf(value: unknown) {
   return String(value || '').trim().toLowerCase().replace(/^#/,'');
@@ -59,6 +61,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const [busy,setBusy] = useState(false);
   const [mosaic,setMosaic] = useState<MosaicSnapshot>({artwork:null,queueLength:0});
   const isMosaic = game.id === 'pixelbattle';
+  const isBingo = game.id === 'bingo';
 
   async function refreshMosaic() {
     if (!isMosaic || !channel) return;
@@ -94,7 +97,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     await run(command);
   }
 
-  const controllerTabs = useMemo<Tab[]>(() => isMosaic ? [...mosaicTabs] : [...basicTabs], [isMosaic]);
+  const controllerTabs = useMemo<Tab[]>(() => isMosaic ? [...mosaicTabs] : isBingo ? [...bingoTabs] : [...basicTabs], [isMosaic,isBingo]);
   const playerCommands = useMemo(() => canonicalPlayerCommands(game), [game]);
   const streamerCommands = useMemo(() => canonicalStreamerCommands(game), [game]);
   const quickCommands = useMemo(() => [...playerCommands, ...streamerCommands]
@@ -113,6 +116,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     <main className="mx-auto grid max-w-7xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
       <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-2xl">
         {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game surface</div><p className="mt-1 text-sm text-slate-400">This is the same game surface used elsewhere in Nebula, wrapped in private controller chrome.</p></div><GameHubPlayPanel game={game}/></div>) : null}
+        {tab==='Mic' && isBingo ? <BingoTranscriptControl channel={channel}/> : null}
         {tab==='Command' ? <div className="space-y-5">
           <div><h2 className="text-2xl font-black">Private command console</h2><p className="mt-1 text-sm text-slate-400">Runs the real Nebula command handler without sending a message to Twitch or Discord.</p></div>
           <form onSubmit={submit} className="flex gap-2"><input value={command} onChange={e=>setCommand(e.target.value)} placeholder={isMosaic?'spmt D12Y':'spmt ...'} className="min-w-0 flex-1 rounded-2xl border border-cyan-300/20 bg-black/50 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/60"/><button disabled={busy||!command.trim()} className="rounded-2xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 disabled:opacity-40">Run</button></form>
