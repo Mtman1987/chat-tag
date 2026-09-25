@@ -34,6 +34,7 @@ import { lookupTwitchUser } from '@/lib/twitch';
 import {
   MOSAIC_COLORS,
   MOSAIC_XP_COST,
+  clearMosaicQueue,
   finishMosaicForPreview,
   mosaicPublicSnapshot,
   paintMosaicCell,
@@ -41,7 +42,10 @@ import {
   parseMosaicPaintCommand,
   parseMosaicViewCommand,
   queueMosaicTheme,
+  removeMosaicQueueRequest,
+  resetMosaicForReplay,
   resumeMosaicIfNeeded,
+  setMosaicPalette,
   setMosaicBrush,
   setMosaicView,
   validateMosaicTheme,
@@ -199,6 +203,52 @@ export async function POST(req: NextRequest) {
       });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic could not be completed.'}`) });
+    }
+  }
+
+  if (command === 'mosaic' && parts[1]?.toLowerCase() === 'queue') {
+    const snapshot = mosaicPublicSnapshot(directState, channel) as any;
+    const items = Array.isArray(snapshot.queue) ? snapshot.queue : [];
+    const summary = items.length ? items.slice(0, 8).map((item: any) => `#${item.position} ${item.theme} (${item.status})`).join(' · ') : 'Queue is empty.';
+    return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${summary}`) });
+  }
+
+  if (command === 'mosaic' && /^(?:remove|drop|reject)$/.test(String(parts[1] || '').toLowerCase())) {
+    if (!canControl) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Only the streamer or a moderator can remove Mosaic requests.`) });
+    const selectorText = parts.slice(2).join(' ').trim();
+    const selector = /^\d+$/.test(selectorText) ? Number(selectorText) : selectorText;
+    if (!selectorText) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Use spmt mosaic remove 2 or spmt mosaic remove theme name.`) });
+    try {
+      const removed = await updateAppState((draft) => removeMosaicQueueRequest(draft, channel, selector));
+      return NextResponse.json({ handled: true, reply: `@${displayName} removed “${removed.theme}” from the Mosaic queue.` });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic request could not be removed.'}`) });
+    }
+  }
+
+  if (command === 'mosaic' && /^(?:clearqueue|clear-queue|queueclear)$/.test(String(parts[1] || '').toLowerCase())) {
+    if (!canControl) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Only the streamer or a moderator can clear the Mosaic queue.`) });
+    const count = await updateAppState((draft) => clearMosaicQueue(draft, channel));
+    return NextResponse.json({ handled: true, reply: `@${displayName} cleared ${count} Mosaic queue item${count === 1 ? '' : 's'}.` });
+  }
+
+  if (command === 'mosaic' && parts[1]?.toLowerCase() === 'palette') {
+    if (!canControl) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Only the streamer or a moderator can change the live Mosaic palette.`) });
+    try {
+      const artwork = await updateAppState((draft) => setMosaicPalette(draft, channel, parts[2] || 'classic'));
+      return NextResponse.json({ handled: true, reply: `@${displayName} switched “${artwork.theme}” to the ${artwork.paletteId || 'classic'} palette.` });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That palette is unavailable.'}`) });
+    }
+  }
+
+  if (command === 'mosaic' && /^(?:replay|again|reset)$/.test(String(parts[1] || '').toLowerCase())) {
+    if (!canControl) return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Only the streamer or a moderator can reset a shared Mosaic.`) });
+    try {
+      const artwork = await updateAppState((draft) => resetMosaicForReplay(draft, channel));
+      return NextResponse.json({ handled: true, reply: `@${displayName} reset “${artwork.theme}” for another run.` });
+    } catch (error: any) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic could not be replayed.'}`) });
     }
   }
 
