@@ -115,6 +115,7 @@ export default async function GameHubDetailPage({
         </section>
 
         <div className="flex flex-wrap gap-3">
+          <Link href={`/games/${game.id}/controller`} className="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-black text-slate-950 no-underline">Open Nebula Controller</Link>
           <Link href="/game-overlays" className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2.5 text-sm font-bold text-cyan-100 no-underline">Add to an overlay</Link>
           <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 no-underline">Back to catalog</Link>
         </div>

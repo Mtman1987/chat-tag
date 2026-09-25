@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import {
   claimNextMosaicRequest,
+  clearMosaicQueue,
   failMosaicRequest,
   finishMosaicForPreview,
   MOSAIC_XP_COST,
@@ -14,7 +15,10 @@ import {
   parseMosaicPaintCommand,
   parseMosaicViewCommand,
   queueMosaicTheme,
+  removeMosaicQueueRequest,
+  resetMosaicForReplay,
   setMosaicBrush,
+  setMosaicPalette,
   setMosaicView,
 } from '../src/lib/nebula-mosaic';
 
@@ -140,6 +144,47 @@ test('Mosaic brush equipment resets with each new artwork', () => {
     channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 'status', now: 62,
   });
   assert.equal(status.brush, 1);
+});
+
+
+test('Mosaic queue gives streamer/moderator tooling deterministic removal by position', () => {
+  const draft = state();
+  queueMosaicTheme(draft, { channel:'spacemountainlive', userId:'1', username:'a', displayName:'A', theme:'owl', now:1 });
+  queueMosaicTheme(draft, { channel:'spacemountainlive', userId:'2', username:'b', displayName:'B', theme:'rocket', now:2 });
+  const removed = removeMosaicQueueRequest(draft, 'spacemountainlive', 1);
+  assert.equal(removed.theme, 'owl');
+  assert.deepEqual(mosaicPublicSnapshot(draft, 'spacemountainlive').queue?.map((item) => item.theme), ['rocket']);
+  assert.equal(clearMosaicQueue(draft, 'spacemountainlive'), 1);
+  assert.equal(mosaicPublicSnapshot(draft, 'spacemountainlive').queueLength, 0);
+});
+
+test('Mosaic brush supports size plus left right up and down directions', () => {
+  assert.deepEqual(parseMosaicBrushCommand('spmt brush 4 down'), { size:4, direction:'down' });
+  assert.equal(parseMosaicBrushCommand('spmt brush left'), 'left');
+  const draft = readyMosaic();
+  const artwork = draft.gameSettings.default.gameHub.channels.spacemountainlive.mosaic.current;
+  const origin = 11 * 40 + 3;
+  artwork.target[origin] = 'Y';
+  artwork.target[(12 * 40) + 3] = 'Y';
+  artwork.target[(13 * 40) + 3] = 'Y';
+  setMosaicBrush(draft, { channel:'spacemountainlive', userId:'7', username:'artist', displayName:'Artist', brush:{ size:3, direction:'down' }, now:50 });
+  const painted = paintMosaicCell(draft, { channel:'spacemountainlive', userId:'7', username:'artist', displayName:'Artist', command:parseMosaicPaintCommand('spmt d12y')!, now:51 });
+  assert.equal(painted.direction, 'down');
+  assert.deepEqual(painted.paintedCoordinates, ['D12','D13','D14']);
+});
+
+test('Mosaic replay and palette remix preserve the target while clearing paint', () => {
+  const draft = readyMosaic();
+  const before = draft.gameSettings.default.gameHub.channels.spacemountainlive.mosaic.current.target.slice();
+  setMosaicPalette(draft, 'spacemountainlive', 'neon', 20);
+  finishMosaicForPreview(draft, 'spacemountainlive', 21);
+  const replay = resetMosaicForReplay(draft, 'spacemountainlive', 22);
+  assert.equal(replay.paletteId, 'neon');
+  assert.deepEqual(replay.target, before);
+  assert.equal(replay.painted.every((value:string) => value === ''), true);
+  const snapshot = mosaicPublicSnapshot(draft, 'spacemountainlive', 23);
+  assert.equal(snapshot.artwork?.paletteId, 'neon');
+  assert.equal(snapshot.premium.testingFree, true);
 });
 
 test('Mosaic show and view commands select one board or the temporary combined artwork', () => {

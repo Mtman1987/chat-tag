@@ -660,6 +660,29 @@ test('every game exposes a separate show-hide instruction overlay', () => {
   assert.equal(hidden.visible, false);
 });
 
+
+test('Nebula Controllers replace instruction-only popouts with private real-command tooling', () => {
+  const command = read('src/app/api/game-hub/command/route.ts');
+  const controller = read('src/components/nebula-controller.tsx');
+  const privateRoute = read('src/app/api/game-hub/controller-command/route.ts');
+  const mosaicFinal = read('src/app/api/game-hub/mosaic/final/route.ts');
+  assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\/controller/);
+  assert.match(controller, /const basicTabs = \['Live','Command','Guide','Commlink'\]/);
+  assert.match(controller, /canonicalPlayerCommands/);
+  assert.match(controller, /canonicalStreamerCommands/);
+  assert.match(controller, /Live game surface/);
+  assert.match(controller, /Private command console/);
+  assert.match(controller, /Player controls/);
+  assert.match(controller, /Streamer controls/);
+  assert.match(controller, /Theme queue/);
+  assert.match(controller, /Saved mosaics/);
+  assert.match(controller, /Palette remix/);
+  assert.match(controller, /Commlink/);
+  assert.match(privateRoute, /POST as runGameHubCommand/);
+  assert.match(privateRoute, /source: 'nebula-controller'/);
+  assert.match(mosaicFinal, /image\/svg\+xml/);
+});
+
 test('composite game overlays remain shell-free while the editor stays in the normal app shell', () => {
   const rootShell = read('src/components/root-shell.tsx');
   const overlay = read('src/app/overlay/game-hub/[profileId]/page.tsx');
