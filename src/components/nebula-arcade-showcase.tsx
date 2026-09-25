@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, ExternalLink, Pause, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Gamepad2, Pause, Play } from 'lucide-react';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import type { GameHubGame } from '@/lib/game-hub-registry';
 import { NebulaGameFrame } from '@/components/nebula-game-frame';
@@ -52,6 +52,7 @@ export function NebulaArcadeShowcase() {
           <button type="button" onClick={() => move(-1)} className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-white" aria-label="Previous game"><ChevronLeft className="h-4 w-4" /></button>
           <button type="button" onClick={() => setPlaying((current) => !current)} className="grid h-9 w-9 place-items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 text-cyan-100" aria-label={playing ? 'Pause rotation' : 'Resume rotation'}>{playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}</button>
           <button type="button" onClick={() => move(1)} className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-white" aria-label="Next game"><ChevronRight className="h-4 w-4" /></button>
+          <a href={`/games/${active.id}/controller`} className="inline-flex h-9 items-center gap-2 rounded-full bg-cyan-300 px-3 text-xs font-black text-slate-950 no-underline" aria-label={`Open ${active.name} controller`}><Gamepad2 className="h-4 w-4" />Controller</a>
           <a href={active.sourcePrototype ? `/nebula-arcade/games/${active.sourcePrototype.split('/').pop()}?embedded=1&demo=1` : active.nativePath || `/games/${active.id}`} target="_blank" rel="noopener noreferrer" className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-white" aria-label={`Open ${active.name}`}><ExternalLink className="h-4 w-4" /></a>
         </div>
       </div>

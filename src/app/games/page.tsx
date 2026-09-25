@@ -41,7 +41,8 @@ export default function GamesHubPage() {
             <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5">one rotating overlay</span>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/game-overlays" className="rounded-full bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent)))] px-5 py-2.5 text-sm font-bold text-slate-950 no-underline">Open Nebula overlay</Link>
+            <Link href="/controllers" className="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-black text-slate-950 no-underline">Open Controller Bay</Link>
+            <Link href="/game-overlays" className="rounded-full border border-violet-300/20 bg-violet-300/10 px-5 py-2.5 text-sm font-bold text-violet-100 no-underline">Open Nebula overlay</Link>
           </div>
         </div>
       </section>
@@ -61,8 +62,9 @@ export default function GamesHubPage() {
             <div className="rounded-xl border border-white/8 bg-black/25 px-3 py-2 text-xs leading-5 text-slate-400">
               {canonicalCommandSummary(game)}
             </div>
-            <div className="mt-auto">
-              <Link href={`/games/${game.id}`} className="inline-block rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-100 no-underline">Rules, players & leaderboard</Link>
+            <div className="mt-auto flex flex-wrap gap-2">
+              <Link href={`/games/${game.id}/controller`} className="inline-block rounded-lg bg-cyan-300 px-3 py-2 text-xs font-black text-slate-950 no-underline">Open Controller</Link>
+              <Link href={`/games/${game.id}`} className="inline-block rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-100 no-underline">Details</Link>
             </div>
           </article>
         ))}

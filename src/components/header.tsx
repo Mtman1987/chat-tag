@@ -1,6 +1,6 @@
 'use client';
 
-import { Gamepad2, LogIn, LogOut, MessageCircle, MonitorUp, ShieldCheck, Users } from 'lucide-react';
+import { Gamepad2, LogIn, LogOut, MessageCircle, MonitorUp, ShieldCheck, SlidersHorizontal, Users } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 const primaryNavItems = [
   { href: '/', label: 'Play', icon: Gamepad2 },
+  { href: '/controllers', label: 'Controls', icon: SlidersHorizontal },
   { href: '/messages', label: 'Messages', icon: MessageCircle },
   { href: '/overlay', label: 'Overlay', icon: MonitorUp },
 ];

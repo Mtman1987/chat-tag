@@ -661,6 +661,27 @@ test('every game exposes a separate show-hide instruction overlay', () => {
 });
 
 
+test('Controller Bay is a first-class Nebula Arcade destination', () => {
+  const bay = read('src/components/nebula-controller-bay.tsx');
+  const games = read('src/app/games/page.tsx');
+  const showcase = read('src/components/nebula-arcade-showcase.tsx');
+  const sidebar = read('src/components/suite-sidebar.tsx');
+  const header = read('src/components/header.tsx');
+  const home = read('src/app/main-dashboard.tsx');
+
+  assert.match(bay, /Nebula Controller Bay/);
+  assert.match(bay, /Pick the stream\. Pick the game\. Open the controller\./);
+  assert.match(bay, /liveStreamers/);
+  assert.match(bay, /\/games\/\$\{selectedGame\.id\}\/controller/);
+  assert.match(games, /Open Controller Bay/);
+  assert.match(games, /\/games\/\$\{game\.id\}\/controller/);
+  assert.match(showcase, /Controller/);
+  assert.match(showcase, /\/games\/\$\{active\.id\}\/controller/);
+  assert.match(sidebar, /href: '\/controllers'/);
+  assert.match(header, /href: '\/controllers'/);
+  assert.match(home, /Open Controller Bay/);
+});
+
 test('Nebula Controllers replace instruction-only popouts with private real-command tooling', () => {
   const command = read('src/app/api/game-hub/command/route.ts');
   const controller = read('src/components/nebula-controller.tsx');

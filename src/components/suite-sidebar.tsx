@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   Gamepad2,
   LibraryBig,
+  SlidersHorizontal,
   MessageCircle,
   MonitorUp,
   PanelLeftClose,
@@ -24,6 +25,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { href: '/', label: 'Arcade', icon: Gamepad2, exact: true },
   { href: '/games', label: 'All Games', icon: LibraryBig },
+  { href: '/controllers', label: 'Controllers', icon: SlidersHorizontal },
   { href: '/messages', label: 'Messages', icon: MessageCircle },
   { href: '/game-overlays', label: 'Games Overlay', icon: MonitorUp },
 ];

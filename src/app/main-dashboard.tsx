@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Gamepad2, Radio, Sparkles, Users } from 'lucide-react';
+import { Gamepad2, Radio, SlidersHorizontal, Sparkles, Users } from 'lucide-react';
+import Link from 'next/link';
 import type { Player } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CommunityList } from '@/components/community-list';
@@ -60,8 +61,12 @@ export function MainDashboard() {
       <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
           <div className="cosmic-status"><Radio className="h-3.5 w-3.5" /> Community game hub</div>
-          <h1 className="mt-3 font-headline text-3xl font-bold tracking-tight text-white md:text-4xl">Tag the community. Jump into Quackverse.</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">The game stays front and center. Live community status lives in the sidebar, and owner controls stay behind the authenticated settings route.</p>
+          <h1 className="mt-3 font-headline text-3xl font-bold tracking-tight text-white md:text-4xl">Play in chat. Use Controllers when you want the full game.</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Nebula overlays stay clean for stream. The Controller Bay gives players and streamers the practical controls, live boards, private inputs, guides and Commlink alongside the game.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/controllers" className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-4 py-2.5 text-sm font-black text-slate-950 no-underline"><SlidersHorizontal className="h-4 w-4" />Open Controller Bay</Link>
+            <Link href="/games" className="rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 no-underline">Browse all games</Link>
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-2 text-xs sm:flex">
           <div className="min-w-24 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] px-4 py-2.5 text-center backdrop-blur">
