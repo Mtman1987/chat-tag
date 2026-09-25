@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserFromRequest } from '@/lib/auth';
-import { normalizeGameHubChannel } from '@/lib/game-hub-state';
+import { normalizeGameHubChannel, resolveChannelGameIds } from '@/lib/game-hub-state';
 import {
   paintMosaicCell,
   parseMosaicBrushCommand,
@@ -9,7 +9,7 @@ import {
   setMosaicBrush,
   validateMosaicTheme,
 } from '@/lib/nebula-mosaic';
-import { updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppState } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +27,18 @@ export async function POST(req: NextRequest) {
   const username = normalizeGameHubChannel(user.twitchUsername);
   if (!channel) return NextResponse.json({ error: 'Choose a stream first.' }, { status: 400 });
   if (!message) return NextResponse.json({ error: 'Type a Mosaic command first.' }, { status: 400 });
+
+  const snapshot = await readAppState();
+  const knownChannels = new Set<string>([
+    ...Object.keys(snapshot.botChannels || {}).map(normalizeGameHubChannel),
+    ...Object.values(snapshot.users || {}).map((entry:any) => normalizeGameHubChannel(entry?.twitchUsername || entry?.username)),
+  ].filter(Boolean));
+  if (!knownChannels.has(channel)) {
+    return NextResponse.json({ error: 'That stream is not an SPMT community channel.' }, { status: 403 });
+  }
+  if (!resolveChannelGameIds(snapshot, channel).includes('pixelbattle')) {
+    return NextResponse.json({ error: 'Mosaic is not active in that stream right now.' }, { status: 409 });
+  }
 
   const paint = parseMosaicPaintCommand(message);
   if (paint) {
