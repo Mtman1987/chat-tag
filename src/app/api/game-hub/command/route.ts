@@ -129,7 +129,7 @@ function guideUrl(req: NextRequest, channel: string) {
 }
 
 function gamePopoutUrl(req: NextRequest, channel: string, gameId: string) {
-  return `${publicOrigin(req)}/games/${encodeURIComponent(gameId)}?channel=${encodeURIComponent(channel)}`;
+  return `${publicOrigin(req)}/games/${encodeURIComponent(gameId)}/controller?channel=${encodeURIComponent(channel)}`;
 }
 
 function instantGameOverlayUrl(req: NextRequest, channel: string, gameId: string) {
