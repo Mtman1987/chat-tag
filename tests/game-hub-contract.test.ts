@@ -667,7 +667,13 @@ test('Nebula Controllers replace instruction-only popouts with private real-comm
   const privateRoute = read('src/app/api/game-hub/controller-command/route.ts');
   const mosaicFinal = read('src/app/api/game-hub/mosaic/final/route.ts');
   assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\/controller/);
+  assert.match(controller, /const basicTabs = \['Live','Command','Guide','Commlink'\]/);
+  assert.match(controller, /canonicalPlayerCommands/);
+  assert.match(controller, /canonicalStreamerCommands/);
+  assert.match(controller, /Live game surface/);
   assert.match(controller, /Private command console/);
+  assert.match(controller, /Player controls/);
+  assert.match(controller, /Streamer controls/);
   assert.match(controller, /Theme queue/);
   assert.match(controller, /Saved mosaics/);
   assert.match(controller, /Palette remix/);
