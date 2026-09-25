@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
+import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
 import { GameHubPlayPanel } from '@/components/game-hub-play-panel';
 
@@ -19,8 +20,9 @@ type MosaicSnapshot = {
 };
 
 const CLASSIC: Record<string,string> = {R:'#ef4444',B:'#3b82f6',G:'#22c55e',Y:'#eab308',P:'#a855f7',O:'#f97316',PK:'#ec4899',W:'#f8fafc',K:'#111827',C:'#06b6d4'};
-const tabs = ['Board','Command','Queue','Saves','Palette','Commlink'] as const;
-type Tab = typeof tabs[number];
+const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Commlink'] as const;
+const basicTabs = ['Live','Command','Guide','Commlink'] as const;
+type Tab = typeof mosaicTabs[number] | typeof basicTabs[number];
 
 function channelOf(value: unknown) {
   return String(value || '').trim().toLowerCase().replace(/^#/,'');
@@ -51,7 +53,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const params = useSearchParams();
   const { user } = useSession();
   const channel = channelOf(params.get('channel') || user?.twitchUsername || '');
-  const [tab,setTab] = useState<Tab>('Board');
+  const [tab,setTab] = useState<Tab>(game.id === 'pixelbattle' ? 'Board' : 'Live');
   const [command,setCommand] = useState('');
   const [reply,setReply] = useState('');
   const [busy,setBusy] = useState(false);
@@ -92,7 +94,12 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     await run(command);
   }
 
-  const controllerTabs = useMemo(() => isMosaic ? tabs : (['Board','Command','Commlink'] as Tab[]), [isMosaic]);
+  const controllerTabs = useMemo<Tab[]>(() => isMosaic ? [...mosaicTabs] : [...basicTabs], [isMosaic]);
+  const playerCommands = useMemo(() => canonicalPlayerCommands(game), [game]);
+  const streamerCommands = useMemo(() => canonicalStreamerCommands(game), [game]);
+  const quickCommands = useMemo(() => [...playerCommands, ...streamerCommands]
+    .filter((item, index, all) => all.findIndex((entry) => entry.trigger === item.trigger) === index)
+    .slice(0, 12), [playerCommands, streamerCommands]);
   const premium = mosaic.premium;
   return <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white">
     <header className="sticky top-0 z-20 border-b border-cyan-300/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl">
@@ -105,14 +112,17 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     </header>
     <main className="mx-auto grid max-w-7xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
       <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-2xl">
-        {tab==='Board' ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <GameHubPlayPanel game={game}/>) : null}
+        {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game surface</div><p className="mt-1 text-sm text-slate-400">This is the same game surface used elsewhere in Nebula, wrapped in private controller chrome.</p></div><GameHubPlayPanel game={game}/></div>) : null}
         {tab==='Command' ? <div className="space-y-5">
           <div><h2 className="text-2xl font-black">Private command console</h2><p className="mt-1 text-sm text-slate-400">Runs the real Nebula command handler without sending a message to Twitch or Discord.</p></div>
           <form onSubmit={submit} className="flex gap-2"><input value={command} onChange={e=>setCommand(e.target.value)} placeholder={isMosaic?'spmt D12Y':'spmt ...'} className="min-w-0 flex-1 rounded-2xl border border-cyan-300/20 bg-black/50 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/60"/><button disabled={busy||!command.trim()} className="rounded-2xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 disabled:opacity-40">Run</button></form>
           {reply ? <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[.06] p-4 text-sm text-cyan-50">{reply}</div> : null}
-          {isMosaic ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {['spmt show 1','spmt show 2','spmt show 3','spmt show 4','spmt show all','spmt brush 1','spmt brush 3 right','spmt brush 3 left','spmt brush 3 down','spmt brush 3 up','spmt mosaic queue','spmt mosaic finish'].map(item=><button key={item} onClick={()=>void run(item)} className="rounded-xl border border-white/10 bg-white/[.035] px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-white/[.07]"><code>{item}</code></button>)}
-          </div> : null}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(isMosaic
+              ? ['spmt show 1','spmt show 2','spmt show 3','spmt show 4','spmt show all','spmt brush 1','spmt brush 3 right','spmt brush 3 left','spmt brush 3 down','spmt brush 3 up','spmt mosaic queue','spmt mosaic finish'].map((trigger)=>({trigger,description:'Mosaic quick control'}))
+              : quickCommands
+            ).map(item=><button key={item.trigger} onClick={()=>void run(item.trigger)} className="rounded-xl border border-white/10 bg-white/[.035] px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-white/[.07]"><code>{item.trigger}</code><span className="mt-1 block font-normal text-slate-500">{item.description}</span></button>)}
+          </div>
         </div> : null}
         {tab==='Queue' && isMosaic ? <div className="space-y-4"><div><h2 className="text-2xl font-black">Theme queue</h2><p className="text-sm text-slate-400">Streamer/mod veto lives here. Chat can suggest; the channel owner gets the last say.</p></div>
           {mosaic.queue?.length ? mosaic.queue.map(item=><div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[.025] p-3"><div className="min-w-0"><strong className="block truncate">#{item.position} · {item.theme}</strong><span className="text-xs text-slate-500">{item.displayName} · {item.status}</span></div><button onClick={()=>void run(`spmt mosaic remove ${item.position}`)} className="rounded-full border border-rose-300/20 bg-rose-300/10 px-3 py-1.5 text-xs font-bold text-rose-100">Remove</button></div>) : <p className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-slate-500">Queue is empty.</p>}
@@ -124,6 +134,14 @@ export function NebulaController({ game }: { game: GameHubGame }) {
         </div> : null}
         {tab==='Palette' && isMosaic ? <div className="space-y-5"><div><h2 className="text-2xl font-black">Palette remix</h2><p className="text-sm text-slate-400">Change the presentation without changing the puzzle. Test period: free/unlocked.</p></div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{['classic','neon','pastel','mono','ocean'].map(name=><button key={name} onClick={()=>void run(`spmt mosaic palette ${name}`)} className={`rounded-2xl border p-4 text-left ${mosaic.artwork?.paletteId===name?'border-violet-300/60 bg-violet-300/10':'border-white/10 bg-white/[.025]'}`}><strong className="capitalize">{name}</strong><span className="mt-1 block text-xs text-slate-500">Apply to live + reveal</span></button>)}</div>
+        </div> : null}
+        {tab==='Guide' ? <div className="space-y-5">
+          <div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">${game.category} · ${game.runtime}</div><h2 className="mt-1 text-2xl font-black">${game.name}</h2><p className="mt-2 text-sm leading-6 text-slate-300">${game.howToPlay}</p></div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><h3 className="font-black text-white">Player controls</h3><div className="mt-3 space-y-2">{playerCommands.map(item=><div key={item.trigger} className="rounded-xl border border-white/8 bg-black/20 p-3"><code className="text-cyan-100">{item.trigger}</code><p className="mt-1 text-xs text-slate-400">{item.description}</p></div>)}</div></section>
+            <section className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><h3 className="font-black text-white">Streamer controls</h3><div className="mt-3 space-y-2">{streamerCommands.map(item=><div key={item.trigger} className="rounded-xl border border-white/8 bg-black/20 p-3"><code className="text-emerald-100">{item.trigger}</code><p className="mt-1 text-xs text-slate-400">{item.description}</p></div>)}</div></section>
+          </div>
+          {game.chatSignals?.length ? <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.16em] text-violet-200">Passive input</div><p className="mt-2 text-sm text-slate-300">{game.chatSignals.join(' · ')}</p></div> : null}
         </div> : null}
         {tab==='Commlink' ? <div className="space-y-4"><div><h2 className="text-2xl font-black">Commlink</h2><p className="text-sm text-slate-400">Communications stay in Commlink. The private command console above is game control, not another public chat transport.</p></div><iframe src="/messages" title="Commlink" className="h-[68vh] min-h-[520px] w-full rounded-2xl border border-white/10 bg-slate-950"/><a href="https://spmt.live/?view=commlink" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-bold text-cyan-100 no-underline">Open full Commlink workspace</a></div> : null}
       </section>
