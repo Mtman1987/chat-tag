@@ -1,0 +1,50 @@
+name: Quackverse AI Live Probe
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.head_ref == 'test/quackverse-ai-one-batch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+      - name: Generate one missing static card in live app
+        shell: bash
+        run: |
+          set -euo pipefail
+          flyctl ssh console --app chat-tag-new -C 'node -e '"'"'
+          const base = "http://127.0.0.1:3000";
+          const secret = String(process.env.BOT_SECRET_KEY || "").trim();
+          if (!secret) throw new Error("BOT_SECRET_KEY unavailable in chat-tag-new");
+          async function main() {
+            const before = await fetch(base + "/api/quackverse/art").then(r => r.json());
+            console.log("BEFORE", JSON.stringify({cardCount:before.cardCount,staticCount:before.staticCount,missingStaticCount:before.missingStaticCount,complete:before.complete}, null, 2));
+            const response = await fetch(base + "/api/quackverse/art/generate?secret=" + encodeURIComponent(secret), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ variant:"static", limit:1, missingOnly:true, providerOverride:"seaart", includePrompt:true })
+            });
+            const data = await response.json().catch(() => null);
+            console.log("GENERATION", JSON.stringify({status:response.status,data}, null, 2));
+            if (!response.ok) throw new Error("generator HTTP " + response.status);
+            const success = Array.isArray(data?.results) && data.results.find(x => x?.success);
+            if (!success) throw new Error("one-card probe generated no successful image");
+            const after = await fetch(base + "/api/quackverse/art").then(r => r.json());
+            const saved = after?.cards?.[String(success.cardId)]?.static;
+            console.log("AFTER", JSON.stringify({cardId:success.cardId,name:success.name,provider:success.provider,staticCount:after.staticCount,missingStaticCount:after.missingStaticCount,saved}, null, 2));
+            if (!saved?.url) throw new Error("generated card is not present in persisted manifest");
+            const file = await fetch(base + saved.url);
+            console.log("FILE", JSON.stringify({status:file.status,contentType:file.headers.get("content-type"),contentLength:file.headers.get("content-length")}, null, 2));
+            if (!file.ok || !String(file.headers.get("content-type") || "").startsWith("image/")) throw new Error("persisted generated file is not servable");
+          }
+          main().catch(e => { console.error(e); process.exit(1); });
+          '"'"''
