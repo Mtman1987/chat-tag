@@ -348,8 +348,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         handled: true,
         reply: mosaicBrush === 'status'
-          ? `@${displayName} your brush for “${equipped.artwork}” paints ${equipped.brush} cell${equipped.brush === 1 ? '' : 's'} to the right. Change it with spmt brush 1-5.`
-          : `@${displayName} ${equipped.brush === 1 ? 'single-cell brush equipped' : `${equipped.brush}-cell brush equipped`} for “${equipped.artwork}”. Paint normally with commands like spmt d15y.`,
+          ? `@${displayName} your brush for “${equipped.artwork}” paints ${equipped.brush} cell${equipped.brush === 1 ? '' : 's'} ${equipped.direction}. Change it with spmt brush 1-5 and spmt brush left/right/up/down.`
+          : `@${displayName} ${equipped.brush === 1 ? 'single-cell brush' : `${equipped.brush}-cell brush`} now paints ${equipped.direction} for “${equipped.artwork}”.`,
       });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} ${error?.message || 'That Mosaic brush could not be equipped.'}`) });
