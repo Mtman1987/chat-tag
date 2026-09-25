@@ -364,11 +364,11 @@ export function parseMosaicPaintCommand(messageValue: unknown): MosaicPaintComma
 
 export function parseMosaicBrushCommand(messageValue: unknown): MosaicBrushCommand | null {
   let source = String(messageValue || '').trim().toLowerCase();
-  source = source.replace(/^!?@?spmt(?:\\s+|$)/i, '').trim();
-  source = source.replace(/^pixel(?:battle)?\\s+|^mosaic\\s+/i, '').trim();
-  const match = source.match(/^brush(?:\\s+(.*))?$/);
+  source = source.replace(/^!?@?spmt(?:\s+|$)/i, '').trim();
+  source = source.replace(/^pixel(?:battle)?\s+|^mosaic\s+/i, '').trim();
+  const match = source.match(/^brush(?:\s+(.*))?$/);
   if (!match) return null;
-  const args = String(match[1] || '').trim().split(/\\s+/).filter(Boolean);
+  const args = String(match[1] || '').trim().split(/\s+/).filter(Boolean);
   if (!args.length) return 'status';
   if (args.length === 1 && args[0] === 'off') return 1;
   const direction = args.find((value) => ['right','left','down','up'].includes(value)) as MosaicBrushDirection | undefined;
