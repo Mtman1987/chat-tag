@@ -662,7 +662,9 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     maxAttempts: MOSAIC_GENERATION_MAX_ATTEMPTS,
     retryAt: latestRequest.retryAt || '',
   } : null;
-  if (!artwork) return { artwork: null, queueLength, queue, generation };
+  const saves = mosaic.saves.slice(0,20).map((item) => ({ id:item.id,theme:item.theme,status:item.status,updatedAt:item.updatedAt,createdAt:item.createdAt,paletteId:item.paletteId || 'classic',requestedBy:item.requestedBy }));
+  const premium = { testingFree:true, capabilities:{ soloProjects:true, savedProjects:true, friendSessions:true, paletteRemix:true } };
+  if (!artwork) return { artwork: null, queueLength, queue, generation, saves, premium };
   const viewMode = artwork.status === 'completed'
     ? 'all'
     : artwork.viewMode === 'all' && Date.parse(String(artwork.viewUntil || 0)) > now ? 'all' : 'board';
@@ -700,5 +702,7 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     queueLength,
     queue,
     generation,
+    saves,
+    premium,
   };
 }
