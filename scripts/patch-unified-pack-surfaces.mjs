@@ -11,8 +11,8 @@ function patchFile(path, patches) {
 }
 
 const discordChatRoute = fs.readFileSync('src/app/api/discord/chat/route.ts', 'utf8');
-if (discordChatRoute.includes('Cards · 3 across') && discordChatRoute.includes('PACK ANIMATION INCOMING')) {
-  console.log('Unified pack patch: direct Discord pack presenter already uses fixed grid/attachment flow.');
+if (discordChatRoute.includes('buildCardColumns') && discordChatRoute.includes('PACK ANIMATION INCOMING')) {
+  console.log('Unified pack patch: direct Discord pack presenter already uses native columns/attachment flow.');
 } else
 patchFile('src/app/api/discord/chat/route.ts', [
   {
