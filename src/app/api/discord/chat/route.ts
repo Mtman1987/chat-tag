@@ -144,6 +144,8 @@ async function sendDiscordPackReply(
   context: DiscordReplyContext,
 ) {
   const packCards = Array.isArray(packData.pack) ? packData.pack : [];
+  const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
+  const uniqueCards = new Set(collectionIds).size;
   const buildCardColumns = (cards: any[]) => {
     const columns = [0, 1, 2].map((column) => cards.filter((_, index) => index % 3 === column));
     return columns.map((cardsInColumn) => ({
