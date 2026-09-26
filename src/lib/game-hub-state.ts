@@ -617,7 +617,7 @@ export function recordWordChainMessage(
     settings.wordChainVerdicts = Object.fromEntries(verdictEntries);
     const pendingPlayer = getGameHubStore(state).players[pending.playerId];
     const applied = accepted && pendingPlayer && round.currentWord === pending.expectedWord
-      ? applyWordChainWord(state, stateChannel, round, pendingPlayer, pending.word, now)
+      ? applyWordChainWord(state, pending.sourceChannel || channel, round, pendingPlayer, pending.word, now)
       : null;
     if (applied) {
       updateStreamGameBattle(state, pending.sourceChannel || channel, 'wordchain', (battle) => {
@@ -650,7 +650,7 @@ export function recordWordChainMessage(
   const canonical = (round.themeWords || builtInWords || communityWords || []).includes(normalized);
   const cachedVerdict = settings.wordChainVerdicts?.[verdictKey];
   if (canonical || cachedVerdict === true) {
-    const applied = applyWordChainWord(state, stateChannel, round, player, normalized, now);
+    const applied = applyWordChainWord(state, channel, round, player, normalized, now);
     if (applied) {
       updateStreamGameBattle(state, channel, 'wordchain', (battle) => {
         battle.scores[channel] = Number(battle.scores[channel] || 0) + applied.points;
