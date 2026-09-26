@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({})) as JsonObject;
-  let channel = normalizeChannel(body.channel);
+  const channel = normalizeChannel(body.channel);
   const username = normalizeChannel(body.username);
   // A linked Chat Wars battle keeps each stream's chat identity while allowing
   // every participating channel to feed the shared battle presentation.
