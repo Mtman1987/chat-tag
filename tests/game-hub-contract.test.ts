@@ -32,12 +32,15 @@ import {
   PHRASE_GUESS_PHRASES,
   WORD_CHAIN_THEMES,
   getOrCreateGameHubPlayer,
+  joinGameHubGame,
   phraseGuessPublicSnapshot,
   phraseGuessRoundAt,
   phraseGuessRoundForChannel,
   purchasePhraseGuessHint,
   recordPhraseGuessAttempt,
   recordWordChainMessage,
+  setStreamGameBattle,
+  streamGameBattlePublicSnapshot,
   submitPhraseGuessPhrase,
   submitWordChainTheme,
   wordChainPublicSnapshot,
@@ -753,4 +756,45 @@ test('SpaceMountain parade overlay is full-screen and Overlay Bay test raids use
   assert.match(parade, /api\/oauth\/userinfo/);
   assert.match(parade, /username\) === 'spacemountainlive'/);
   assert.match(bot, /handleRaidSupport[\s\S]*api\/game-hub\/parade[\s\S]*trigger: 'raid'/);
+});
+
+
+test('cross-stream Phrase Guess shares one round and awards the solving stream', () => {
+  const draft:any = { gameSettings: { default: {} } };
+  setStreamGameBattle(draft, { gameId: 'phraseguess', channels: ['alpha', 'beta'], createdBy: 'alpha' });
+  joinGameHubGame(draft, { gameId: 'phraseguess', userId: 'a1', username: 'alphauser', displayName: 'Alpha User' });
+  joinGameHubGame(draft, { gameId: 'phraseguess', userId: 'b1', username: 'betauser', displayName: 'Beta User' });
+
+  const round = phraseGuessRoundForChannel(draft, 'alpha', 1);
+  const result = recordPhraseGuessAttempt(draft, {
+    channel: 'beta', userId: 'b1', username: 'betauser', displayName: 'Beta User',
+    message: round.phrase, now: 1,
+  });
+  assert.equal(result.outcome, 'won');
+  assert.equal(phraseGuessPublicSnapshot(draft, 'alpha', 1).solved, true);
+  assert.equal(phraseGuessPublicSnapshot(draft, 'beta', 1).solved, true);
+  const battle = streamGameBattlePublicSnapshot(draft, 'alpha', 'phraseguess');
+  assert.equal(battle?.scores.beta, 1);
+  assert.equal(battle?.winnerChannel, 'beta');
+  assert.equal(battle?.winnerDisplayName, 'Beta User');
+});
+
+test('cross-stream Word Chain shares one chain and credits the source stream', () => {
+  const draft:any = { gameSettings: { default: {} } };
+  setStreamGameBattle(draft, { gameId: 'wordchain', channels: ['alpha', 'beta'], createdBy: 'alpha' });
+  joinGameHubGame(draft, { gameId: 'wordchain', userId: 'a1', username: 'alphauser', displayName: 'Alpha User' });
+  joinGameHubGame(draft, { gameId: 'wordchain', userId: 'b1', username: 'betauser', displayName: 'Beta User' });
+
+  const before = wordChainPublicSnapshot(draft, 'alpha', 1);
+  assert.equal(before.requiredLetter, 'R');
+  const result = recordWordChainMessage(draft, {
+    channel: 'beta', userId: 'b1', username: 'betauser', displayName: 'Beta User',
+    message: 'RABBIT', now: 1,
+  });
+  assert.equal(result.outcome, 'accepted');
+  assert.equal(wordChainPublicSnapshot(draft, 'alpha', 1).currentWord, 'RABBIT');
+  assert.equal(wordChainPublicSnapshot(draft, 'beta', 1).currentWord, 'RABBIT');
+  const battle = streamGameBattlePublicSnapshot(draft, 'beta', 'wordchain');
+  assert.ok(Number(battle?.scores.beta || 0) > 0);
+  assert.equal(Number(battle?.scores.alpha || 0), 0);
 });

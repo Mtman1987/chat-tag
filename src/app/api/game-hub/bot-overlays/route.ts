@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { createGameOverlayProfile, normalizeGameOverlayProfile, patchGameOverlayProfile } from '@/lib/game-hub-overlays';
-import { setChatWarsBattle } from '@/lib/game-hub-state';
+import { setChatWarsBattle, setStreamGameBattle } from '@/lib/game-hub-state';
 
 export const dynamic = 'force-dynamic';
 const STORE_KEY = 'gameHubOverlayProfiles';
@@ -65,6 +65,12 @@ export async function PUT(req:NextRequest){
  if(!isBotRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
  const body=await req.json().catch(()=>({})); const channels=Array.isArray(body.channels)?body.channels.map(login).filter(Boolean):[];
  if(channels.length<2) return NextResponse.json({error:'At least two channels are required.'},{status:400});
- try{ const battle=await updateAppState((state:any)=>setChatWarsBattle(state,{channels,createdBy:body.createdBy||channels[0],active:body.active!==false})); return NextResponse.json({battle}); }
+ const gameId=String(body.gameId||'chatwars').trim().toLowerCase();
+ try{
+   const battle=await updateAppState((state:any)=>gameId==='chatwars'
+     ? setChatWarsBattle(state,{channels,createdBy:body.createdBy||channels[0],active:body.active!==false})
+     : setStreamGameBattle(state,{gameId:gameId as 'wordchain'|'phraseguess',channels,createdBy:body.createdBy||channels[0],active:body.active!==false}));
+   return NextResponse.json({battle});
+ }
  catch(error:any){ return NextResponse.json({error:error?.message||'Unable to create stream battle.'},{status:400}); }
 }

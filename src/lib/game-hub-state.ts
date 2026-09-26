@@ -112,12 +112,24 @@ export type GameHubChannelSettings = {
       displayName: string;
       word: string;
       expectedWord: string;
+      sourceChannel: string;
       closesAt: number;
       votes: Record<string, boolean>;
     };
   };
   wordChainVerdicts?: Record<string, boolean>;
   chatWarsBattle?: { battleId: string; channels: string[]; createdBy: string; createdAt: string; active: boolean };
+  streamGameBattles?: Record<string, {
+    battleId: string;
+    gameId: 'wordchain' | 'phraseguess';
+    channels: string[];
+    createdBy: string;
+    createdAt: string;
+    active: boolean;
+    scores: Record<string, number>;
+    winnerChannel?: string;
+    winnerDisplayName?: string;
+  }>;
 };
 
 export type GameHubLedgerEntry = {
@@ -330,9 +342,10 @@ export function purchasePhraseGuessHint(
 ) {
   const channel = normalizeGameHubChannel(input.channel);
   if (!channel) throw new Error('A channel is required.');
+  const stateChannel = streamGameStateChannel(state, channel, 'phraseguess');
   const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
-  const settings = getChannelGameSettings(state, channel);
-  const activeRound = phraseGuessRoundForChannel(state, channel, now);
+  const settings = getChannelGameSettings(state, stateChannel);
+  const activeRound = phraseGuessRoundForChannel(state, stateChannel, now);
   const roundSlot = activeRound.roundSlot;
   const previous = settings.phraseGuessRound || settings.phraseGuessHints;
   const hintsUsed = Math.max(0, Math.floor(Number(previous?.hintsUsed || 0)));
@@ -442,9 +455,10 @@ export function recordPhraseGuessAttempt(
   const membership = player.joinedGames.phraseguess;
   if (!membership?.active) return { changed: false, outcome: 'not-playing' as const };
 
+  const stateChannel = streamGameStateChannel(state, channel, 'phraseguess');
   const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
-  const settings = getChannelGameSettings(state, channel);
-  const current = phraseGuessRoundForChannel(state, channel, now);
+  const settings = getChannelGameSettings(state, stateChannel);
+  const current = phraseGuessRoundForChannel(state, stateChannel, now);
   if (current.winnerPlayerId) return { changed: false, outcome: 'closed' as const, roundSlot: current.roundSlot };
 
   const normalizedGuess = normalizePhraseGuessText(message);
@@ -456,6 +470,11 @@ export function recordPhraseGuessAttempt(
     membership.wins += 1;
     membership.lastActiveAt = new Date(now).toISOString();
     awardGameHubPoints(state, player, PHRASE_GUESS_WIN_POINTS, 'Phrase Guess solved', { gameId: 'phraseguess', channel });
+    updateStreamGameBattle(state, channel, 'phraseguess', (battle) => {
+      battle.scores[channel] = Number(battle.scores[channel] || 0) + 1;
+      battle.winnerChannel = channel;
+      battle.winnerDisplayName = player.displayName;
+    });
     let submitterReward = 0;
     if (current.submitterPlayerId) {
       const submitter = getGameHubStore(state).players[current.submitterPlayerId];
@@ -579,8 +598,9 @@ export function recordWordChainMessage(
   const channel = normalizeGameHubChannel(input.channel);
   const message = String(input.message || '').trim();
   if (!channel || !message || /^!?@?spmt(?:\s|$)/i.test(message)) return { changed: false, outcome: 'ignored' as const };
+  const stateChannel = streamGameStateChannel(state, channel, 'wordchain');
   const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
-  const settings = getChannelGameSettings(state, channel);
+  const settings = getChannelGameSettings(state, stateChannel);
   const round = wordChainStateForRound(settings, now);
   let finalized: { accepted: boolean; word: string; points?: number } | null = null;
 
@@ -597,8 +617,13 @@ export function recordWordChainMessage(
     settings.wordChainVerdicts = Object.fromEntries(verdictEntries);
     const pendingPlayer = getGameHubStore(state).players[pending.playerId];
     const applied = accepted && pendingPlayer && round.currentWord === pending.expectedWord
-      ? applyWordChainWord(state, channel, round, pendingPlayer, pending.word, now)
+      ? applyWordChainWord(state, pending.sourceChannel || channel, round, pendingPlayer, pending.word, now)
       : null;
+    if (applied) {
+      updateStreamGameBattle(state, pending.sourceChannel || channel, 'wordchain', (battle) => {
+        battle.scores[pending.sourceChannel || channel] = Number(battle.scores[pending.sourceChannel || channel] || 0) + applied.points;
+      });
+    }
     finalized = { accepted: Boolean(applied), word: pending.word, ...(applied ? { points: applied.points } : {}) };
   }
 
@@ -626,6 +651,11 @@ export function recordWordChainMessage(
   const cachedVerdict = settings.wordChainVerdicts?.[verdictKey];
   if (canonical || cachedVerdict === true) {
     const applied = applyWordChainWord(state, channel, round, player, normalized, now);
+    if (applied) {
+      updateStreamGameBattle(state, channel, 'wordchain', (battle) => {
+        battle.scores[channel] = Number(battle.scores[channel] || 0) + applied.points;
+      });
+    }
     return { changed: Boolean(applied) || Boolean(finalized), outcome: 'accepted' as const, finalized, ...applied };
   }
   if (cachedVerdict === false) return { changed: Boolean(finalized), outcome: 'rejected' as const, finalized };
@@ -637,6 +667,7 @@ export function recordWordChainMessage(
     displayName: player.displayName,
     word: normalized,
     expectedWord: round.currentWord,
+    sourceChannel: channel,
     closesAt: now + WORD_CHAIN_VOTE_MS,
     votes: {},
   };
@@ -656,8 +687,10 @@ function stablePhraseMask(phrase: string, roundSlot: number, revealPercent: numb
 }
 
 export function phraseGuessPublicSnapshot(state: any, channelValue: unknown, nowValue = Date.now()) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const stateChannel = streamGameStateChannel(state, channel, 'phraseguess');
   const now = Math.max(0, Math.floor(Number(nowValue)));
-  const round = phraseGuessRoundForChannel(state, channelValue, now);
+  const round = phraseGuessRoundForChannel(state, stateChannel, now);
   const elapsed = now - round.roundSlot * PHRASE_GUESS_ROUND_MS;
   const revealSteps = Math.floor(elapsed / 45_000);
   const revealPercent = 10 + revealSteps * 10 + Math.max(0, Number(round.hintsUsed || 0)) * 10;
@@ -675,8 +708,9 @@ export function phraseGuessPublicSnapshot(state: any, channelValue: unknown, now
 
 export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowValue = Date.now()) {
   const channel = normalizeGameHubChannel(channelValue);
+  const stateChannel = streamGameStateChannel(state, channel, 'wordchain');
   const now = Math.max(0, Math.floor(Number(nowValue)));
-  const round = wordChainStateForRound(getChannelGameSettings(state, channel), now);
+  const round = wordChainStateForRound(getChannelGameSettings(state, stateChannel), now);
   const elapsed = now - round.roundSlot * WORD_CHAIN_ROUND_MS;
   return {
     roundSlot: round.roundSlot,
@@ -759,6 +793,79 @@ export function getGameHubGameStats(state: any, gameId: string) {
 
 export function gameCatalogIds() {
   return GAME_HUB_CATALOG.map((game) => game.id);
+}
+
+export function setStreamGameBattle(
+  state: any,
+  input: { gameId: 'wordchain' | 'phraseguess'; channels: unknown[]; createdBy?: unknown; active?: boolean },
+) {
+  const gameId = input.gameId;
+  if (gameId !== 'wordchain' && gameId !== 'phraseguess') throw new Error('Unsupported stream battle game.');
+  const channels = [...new Set((input.channels || []).map(normalizeGameHubChannel).filter(Boolean))].slice(0, 4);
+  if (channels.length < 2) throw new Error('A stream battle requires at least two channels.');
+  const createdAt = new Date().toISOString();
+  const battle = {
+    battleId: `${gameId}:${channels.slice().sort().join('+')}`,
+    gameId,
+    channels,
+    createdBy: normalizeGameHubChannel(input.createdBy) || channels[0],
+    createdAt,
+    active: input.active !== false,
+    scores: Object.fromEntries(channels.map((channel) => [channel, 0])),
+  };
+  for (const channel of channels) {
+    const settings = getChannelGameSettings(state, channel);
+    settings.streamGameBattles ||= {};
+    settings.streamGameBattles[gameId] = { ...battle, scores: { ...battle.scores } };
+    setChannelGameRunning(state, channel, gameId, battle.active);
+  }
+  return battle;
+}
+
+export function getStreamGameBattle(state: any, channelValue: unknown, gameId: 'wordchain' | 'phraseguess') {
+  const channel = normalizeGameHubChannel(channelValue);
+  return getChannelGameSettings(state, channel).streamGameBattles?.[gameId] || null;
+}
+
+function streamGameStateChannel(state: any, channelValue: unknown, gameId: 'wordchain' | 'phraseguess') {
+  const channel = normalizeGameHubChannel(channelValue);
+  const battle = getStreamGameBattle(state, channel, gameId);
+  return battle?.active && battle.channels.includes(channel) ? battle.channels[0] : channel;
+}
+
+function updateStreamGameBattle(
+  state: any,
+  sourceChannelValue: unknown,
+  gameId: 'wordchain' | 'phraseguess',
+  mutate: (battle: NonNullable<GameHubChannelSettings['streamGameBattles']>[string]) => void,
+) {
+  const sourceChannel = normalizeGameHubChannel(sourceChannelValue);
+  const battle = getStreamGameBattle(state, sourceChannel, gameId);
+  if (!battle?.active || !battle.channels.includes(sourceChannel)) return null;
+  const next = { ...battle, scores: { ...battle.scores } };
+  mutate(next);
+  for (const channel of next.channels) {
+    const settings = getChannelGameSettings(state, channel);
+    settings.streamGameBattles ||= {};
+    settings.streamGameBattles[gameId] = { ...next, scores: { ...next.scores } };
+  }
+  return next;
+}
+
+export function streamGameBattlePublicSnapshot(state: any, channelValue: unknown, gameId: 'wordchain' | 'phraseguess') {
+  const battle = getStreamGameBattle(state, channelValue, gameId);
+  if (!battle?.active) return null;
+  return {
+    battleId: battle.battleId,
+    gameId: battle.gameId,
+    channels: battle.channels,
+    scores: battle.scores,
+    createdBy: battle.createdBy,
+    createdAt: battle.createdAt,
+    active: battle.active,
+    winnerChannel: battle.winnerChannel || '',
+    winnerDisplayName: battle.winnerDisplayName || '',
+  };
 }
 
 export function setChatWarsBattle(state:any,input:{channels:unknown[];createdBy?:unknown;active?:boolean}){

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   normalizeGameHubChannel,
   phraseGuessPublicSnapshot,
+  streamGameBattlePublicSnapshot,
   wordChainPublicSnapshot,
 } from '@/lib/game-hub-state';
 import { readAppState } from '@/lib/volume-store';
@@ -19,5 +20,6 @@ export async function GET(req: NextRequest) {
   const snapshot = gameId === 'wordchain'
     ? wordChainPublicSnapshot(state, channel)
     : phraseGuessPublicSnapshot(state, channel);
-  return NextResponse.json({ gameId, snapshot }, { headers: { 'Cache-Control': 'no-store' } });
+  const battle = streamGameBattlePublicSnapshot(state, channel, gameId);
+  return NextResponse.json({ gameId, snapshot, battle }, { headers: { 'Cache-Control': 'no-store' } });
 }
