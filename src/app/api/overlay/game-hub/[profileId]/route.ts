@@ -58,9 +58,9 @@ export async function GET(
   if (!profile) return NextResponse.json({ error: 'Overlay was not found.' }, { status: 404 });
 
   const games = profile.gameIds
-    .map((gameId) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
+    .map((gameId: string) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
     .filter(Boolean)
-    .map((game) => ({
+    .map((game: (typeof GAME_HUB_CATALOG)[number] | undefined) => ({
       id: game!.id,
       name: game!.name,
       shortName: game!.shortName,
