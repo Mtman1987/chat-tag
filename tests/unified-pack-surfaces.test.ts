@@ -75,3 +75,20 @@ test('Quackverse Discord edit uploads the rendered GIF as an attachment', async 
   assert.match(editor, /files\[0\]/);
   assert.match(editor, /attachments: \[\{ id: 0, filename: attachmentName \}\]/);
 });
+
+
+test('direct Discord spmt pack route uses fixed grid, pending notice, and attached GIF', async () => {
+  const route = await read('src/app/api/discord/chat/route.ts');
+  assert.match(route, /Cards · 3 across/);
+  assert.match(route, /PACK ANIMATION INCOMING/);
+  assert.match(route, /attachment:\/\/\$\{attachmentName\}/);
+  assert.match(route, /attachmentUrl: render\.gifUrl/);
+  assert.doesNotMatch(route, /const cardFields = packCards/);
+});
+
+test('prebuild does not overwrite the fixed direct Discord pack presenter', async () => {
+  const patch = await read('scripts/patch-unified-pack-surfaces.mjs');
+  assert.match(patch, /direct Discord pack presenter already uses fixed grid\/attachment flow/);
+  assert.match(patch, /Cards · 3 across/);
+  assert.match(patch, /PACK ANIMATION INCOMING/);
+});
