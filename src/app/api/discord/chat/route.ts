@@ -147,21 +147,39 @@ async function sendDiscordPackReply(
   const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
   const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
   const uniqueCards = new Set(collectionIds).size;
-  const cardFields = packCards.slice(0, 12).map((card: any, index: number) => ({
-    name: `${index + 1}. ${String(card?.name || 'Unknown Card').slice(0, 180)}`,
-    value: [
-      card?.rarity ? `Rarity: **${card.rarity}**` : '',
-      card?.type ? `Type: **${card.type}**` : '',
-      card?.id ? `#${card.id}` : '',
-    ].filter(Boolean).join(' · ') || 'Card',
-    inline: true,
-  }));
-  const embed: any = {
+  const packGridCell = (card: any, index: number) => {
+    const nameRaw = `${index + 1}. ${String(card?.name || 'Unknown')}`;
+    const name = (nameRaw.length > 20 ? nameRaw.slice(0, 19) + '…' : nameRaw).padEnd(20, ' ');
+    const rarity = String(card?.rarity || '?').slice(0, 1).toUpperCase();
+    const typeRaw = String(card?.type || '?');
+    const type = typeRaw.length > 9 ? typeRaw.slice(0, 8) + '…' : typeRaw;
+    const metaRaw = `${rarity} · ${type} · #${card?.id || '?'}`;
+    const meta = (metaRaw.length > 20 ? metaRaw.slice(0, 19) + '…' : metaRaw).padEnd(20, ' ');
+    return { name, meta };
+  };
+  const gridLines: string[] = [];
+  for (let index = 0; index < packCards.length; index += 3) {
+    const row = packCards.slice(index, index + 3).map((card: any, offset: number) => packGridCell(card, index + offset));
+    gridLines.push(row.map((entry: any) => entry.name).join(' │ ').trimEnd());
+    gridLines.push(row.map((entry: any) => entry.meta).join(' │ ').trimEnd());
+    if (index + 3 < packCards.length) gridLines.push('');
+  }
+  const cardGrid = ['```text', ...gridLines, '```'].join('\n');
+  const baseDescription = `🦆 @${userName} opened a Quackverse pack: ${packNames}. ${Number(packData.packsRemaining || 0)}/3 packs left today.`;
+  const buildEmbed = (animationState: 'pending' | 'ready' | 'unavailable', imageUrl?: string) => ({
     title: 'Quackverse Pack Opened',
-    description: `🦆 @${userName} opened a Quackverse pack: ${packNames}. ${Number(packData.packsRemaining || 0)}/3 packs left today.`,
+    description: [
+      baseDescription,
+      animationState === 'pending' ? '🎞️ **PACK ANIMATION INCOMING…**' : '',
+      animationState === 'unavailable' ? '🎞️ Pack animation unavailable for this opening.' : '',
+    ].filter(Boolean).join('\n'),
     color: 0x00d9ff,
     fields: [
-      ...cardFields,
+      {
+        name: 'Cards · 3 across',
+        value: cardGrid,
+        inline: false,
+      },
       {
         name: 'Collection',
         value: `${collectionIds.length} total cards | ${uniqueCards} unique`,
@@ -173,12 +191,14 @@ async function sendDiscordPackReply(
         inline: true,
       },
     ],
+    ...(imageUrl ? { image: { url: imageUrl } } : {}),
     ...replyEmbedIdentity(context),
     timestamp: new Date().toISOString(),
-  };
-  // Keep the initial Discord response compact. The five cards remain in the
-  // text fields while DSH records the real pack-opening animation in the
-  // background. When that GIF is ready we edit this same Discord message.
+  });
+  const embed: any = buildEmbed('pending');
+  // Keep the initial Discord response compact and deterministic on mobile.
+  // The cards are rendered as one monospace 3-column grid while DSH records
+  // the pack animation, then this same Discord message is edited with the GIF.
   const result = await sendDiscordMessage({
     channelId,
     content: '',
@@ -210,11 +230,14 @@ async function sendDiscordPackReply(
         await queueQuackversePackGif(event);
         const render = await waitForQuackversePackGifResult(event.eventId);
         if (render.gifUrl) {
+          const attachmentName = 'pack-animation.gif';
           const edited = await editDiscordSentMessage({
             channelId,
             result: sentResult,
             botToken: DISCORD_BOT_TOKEN,
-            embeds: [{ ...embed, image: { url: render.gifUrl } }],
+            embeds: [buildEmbed('ready', `attachment://${attachmentName}`)],
+            attachmentUrl: render.gifUrl,
+            attachmentName,
           });
           console.log('[Discord Chat] Quackverse pack GIF ready', {
             packId: event.eventId,
@@ -224,6 +247,12 @@ async function sendDiscordPackReply(
             gifUrl: render.gifUrl,
           });
         } else {
+          await editDiscordSentMessage({
+            channelId,
+            result: sentResult,
+            botToken: DISCORD_BOT_TOKEN,
+            embeds: [buildEmbed('unavailable')],
+          }).catch(() => false);
           console.error('[Discord Chat] Quackverse pack GIF unavailable', {
             packId: event.eventId,
             messageId: sentResult.messageId,
