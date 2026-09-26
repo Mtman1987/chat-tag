@@ -3,10 +3,12 @@ import test from 'node:test';
 import {
   chatWarsMinimumWordLength,
   chatWarsPublicSnapshot,
+  chatWarsStreamBattleSnapshot,
   getChatWarsState,
   recordChatWarsMessage,
   setChatWarsTeam,
 } from '../src/lib/chat-wars';
+import { setChatWarsBattle } from '../src/lib/game-hub-state';
 
 function state() {
   return { gameSettings: { default: {} } } as any;
@@ -93,4 +95,22 @@ test('Chat Wars saves the first 20x25 field, pauses once for Stella, then opens 
   assert.equal(snapshot.combined.width, 40);
   assert.equal(snapshot.combined.height, 25);
   assert.equal(snapshot.combined.tiles.length, 1000);
+});
+
+
+test('Chat Wars battle snapshot exposes every linked stream board', () => {
+  const draft = state();
+  setChatWarsBattle(draft, { channels: ['space', 'friend'], createdBy: 'space', active: true });
+  setChatWarsTeam(draft, { channel: 'space', userId: '1', username: 'redplayer', displayName: 'Red Player', team: 'red', now: 1 });
+  setChatWarsTeam(draft, { channel: 'friend', userId: '2', username: 'blueplayer', displayName: 'Blue Player', team: 'blue', now: 1 });
+  recordChatWarsMessage(draft, { channel: 'space', userId: '1', username: 'redplayer', displayName: 'Red Player', message: 'nebula mountain community', now: 2, random: () => 0 });
+  recordChatWarsMessage(draft, { channel: 'friend', userId: '2', username: 'blueplayer', displayName: 'Blue Player', message: 'galaxy streamer community', now: 2, random: () => 0 });
+
+  const battle = chatWarsStreamBattleSnapshot(draft, 'space');
+  assert.equal(battle?.channels.length, 2);
+  assert.deepEqual(battle?.channels.map((entry) => entry.channel), ['space', 'friend']);
+  assert.equal(battle?.channels[0].tiles.length, 500);
+  assert.equal(battle?.channels[1].tiles.length, 500);
+  assert.equal(battle?.channels[0].territory, 1);
+  assert.equal(battle?.channels[1].territory, 1);
 });
