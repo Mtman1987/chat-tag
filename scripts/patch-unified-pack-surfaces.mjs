@@ -10,6 +10,10 @@ function patchFile(path, patches) {
   fs.writeFileSync(path, source);
 }
 
+const discordChatRoute = fs.readFileSync('src/app/api/discord/chat/route.ts', 'utf8');
+if (discordChatRoute.includes('Cards · 3 across') && discordChatRoute.includes('PACK ANIMATION INCOMING')) {
+  console.log('Unified pack patch: direct Discord pack presenter already uses fixed grid/attachment flow.');
+} else
 patchFile('src/app/api/discord/chat/route.ts', [
   {
     before: "import { sendDiscordMessage } from '@/lib/discord-webhooks';",
