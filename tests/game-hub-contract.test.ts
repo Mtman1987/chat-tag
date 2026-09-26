@@ -401,7 +401,7 @@ test('game commands return the per-game learn-by-doing popout', () => {
   assert.match(command, /function instantGameOverlayUrl/);
   assert.match(command, /function gameReplyWithPopout/);
   assert.match(command, /getPublicAppOrigin\(req\)/);
-  assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\?channel=/);
+  assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\/controller\?channel=/);
   assert.match(command, /\^\(\?:control\|controls\|popout\)\$/);
   assert.match(command, /Learn and play:/);
   assert.match(command, /learn by playing, see its rules and commands/);
