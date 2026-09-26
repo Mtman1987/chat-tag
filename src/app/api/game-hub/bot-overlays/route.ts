@@ -5,8 +5,11 @@ import { createGameOverlayProfile, normalizeGameOverlayProfile, patchGameOverlay
 
 export const dynamic = 'force-dynamic';
 const STORE_KEY = 'gameHubOverlayProfiles';
+const SYSTEM_OVERRIDE_KEY = 'gameHubSystemOverlayOverrides';
 function login(v: unknown){ return String(v||'').trim().toLowerCase().replace(/^#/,'').slice(0,80); }
 function store(state:any){ state.gameSettings.default ||= {}; state.gameSettings.default[STORE_KEY] ||= {}; return state.gameSettings.default[STORE_KEY] as Record<string,any>; }
+function systemOverrides(state:any){ state.gameSettings.default ||= {}; state.gameSettings.default[SYSTEM_OVERRIDE_KEY] ||= {}; return state.gameSettings.default[SYSTEM_OVERRIDE_KEY] as Record<string,any>; }
+function systemOwner(id:string){ const match=id.match(/^system-([a-z0-9_]+)-(?:main|activity|rain|parade)$/); return match?.[1]||''; }
 
 export async function GET(req: NextRequest) {
   if (!isBotRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
@@ -34,6 +37,21 @@ export async function PATCH(req: NextRequest) {
   if(!ownerLogin||!id) return NextResponse.json({error:'channel and id are required'},{status:400});
   try {
     const profile=await updateAppState((state:any)=>{
+      const systemLogin=systemOwner(id);
+      if(systemLogin){
+        if(systemLogin!==ownerLogin) throw new Error('Overlay was not found.');
+        const overrides=systemOverrides(state);
+        const current=overrides[id]||{};
+        const updated={
+          ...current,
+          ...(body.gameIds==null?{}:{gameIds:body.gameIds}),
+          ...(body.layout==null?{}:{layout:body.layout}),
+          ...(body.transparent==null?{}:{transparent:body.transparent!==false}),
+          updatedAt:new Date().toISOString(),
+        };
+        overrides[id]=updated;
+        return {id,ownerLogin,...updated,system:true};
+      }
       const profiles=store(state); const existing=normalizeGameOverlayProfile(profiles[id]);
       if(!existing||existing.ownerLogin!==ownerLogin) throw new Error('Overlay was not found.');
       const updated=patchGameOverlayProfile(existing,body); updated.ownerLogin=ownerLogin; profiles[id]=updated; return updated;
