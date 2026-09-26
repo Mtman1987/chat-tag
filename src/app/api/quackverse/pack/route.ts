@@ -133,7 +133,9 @@ async function notifyStreamWeaverPackOverlay(input: {
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     console.warn('[Quackverse] StreamWeaver overlay notify failed:', response.status, detail.slice(0, 300));
+    return;
   }
+  console.log('[Quackverse] StreamWeaver overlay notified', { tenantId: input.tenantId, packId: input.packId });
 }
 
 function summarizePackAudit(events: any[]) {
@@ -399,15 +401,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...payload, error: (result as any).error }, { status: (result as any).status || 400 });
   }
   if (payload.packId && Array.isArray(payload.pack)) {
-    notifyStreamWeaverPackOverlay({
-      origin: publicOrigin,
-      username: normalizedUsername || userRecordId || userId,
-      packId: payload.packId,
-      pack: payload.pack,
-      tenantId: overlayTenantId,
-    }).catch((error) => {
+    try {
+      await notifyStreamWeaverPackOverlay({
+        origin: publicOrigin,
+        username: normalizedUsername || userRecordId || userId,
+        packId: payload.packId,
+        pack: payload.pack,
+        tenantId: overlayTenantId,
+      });
+    } catch (error) {
       console.warn('[Quackverse] StreamWeaver overlay notify failed:', error instanceof Error ? error.message : error);
-    });
+    }
   }
   return NextResponse.json(payload);
 }
