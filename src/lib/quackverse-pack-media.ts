@@ -77,8 +77,10 @@ export function createQuackversePackMediaEvent(input: {
   };
 }
 
-export function quackversePackRenderUrl(event: QuackversePackMediaEvent): string {
-  return `${STREAMWEAVER_URL}/overlay/card-pack?event=${encodeURIComponent(encodeEvent(event))}&capture=1`;
+export function quackversePackRenderUrl(event: QuackversePackMediaEvent, tenantId?: string): string {
+  const tenant = String(tenantId || '').trim().toLowerCase().replace(/^#/, '');
+  const tenantParam = tenant ? `&tenant=${encodeURIComponent(tenant)}` : '';
+  return `${STREAMWEAVER_URL}/overlay/card-pack?event=${encodeURIComponent(encodeEvent(event))}&capture=1${tenantParam}`;
 }
 
 async function dshRequest(path: string, init: RequestInit) {
@@ -94,11 +96,11 @@ async function dshRequest(path: string, init: RequestInit) {
   return response.json() as Promise<any>;
 }
 
-export async function queueQuackversePackGif(event: QuackversePackMediaEvent) {
+export async function queueQuackversePackGif(event: QuackversePackMediaEvent, tenantId?: string) {
   return dshRequest('/api/internal/card-pack/render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ eventId: event.eventId, source: 'quackverse', renderUrl: quackversePackRenderUrl(event) }),
+    body: JSON.stringify({ eventId: event.eventId, source: 'quackverse', renderUrl: quackversePackRenderUrl(event, tenantId) }),
   });
 }
 
