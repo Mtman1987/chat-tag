@@ -26,7 +26,7 @@ export async function editDiscordSentMessage(input: {
   };
 
   let attachmentBytes: Uint8Array | null = null;
-  let attachmentName = String(input.attachmentName || 'pack-animation.gif').trim() || 'pack-animation.gif';
+  const attachmentName = String(input.attachmentName || 'pack-animation.gif').trim() || 'pack-animation.gif';
   if (input.attachmentUrl) {
     const media = await fetch(input.attachmentUrl, { signal: timeoutSignal(15_000) }).catch(() => null);
     if (media?.ok) attachmentBytes = new Uint8Array(await media.arrayBuffer());
