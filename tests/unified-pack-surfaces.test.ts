@@ -56,3 +56,22 @@ test('Quackverse Twitch pack presenter passes the source channel into GIF captur
   assert.match(media, /tenantParam/);
   assert.match(media, /queueQuackversePackGif\(event: QuackversePackMediaEvent, tenantId\?: string\)/);
 });
+
+
+test('Quackverse Discord pack uses a fixed three-column text grid with pending animation notice', async () => {
+  const route = await read('src/app/api/quackverse/pack/present/route.ts');
+  assert.match(route, /Cards · 3 across/);
+  assert.match(route, /PACK ANIMATION INCOMING/);
+  assert.match(route, /inline: false/);
+  assert.doesNotMatch(route, /const cardFields = input\.pack/);
+});
+
+test('Quackverse Discord edit uploads the rendered GIF as an attachment', async () => {
+  const route = await read('src/app/api/quackverse/pack/present/route.ts');
+  const editor = await read('src/lib/discord-message-edit.ts');
+  assert.match(route, /attachment:\/\/\$\{attachmentName\}/);
+  assert.match(route, /attachmentUrl: render\.gifUrl/);
+  assert.match(editor, /FormData/);
+  assert.match(editor, /files\[0\]/);
+  assert.match(editor, /attachments: \[\{ id: 0, filename: attachmentName \}\]/);
+});
