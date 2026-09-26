@@ -117,6 +117,7 @@ export type GameHubChannelSettings = {
     };
   };
   wordChainVerdicts?: Record<string, boolean>;
+  chatWarsBattle?: { battleId: string; channels: string[]; createdBy: string; createdAt: string; active: boolean };
 };
 
 export type GameHubLedgerEntry = {
@@ -759,3 +760,12 @@ export function getGameHubGameStats(state: any, gameId: string) {
 export function gameCatalogIds() {
   return GAME_HUB_CATALOG.map((game) => game.id);
 }
+
+export function setChatWarsBattle(state:any,input:{channels:unknown[];createdBy?:unknown;active?:boolean}){
+ const channels=[...new Set((input.channels||[]).map(normalizeGameHubChannel).filter(Boolean))].slice(0,4);
+ if(channels.length<2) throw new Error('Chat Wars stream battle requires at least two channels.');
+ const battleId='chatwars:'+channels.slice().sort().join('+'); const createdAt=new Date().toISOString();
+ for(const channel of channels){ const settings=getChannelGameSettings(state,channel); settings.chatWarsBattle={battleId,channels,createdBy:normalizeGameHubChannel(input.createdBy),createdAt,active:input.active!==false}; setChannelGameRunning(state,channel,'chatwars',input.active!==false); }
+ return {battleId,channels,createdAt,active:input.active!==false};
+}
+export function getChatWarsBattle(state:any,channelValue:unknown){ return getChannelGameSettings(state,channelValue).chatWarsBattle||null; }

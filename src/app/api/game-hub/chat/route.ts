@@ -12,6 +12,7 @@ import {
   recordWordChainMessage,
   recordGameHubChatActivity,
   resolveChannelGameIds,
+  getChatWarsBattle,
 } from '@/lib/game-hub-state';
 import { readAppState, updateAppStateIfChanged, type JsonObject } from '@/lib/volume-store';
 
@@ -67,6 +68,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as JsonObject;
   const channel = normalizeChannel(body.channel);
   const username = normalizeChannel(body.username);
+  // A linked Chat Wars battle keeps each stream's chat identity while allowing
+  // every participating channel to feed the shared battle presentation.
+  const sourceChannel = channel;
   const message = cleanText(body.message, 500);
   if (!channel || !username || !message) {
     return NextResponse.json({ error: 'channel, username and message are required.' }, { status: 400 });
@@ -153,6 +157,8 @@ export async function POST(req: NextRequest) {
     phraseGuess: activity.phraseGuess,
     wordChain: activity.wordChain,
     chatWars: activity.chatWars,
+    sourceChannel,
+    battle: getChatWarsBattle(await readAppState(), channel),
     ...(stellaHalftimeQueued !== undefined ? { stellaHalftimeQueued } : {}),
   });
 }
