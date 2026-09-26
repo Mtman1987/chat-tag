@@ -5,6 +5,7 @@ import {
   joinGameHubGame,
   normalizeGameHubChannel,
   normalizeGameHubPlayerId,
+  getChatWarsBattle,
 } from '@/lib/game-hub-state';
 
 export const CHAT_WARS_WIDTH = 20;
@@ -291,4 +292,10 @@ export function compactChatWarsReveal(state: any, channelValue: unknown) {
     activeHalf: snapshot.activeHalf,
     phase: snapshot.phase,
   };
+}
+
+export function chatWarsStreamBattleSnapshot(state:any,channelValue:unknown){
+ const battle=getChatWarsBattle(state,channelValue); if(!battle?.active) return null;
+ const channels=battle.channels.map((channel:string)=>{ const snapshot=chatWarsPublicSnapshot(state,channel); const territory=Object.values(snapshot.totalCounts).reduce((sum:number,value:any)=>sum+Number(value||0),0); return {channel,territory,phase:snapshot.phase,activeHalf:snapshot.activeHalf,updatedAt:snapshot.updatedAt}; });
+ return {...battle,channels};
 }
