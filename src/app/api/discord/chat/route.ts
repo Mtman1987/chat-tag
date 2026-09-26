@@ -147,25 +147,30 @@ async function sendDiscordPackReply(
   const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
   const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
   const uniqueCards = new Set(collectionIds).size;
+  const cardFields = packCards.slice(0, 12).map((card: any, index: number) => ({
+    name: `${index + 1}. ${String(card?.name || 'Unknown Card').slice(0, 180)}`,
+    value: [
+      card?.rarity ? `Rarity: **${card.rarity}**` : '',
+      card?.type ? `Type: **${card.type}**` : '',
+      card?.id ? `#${card.id}` : '',
+    ].filter(Boolean).join(' · ') || 'Card',
+    inline: true,
+  }));
   const embed: any = {
     title: 'Quackverse Pack Opened',
     description: `🦆 @${userName} opened a Quackverse pack: ${packNames}. ${Number(packData.packsRemaining || 0)}/3 packs left today.`,
     color: 0x00d9ff,
     fields: [
-      {
-        name: 'Pack',
-        value: packCards.map((card: any) => `${card?.name || 'Unknown'} (${card?.rarity || 'Unknown'})`).join('\n') || 'No cards returned.',
-        inline: false,
-      },
+      ...cardFields,
       {
         name: 'Collection',
         value: `${collectionIds.length} total cards | ${uniqueCards} unique`,
-        inline: false,
+        inline: true,
       },
       {
         name: 'Rarity Breakdown',
         value: rarityBreakdown(collectionIds),
-        inline: false,
+        inline: true,
       },
     ],
     ...replyEmbedIdentity(context),

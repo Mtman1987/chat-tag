@@ -39,3 +39,20 @@ test('Quackverse awaits the StreamWeaver live overlay handoff before returning',
   assert.match(route, /await notifyStreamWeaverPackOverlay\(\{/);
   assert.match(route, /StreamWeaver overlay notified/);
 });
+
+
+test('Quackverse Discord pack summary uses inline card fields and edits the same message with the GIF', async () => {
+  const route = await read('src/app/api/quackverse/pack/present/route.ts');
+  assert.match(route, /cardFields/);
+  assert.match(route, /inline: true/);
+  assert.match(route, /editDiscordSentMessage/);
+  assert.match(route, /gifUrl/);
+});
+
+test('Quackverse Twitch pack presenter passes the source channel into GIF capture branding', async () => {
+  const patch = await read('scripts/patch-quackverse-pack-bot.mjs');
+  assert.match(patch, /streamweaverTenantId: channelName/);
+  const media = await read('src/lib/quackverse-pack-media.ts');
+  assert.match(media, /tenantParam/);
+  assert.match(media, /queueQuackversePackGif\(event: QuackversePackMediaEvent, tenantId\?: string\)/);
+});
