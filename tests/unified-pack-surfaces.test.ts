@@ -41,12 +41,13 @@ test('Quackverse awaits the StreamWeaver live overlay handoff before returning',
 });
 
 
-test('Quackverse Discord pack summary uses inline card fields and edits the same message with the GIF', async () => {
+test('Quackverse Discord pack summary uses three native inline columns and edits the same message with the GIF', async () => {
   const route = await read('src/app/api/quackverse/pack/present/route.ts');
-  assert.match(route, /cardFields/);
+  assert.match(route, /const columns = \[0, 1, 2\]/);
   assert.match(route, /inline: true/);
   assert.match(route, /editDiscordSentMessage/);
   assert.match(route, /gifUrl/);
+  assert.doesNotMatch(route, /packNames/);
 });
 
 test('Quackverse Twitch pack presenter passes the source channel into GIF capture branding', async () => {
@@ -58,12 +59,12 @@ test('Quackverse Twitch pack presenter passes the source channel into GIF captur
 });
 
 
-test('Quackverse Discord pack uses a fixed three-column text grid with pending animation notice', async () => {
+test('Quackverse Discord pack uses Spotlight-style inline columns with pending animation notice', async () => {
   const route = await read('src/app/api/quackverse/pack/present/route.ts');
-  assert.match(route, /Cards · 3 across/);
+  assert.match(route, /const columns = \[0, 1, 2\]/);
   assert.match(route, /PACK ANIMATION INCOMING/);
-  assert.match(route, /inline: false/);
-  assert.doesNotMatch(route, /const cardFields = input\.pack/);
+  assert.match(route, /inline: true/);
+  assert.doesNotMatch(route, /Cards · 3 across/);
 });
 
 test('Quackverse Discord edit uploads the rendered GIF as an attachment', async () => {
@@ -77,18 +78,19 @@ test('Quackverse Discord edit uploads the rendered GIF as an attachment', async 
 });
 
 
-test('direct Discord spmt pack route uses fixed grid, pending notice, and attached GIF', async () => {
+test('direct Discord spmt pack route uses native columns, pending notice, and attached GIF', async () => {
   const route = await read('src/app/api/discord/chat/route.ts');
-  assert.match(route, /Cards · 3 across/);
+  assert.match(route, /buildCardColumns/);
   assert.match(route, /PACK ANIMATION INCOMING/);
   assert.match(route, /attachment:\/\/\$\{attachmentName\}/);
   assert.match(route, /attachmentUrl: render\.gifUrl/);
-  assert.doesNotMatch(route, /const cardFields = packCards/);
+  assert.doesNotMatch(route, /packNames/);
+  assert.doesNotMatch(route, /Cards · 3 across/);
 });
 
-test('prebuild does not overwrite the fixed direct Discord pack presenter', async () => {
+test('prebuild does not overwrite the native-column direct Discord pack presenter', async () => {
   const patch = await read('scripts/patch-unified-pack-surfaces.mjs');
-  assert.match(patch, /direct Discord pack presenter already uses fixed grid\/attachment flow/);
-  assert.match(patch, /Cards · 3 across/);
+  assert.match(patch, /direct Discord pack presenter already uses native columns\/attachment flow/);
+  assert.match(patch, /buildCardColumns/);
   assert.match(patch, /PACK ANIMATION INCOMING/);
 });
