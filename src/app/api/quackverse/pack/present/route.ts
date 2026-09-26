@@ -47,29 +47,18 @@ function buildPackEmbed(input: {
   animationUnavailable?: boolean;
   animationPending?: boolean;
 }) {
-  const packNames = input.pack.map((card) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
-  const shortRarity = (value: unknown) => String(value || '?').slice(0, 1).toUpperCase();
-  const shortType = (value: unknown) => {
-    const text = String(value || '?');
-    return text.length > 9 ? text.slice(0, 8) + '…' : text;
-  };
-  const cell = (card: any, index: number) => {
-    const name = `${index + 1}. ${String(card?.name || 'Unknown')}`;
-    const trimmed = name.length > 20 ? name.slice(0, 19) + '…' : name;
-    const meta = `${shortRarity(card?.rarity)} · ${shortType(card?.type)} · #${card?.id || '?'}`;
-    return { top: trimmed.padEnd(20, ' '), bottom: meta.padEnd(20, ' ') };
-  };
-  const gridRows: string[] = [];
-  for (let index = 0; index < input.pack.length; index += 3) {
-    const row = input.pack.slice(index, index + 3).map((card, offset) => cell(card, index + offset));
-    gridRows.push(row.map((entry) => entry.top).join(' │ ').trimEnd());
-    gridRows.push(row.map((entry) => entry.bottom).join(' │ ').trimEnd());
-    if (index + 3 < input.pack.length) gridRows.push('');
-  }
-  const cardGrid = ['```text', ...gridRows, '```'].join('\n');
   const uniqueCards = new Set(input.collectionIds).size;
+  const columns = [0, 1, 2].map((column) => input.pack.filter((_, index) => index % 3 === column));
+  const cardColumns = columns.map((cardsInColumn) => ({
+    name: '\u200B',
+    value: cardsInColumn.map((card: any) => [
+      `**${input.pack.indexOf(card) + 1}. ${String(card?.name || 'Unknown Card')}**`,
+      `${String(card?.rarity || 'Unknown')} · ${String(card?.type || 'Quackverse')} · #${card?.id || '?'}`,
+    ].join('\n')).join('\n\n') || '\u200B',
+    inline: true,
+  }));
   const description = [
-    `🦆 @${input.username} opened a Quackverse pack: ${packNames}. ${input.packsRemaining}/3 packs left today.`,
+    `🦆 @${input.username} opened a Quackverse pack. ${input.packsRemaining} packs left today.`,
     input.animationPending ? '🎞️ **PACK ANIMATION INCOMING…**' : '',
     input.animationUnavailable ? '🎞️ Pack animation unavailable for this opening.' : '',
   ].filter(Boolean).join('\n');
@@ -79,11 +68,7 @@ function buildPackEmbed(input: {
     description,
     color: 0x00d9ff,
     fields: [
-      {
-        name: 'Cards · 3 across',
-        value: cardGrid,
-        inline: false,
-      },
+      ...cardColumns,
       {
         name: 'Collection',
         value: `${input.collectionIds.length} total cards | ${uniqueCards} unique`,
