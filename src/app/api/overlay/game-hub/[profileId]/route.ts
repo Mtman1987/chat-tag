@@ -38,7 +38,10 @@ export async function GET(
     },
   };
 
-  const system = systemProfiles[id];
+  const overrideStore = (state.gameSettings.default?.gameHubSystemOverlayOverrides || {}) as Record<string, any>;
+  const systemBase = systemProfiles[id];
+  const systemOverride = systemBase ? (overrideStore[id] || {}) : null;
+  const system = systemBase ? { ...systemBase, ...systemOverride } : null;
   const instant = instantGameOverlayProfile(id);
   const store = (state.gameSettings.default?.gameHubOverlayProfiles || {}) as Record<string, any>;
   const profile = system ? {
@@ -48,9 +51,9 @@ export async function GET(
     name: system.name,
     gameIds: system.gameIds,
     layout: system.layout,
-    transparent: true,
+    transparent: system.transparent !== false,
     createdAt: 'system',
-    updatedAt: 'system',
+    updatedAt: String(system.updatedAt || 'system'),
   } : instant || normalizeGameOverlayProfile(store[id]);
   if (!profile) return NextResponse.json({ error: 'Overlay was not found.' }, { status: 404 });
 
