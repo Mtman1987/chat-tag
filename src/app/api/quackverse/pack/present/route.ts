@@ -47,10 +47,15 @@ function buildPackEmbed(input: {
   animationUnavailable?: boolean;
 }) {
   const packNames = input.pack.map((card) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
-  const packLines = input.pack
-    .slice(0, 5)
-    .map((card) => `${card?.name || 'Unknown'} (${card?.rarity || 'Unknown'})`)
-    .join('\n') || 'No cards returned.';
+  const cardFields = input.pack.slice(0, 12).map((card, index) => ({
+    name: `${index + 1}. ${String(card?.name || 'Unknown Card').slice(0, 180)}`,
+    value: [
+      card?.rarity ? `Rarity: **${card.rarity}**` : '',
+      card?.type ? `Type: **${card.type}**` : '',
+      card?.id ? `#${card.id}` : '',
+    ].filter(Boolean).join(' · ') || 'Card',
+    inline: true,
+  }));
   const uniqueCards = new Set(input.collectionIds).size;
   const description = [
     `🦆 @${input.username} opened a Quackverse pack: ${packNames}. ${input.packsRemaining}/3 packs left today.`,
@@ -62,13 +67,13 @@ function buildPackEmbed(input: {
     description,
     color: 0x00d9ff,
     fields: [
-      { name: 'Pack', value: packLines, inline: false },
+      ...cardFields,
       {
         name: 'Collection',
         value: `${input.collectionIds.length} total cards | ${uniqueCards} unique`,
         inline: true,
       },
-      { name: 'Rarity Breakdown', value: rarityBreakdown(input.pack), inline: false },
+      { name: 'Rarity Breakdown', value: rarityBreakdown(input.pack), inline: true },
     ],
     ...(input.gifUrl ? { image: { url: input.gifUrl } } : {}),
     footer: { text: 'Nebula Arcade · Quackverse' },
@@ -88,6 +93,7 @@ export async function POST(request: NextRequest) {
   const channelId = String(body?.channelId || CHAT_TAG_CHANNEL_ID).trim();
   const packsRemaining = Math.max(0, Number(body?.packsRemaining || 0) || 0);
   const collectionIds = finiteIds(body?.cards || body?.collectionIds);
+  const streamweaverTenantId = String(body?.streamweaverTenantId || body?.tenantId || body?.streamerId || '').trim().toLowerCase().replace(/^#/, '');
 
   if (!packId || !pack.length || !channelId) {
     return NextResponse.json({ error: 'packId, pack, and Discord channel are required' }, { status: 400 });
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const event = createQuackversePackMediaEvent({ eventId: packId, username, cards: pack });
-    await queueQuackversePackGif(event);
+    await queueQuackversePackGif(event, streamweaverTenantId);
     const render = await waitForQuackversePackGifResult(event.eventId);
 
     if (render.gifUrl) {
