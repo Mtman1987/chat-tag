@@ -45,20 +45,32 @@ function buildPackEmbed(input: {
   collectionIds: number[];
   gifUrl?: string;
   animationUnavailable?: boolean;
+  animationPending?: boolean;
 }) {
   const packNames = input.pack.map((card) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
-  const cardFields = input.pack.slice(0, 12).map((card, index) => ({
-    name: `${index + 1}. ${String(card?.name || 'Unknown Card').slice(0, 180)}`,
-    value: [
-      card?.rarity ? `Rarity: **${card.rarity}**` : '',
-      card?.type ? `Type: **${card.type}**` : '',
-      card?.id ? `#${card.id}` : '',
-    ].filter(Boolean).join(' · ') || 'Card',
-    inline: true,
-  }));
+  const shortRarity = (value: unknown) => String(value || '?').slice(0, 1).toUpperCase();
+  const shortType = (value: unknown) => {
+    const text = String(value || '?');
+    return text.length > 9 ? text.slice(0, 8) + '…' : text;
+  };
+  const cell = (card: any, index: number) => {
+    const name = `${index + 1}. ${String(card?.name || 'Unknown')}`;
+    const trimmed = name.length > 20 ? name.slice(0, 19) + '…' : name;
+    const meta = `${shortRarity(card?.rarity)} · ${shortType(card?.type)} · #${card?.id || '?'}`;
+    return { top: trimmed.padEnd(20, ' '), bottom: meta.padEnd(20, ' ') };
+  };
+  const gridRows: string[] = [];
+  for (let index = 0; index < input.pack.length; index += 3) {
+    const row = input.pack.slice(index, index + 3).map((card, offset) => cell(card, index + offset));
+    gridRows.push(row.map((entry) => entry.top).join(' │ ').trimEnd());
+    gridRows.push(row.map((entry) => entry.bottom).join(' │ ').trimEnd());
+    if (index + 3 < input.pack.length) gridRows.push('');
+  }
+  const cardGrid = ['```text', ...gridRows, '```'].join('\n');
   const uniqueCards = new Set(input.collectionIds).size;
   const description = [
     `🦆 @${input.username} opened a Quackverse pack: ${packNames}. ${input.packsRemaining}/3 packs left today.`,
+    input.animationPending ? '🎞️ **PACK ANIMATION INCOMING…**' : '',
     input.animationUnavailable ? '🎞️ Pack animation unavailable for this opening.' : '',
   ].filter(Boolean).join('\n');
 
@@ -67,7 +79,11 @@ function buildPackEmbed(input: {
     description,
     color: 0x00d9ff,
     fields: [
-      ...cardFields,
+      {
+        name: 'Cards · 3 across',
+        value: cardGrid,
+        inline: false,
+      },
       {
         name: 'Collection',
         value: `${input.collectionIds.length} total cards | ${uniqueCards} unique`,
@@ -99,7 +115,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'packId, pack, and Discord channel are required' }, { status: 400 });
   }
 
-  const baseEmbed = buildPackEmbed({ username, pack, packsRemaining, collectionIds });
+  const baseEmbed = buildPackEmbed({ username, pack, packsRemaining, collectionIds, animationPending: true });
   const sent = await sendDiscordMessage({
     channelId,
     content: '',
@@ -119,11 +135,20 @@ export async function POST(request: NextRequest) {
     const render = await waitForQuackversePackGifResult(event.eventId);
 
     if (render.gifUrl) {
+      const attachmentName = 'pack-animation.gif';
       const edited = await editDiscordSentMessage({
         channelId,
         result: sent,
         botToken: DISCORD_BOT_TOKEN,
-        embeds: [buildPackEmbed({ username, pack, packsRemaining, collectionIds, gifUrl: render.gifUrl })],
+        embeds: [buildPackEmbed({
+          username,
+          pack,
+          packsRemaining,
+          collectionIds,
+          gifUrl: `attachment://${attachmentName}`,
+        })],
+        attachmentUrl: render.gifUrl,
+        attachmentName,
       });
       scheduleDiscordMessageCleanup(channelId, sent, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
       console.log('[Quackverse Pack Present] GIF ready', {
