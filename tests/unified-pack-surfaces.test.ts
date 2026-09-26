@@ -32,3 +32,10 @@ test('Quackverse forwards the real pack id to the shared live overlay', async ()
   assert.match(patch, /eventId: input\.packId/);
   assert.match(patch, /packId: input\.packId/);
 });
+
+
+test('Quackverse awaits the StreamWeaver live overlay handoff before returning', async () => {
+  const route = await read('src/app/api/quackverse/pack/route.ts');
+  assert.match(route, /await notifyStreamWeaverPackOverlay\(\{/);
+  assert.match(route, /StreamWeaver overlay notified/);
+});
