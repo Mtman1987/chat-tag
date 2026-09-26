@@ -296,6 +296,22 @@ export function compactChatWarsReveal(state: any, channelValue: unknown) {
 
 export function chatWarsStreamBattleSnapshot(state:any,channelValue:unknown){
  const battle=getChatWarsBattle(state,channelValue); if(!battle?.active) return null;
- const channels=battle.channels.map((channel:string)=>{ const snapshot=chatWarsPublicSnapshot(state,channel); const territory=Object.values(snapshot.totalCounts).reduce((sum:number,value:any)=>sum+Number(value||0),0); return {channel,territory,phase:snapshot.phase,activeHalf:snapshot.activeHalf,updatedAt:snapshot.updatedAt}; });
+ const channels=battle.channels.map((channel:string)=>{
+   const snapshot=chatWarsPublicSnapshot(state,channel);
+   const territory=Object.values(snapshot.totalCounts).reduce((sum:number,value:any)=>sum+Number(value||0),0);
+   return {
+     channel,
+     territory,
+     phase:snapshot.phase,
+     activeHalf:snapshot.activeHalf,
+     updatedAt:snapshot.updatedAt,
+     width:snapshot.width,
+     height:snapshot.height,
+     tiles:snapshot.tiles,
+     counts:snapshot.counts,
+     totalCounts:snapshot.totalCounts,
+     leaderboard:snapshot.leaderboard,
+   };
+ });
  return {...battle,channels};
 }

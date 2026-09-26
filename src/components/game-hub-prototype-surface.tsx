@@ -65,12 +65,33 @@ function emojiTokens(message: string): string[] {
   try { return message.match(/\p{Extended_Pictographic}/gu) || []; } catch { return []; }
 }
 
+type ChatWarsTeamTile = 'gray' | 'red' | 'blue' | 'green' | 'yellow';
+type ChatWarsChannelSnapshot = {
+  channel: string;
+  territory: number;
+  phase: string;
+  activeHalf: number;
+  updatedAt: string;
+  width: number;
+  height: number;
+  tiles: ChatWarsTeamTile[];
+  counts: Record<'red' | 'blue' | 'green' | 'yellow', number>;
+  totalCounts: Record<'red' | 'blue' | 'green' | 'yellow', number>;
+  leaderboard: Array<{ username: string; team: string; level: number; score: number }>;
+};
 type ChatWarsSnapshot = {
   width: number;
   height: number;
-  tiles: Array<'gray' | 'red' | 'blue' | 'green' | 'yellow'>;
+  tiles: ChatWarsTeamTile[];
   counts: Record<'red' | 'blue' | 'green' | 'yellow', number>;
   leaderboard: Array<{ username: string; team: string; level: number; score: number }>;
+  battle?: null | {
+    battleId: string;
+    channels: ChatWarsChannelSnapshot[];
+    createdBy: string;
+    createdAt: string;
+    active: boolean;
+  };
 };
 
 function ChatWarsBoard({ channel, gridOnly = false }: { channel: string; gridOnly?: boolean }) {
@@ -91,9 +112,31 @@ function ChatWarsBoard({ channel, gridOnly = false }: { channel: string; gridOnl
   }, [channel]);
 
   if (!snapshot) return <div className="h-full w-full bg-slate-950" />;
-  const grid = <div aria-label="Chat Wars territory grid" className="grid h-full w-full gap-px overflow-hidden bg-slate-800 p-px" style={{ gridTemplateColumns: `repeat(${snapshot.width}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${snapshot.height}, minmax(0, 1fr))` }}>
-    {snapshot.tiles.map((team, index) => <span key={index} className="min-h-0 min-w-0" style={{ background: team === 'gray' ? '#111827' : COLORS[team] }} />)}
-  </div>;
+
+  const renderGrid = (entry: Pick<ChatWarsChannelSnapshot, 'width' | 'height' | 'tiles'>, label: string) => (
+    <div aria-label={label} className="grid h-full w-full gap-px overflow-hidden bg-slate-800 p-px" style={{ gridTemplateColumns: `repeat(${entry.width}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${entry.height}, minmax(0, 1fr))` }}>
+      {entry.tiles.map((team, index) => <span key={index} className="min-h-0 min-w-0" style={{ background: team === 'gray' ? '#111827' : COLORS[team] }} />)}
+    </div>
+  );
+
+  const battleChannels = snapshot.battle?.active ? snapshot.battle.channels : [];
+  if (battleChannels.length >= 2) {
+    const columns = battleChannels.length <= 2 ? 'grid-cols-2' : 'grid-cols-2';
+    return <div className={`grid h-full w-full ${columns} gap-2 bg-slate-950 p-2`}>
+      {battleChannels.map((entry) => (
+        <div key={entry.channel} className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-1 overflow-hidden rounded border border-white/15 bg-slate-950">
+          <div className="truncate px-2 pt-1 text-center text-[clamp(8px,1.6vw,14px)] font-black uppercase tracking-wide text-cyan-100">@{entry.channel}</div>
+          <div className="min-h-0">{renderGrid(entry, `Chat Wars territory grid for ${entry.channel}`)}</div>
+          <div className="flex items-center justify-between gap-2 px-2 pb-1 text-[clamp(7px,1.2vw,10px)] font-bold uppercase text-white/70">
+            <span>{entry.territory} tiles</span>
+            <span>half {entry.activeHalf} · {entry.phase.replace('-', ' ')}</span>
+          </div>
+        </div>
+      ))}
+    </div>;
+  }
+
+  const grid = renderGrid(snapshot, 'Chat Wars territory grid');
   if (gridOnly) return grid;
   const total = Math.max(1, snapshot.width * snapshot.height);
   return <div className="grid aspect-[4/5] w-full max-w-[420px] grid-rows-[1fr_auto] gap-3">
