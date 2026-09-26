@@ -144,28 +144,18 @@ async function sendDiscordPackReply(
   context: DiscordReplyContext,
 ) {
   const packCards = Array.isArray(packData.pack) ? packData.pack : [];
-  const packNames = packCards.map((card: any) => card?.name).filter(Boolean).slice(0, 5).join(', ') || 'pack opened';
-  const collectionIds = Array.isArray(packData.cards) ? packData.cards.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id)) : [];
-  const uniqueCards = new Set(collectionIds).size;
-  const packGridCell = (card: any, index: number) => {
-    const nameRaw = `${index + 1}. ${String(card?.name || 'Unknown')}`;
-    const name = (nameRaw.length > 20 ? nameRaw.slice(0, 19) + '…' : nameRaw).padEnd(20, ' ');
-    const rarity = String(card?.rarity || '?').slice(0, 1).toUpperCase();
-    const typeRaw = String(card?.type || '?');
-    const type = typeRaw.length > 9 ? typeRaw.slice(0, 8) + '…' : typeRaw;
-    const metaRaw = `${rarity} · ${type} · #${card?.id || '?'}`;
-    const meta = (metaRaw.length > 20 ? metaRaw.slice(0, 19) + '…' : metaRaw).padEnd(20, ' ');
-    return { name, meta };
+  const buildCardColumns = (cards: any[]) => {
+    const columns = [0, 1, 2].map((column) => cards.filter((_, index) => index % 3 === column));
+    return columns.map((cardsInColumn) => ({
+      name: '\u200B',
+      value: cardsInColumn.map((card: any) => [
+        `**${packCards.indexOf(card) + 1}. ${String(card?.name || 'Unknown Card')}**`,
+        `${String(card?.rarity || 'Unknown')} · ${String(card?.type || 'Quackverse')} · #${card?.id || '?'}`,
+      ].join('\n')).join('\n\n') || '\u200B',
+      inline: true,
+    }));
   };
-  const gridLines: string[] = [];
-  for (let index = 0; index < packCards.length; index += 3) {
-    const row = packCards.slice(index, index + 3).map((card: any, offset: number) => packGridCell(card, index + offset));
-    gridLines.push(row.map((entry: any) => entry.name).join(' │ ').trimEnd());
-    gridLines.push(row.map((entry: any) => entry.meta).join(' │ ').trimEnd());
-    if (index + 3 < packCards.length) gridLines.push('');
-  }
-  const cardGrid = ['```text', ...gridLines, '```'].join('\n');
-  const baseDescription = `🦆 @${userName} opened a Quackverse pack: ${packNames}. ${Number(packData.packsRemaining || 0)}/3 packs left today.`;
+  const baseDescription = `🦆 @${userName} opened a Quackverse pack. ${Number(packData.packsRemaining || 0)} packs left today.`;
   const buildEmbed = (animationState: 'pending' | 'ready' | 'unavailable', imageUrl?: string) => ({
     title: 'Quackverse Pack Opened',
     description: [
@@ -175,11 +165,7 @@ async function sendDiscordPackReply(
     ].filter(Boolean).join('\n'),
     color: 0x00d9ff,
     fields: [
-      {
-        name: 'Cards · 3 across',
-        value: cardGrid,
-        inline: false,
-      },
+      ...buildCardColumns(packCards),
       {
         name: 'Collection',
         value: `${collectionIds.length} total cards | ${uniqueCards} unique`,
@@ -196,9 +182,8 @@ async function sendDiscordPackReply(
     timestamp: new Date().toISOString(),
   });
   const embed: any = buildEmbed('pending');
-  // Keep the initial Discord response compact and deterministic on mobile.
-  // The cards are rendered as one monospace 3-column grid while DSH records
-  // the pack animation, then this same Discord message is edited with the GIF.
+  // Match the Spotlight/shoutout pattern: three native inline fields form the
+  // card columns while DSH records, then this same message receives the GIF.
   const result = await sendDiscordMessage({
     channelId,
     content: '',
