@@ -396,8 +396,17 @@ export async function POST(req: NextRequest) {
         // players. Do not rewrite the entire volume for those no-op heartbeats.
         if (!player) return { changed: false, result: false };
         
-        player.lastChatAt = Date.now();
-        markPlayerPlayed(player, player.lastChatAt);
+        const now = Date.now();
+        const previousActivity = Number(player.lastChatAt) || 0;
+        const channelChanged = Boolean(body.channel && player.lastSeenChannel !== body.channel);
+        const immunityChanged = Boolean(player.sleepingImmunity || player.offlineImmunity);
+        // Presence is minute-granular. A busy channel should not rewrite the
+        // entire volume-backed state for every message from a player.
+        if (now - previousActivity < 60_000 && !channelChanged && !immunityChanged) {
+          return { changed: false, result: true };
+        }
+        player.lastChatAt = now;
+        markPlayerPlayed(player, now);
         if (body.channel) player.lastSeenChannel = body.channel;
         
         if (player.sleepingImmunity || player.offlineImmunity) {

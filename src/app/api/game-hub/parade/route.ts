@@ -4,7 +4,7 @@ import { getBotSecret } from '@/lib/runtime-secrets';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
 import { buildXpIdempotencyKey } from '@spmt/sdk';
 import { lookupTwitchUser } from '@/lib/twitch';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { setChannelGameRunning } from '@/lib/game-hub-state';
 import {
   finishDueDancingParades,
@@ -183,10 +183,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'finish-due') {
-    const sessions = await updateAppState((state) => {
+    const sessions = await updateAppStateIfChanged((state) => {
       const ended = finishDueDancingParades(state);
       for (const session of ended) setChannelGameRunning(state, session.channel, 'dancingparade', false);
-      return ended;
+      return { changed: ended.length > 0, result: ended };
     });
     const ended = [];
     for (const session of sessions) {

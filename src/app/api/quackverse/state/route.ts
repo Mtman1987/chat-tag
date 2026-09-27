@@ -7,7 +7,7 @@ import {
   redactQuackverseStateForViewer,
   viewerPayload,
 } from '@/lib/quackverse-access';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { quackverseRoomKeyFromParams, quackverseScopeFromParams } from '@/lib/quackverse-rooms';
 import { normalizeQuackverseState, type QuackverseSavedState } from '@/lib/quackverse-state';
 
@@ -18,15 +18,18 @@ export async function GET(req: NextRequest) {
   const scopedRoom = Boolean(quackverseScopeFromParams(req.nextUrl.searchParams));
 
   const saved = userId
-    ? await updateAppState((appState) => {
+    ? await updateAppStateIfChanged((appState) => {
         const current = appState.quackverseRooms?.[roomKey] || (!scopedRoom ? appState.quackverse : {});
         const state = normalizeQuackverseState(current as Partial<QuackverseSavedState>);
         const previousSeat = state.claimedPlayers.playerOne === userId || state.claimedPlayers.playerTwo === userId;
         const seat = ensureClaimedSeat(state, userId);
-        if (seat && !previousSeat) state.updatedAt = new Date().toISOString();
-        if (!appState.quackverseRooms) appState.quackverseRooms = {};
-        appState.quackverseRooms[roomKey] = state;
-        return state;
+        const changed = Boolean(seat && !previousSeat);
+        if (changed) {
+          state.updatedAt = new Date().toISOString();
+          if (!appState.quackverseRooms) appState.quackverseRooms = {};
+          appState.quackverseRooms[roomKey] = state;
+        }
+        return { changed, result: state };
       })
     : await (async () => {
         const appState = await readAppState();

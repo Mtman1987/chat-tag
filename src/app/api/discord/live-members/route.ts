@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { fetchTwitchLiveData } from '@/lib/twitch-live-data';
 
 function normalize(value: unknown) {
@@ -73,16 +73,22 @@ export async function GET() {
 
     const liveUsernames = new Set(liveMembers.map((member: any) => normalize(member.twitchUsername)));
     if (liveUsernames.size > 0) {
-      await updateAppState((draft) => {
+      await updateAppStateIfChanged((draft) => {
+        let changed = false;
         for (const player of Object.values(draft.tagPlayers || {}) as any[]) {
           const username = normalize(player.twitchUsername || player.username);
-          if (liveUsernames.has(username)) {
+          if (liveUsernames.has(username) && (
+            player.offlineImmunity || player.sleepingImmunity ||
+            player.timedImmunityUntil != null || player.noTagbackFrom != null
+          )) {
             player.offlineImmunity = false;
             player.sleepingImmunity = false;
             player.timedImmunityUntil = null;
             player.noTagbackFrom = null;
+            changed = true;
           }
         }
+        return { changed, result: null };
       });
     }
 
