@@ -181,3 +181,5 @@ Also check the app mod/admin logs after auto-rotate, away toggles, fix/prune act
 - Prune/archive remaining root utility scripts.
 
 <!-- Deployment retrigger: 2026-09-27 Chat Tag state isolation fix -->
+
+<!-- PR deployment trigger: state isolation recovery -->
