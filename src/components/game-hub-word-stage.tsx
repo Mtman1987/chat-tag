@@ -9,7 +9,10 @@ type WordChainSnapshot = {
   requiredLetter: string;
   chainLength: number;
   secondsLeft: number;
-  vote?: { word: string; closesAt: number } | null;
+  phase: 'play' | 'review' | 'tally';
+  reviewWords: Array<{ number: number; word: string; displayName: string; points: number; up: number; down: number; accepted?: boolean }>;
+  reviewLeaders: Array<{ displayName: string; points: number }>;
+  lastTally?: { roundSlot: number; accepted: number; rejected: number } | null;
 };
 
 type PhraseGuessSnapshot = {
@@ -72,20 +75,39 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
     const chain = snapshot as WordChainSnapshot;
     const head = chain.currentWord.slice(0, -1);
     return (
-      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden px-[4%] text-white">
-        <div className="absolute left-[3%] top-[4%] rounded-full border border-cyan-300/35 bg-slate-950/70 px-[2.4%] py-[1.1%] text-[clamp(12px,1.7vw,25px)] font-black uppercase tracking-[.12em] text-cyan-100">
-          {chain.theme} · Round {chain.roundNumber}/5
+      <div className="relative flex h-full w-full flex-col items-center overflow-hidden px-[3%] pt-[2%] text-white">
+        <div className="rounded-full border border-cyan-300/35 bg-slate-950/85 px-[2.5%] py-[.8%] text-center text-[clamp(12px,1.5vw,22px)] font-black uppercase tracking-[.1em] text-cyan-100">
+          Word Chain · {chain.theme} · Round {chain.roundNumber}/5 · {chain.phase === 'tally' ? 'Tally' : chain.phase === 'review' ? 'Review' : 'Play'} {clock(chain.secondsLeft)}
         </div>
-        <div className="absolute right-[3%] top-[4%] rounded-full border border-violet-300/35 bg-slate-950/70 px-[2.4%] py-[1.1%] text-[clamp(12px,1.7vw,25px)] font-black tabular-nums text-violet-100">
-          {clock(chain.secondsLeft)}
-        </div>
-        <div className="max-w-full break-all text-center text-[clamp(56px,12vw,180px)] font-black uppercase leading-none tracking-[.08em] drop-shadow-[0_0_26px_rgba(34,211,238,.55)]">
-          {head}<span className="text-fuchsia-300">{chain.requiredLetter}</span>
-        </div>
-        <div className="mt-[5%] text-center text-[clamp(15px,2vw,30px)] font-bold uppercase tracking-[.16em] text-cyan-100/80">
-          Next word starts with <span className="text-fuchsia-300">{chain.requiredLetter}</span> · {chain.chainLength} words
-        </div>
-        {chain.vote && <div className={`absolute ${battle?.active ? 'bottom-[11%]' : 'bottom-[4%]'} rounded-full border border-amber-300/40 bg-slate-950/80 px-[3%] py-[1.2%] text-[clamp(13px,1.7vw,24px)] font-bold text-amber-100`}>Vote YES or NO: does “{chain.vote.word}” fit?</div>}
+        {chain.phase === 'play' ? (
+          <div className="mt-[1.5%] flex max-w-full flex-col items-center rounded-2xl bg-slate-950/80 px-[3%] py-[1.2%] text-center backdrop-blur-sm">
+            <div className="max-w-full break-all text-[clamp(42px,8vw,112px)] font-black uppercase leading-none tracking-[.05em] drop-shadow-[0_0_22px_rgba(34,211,238,.7)]">
+              {head}<span className="text-fuchsia-300">{chain.requiredLetter}</span>
+            </div>
+            <div className="mt-[1%] text-[clamp(12px,1.55vw,22px)] font-bold uppercase tracking-[.1em] text-cyan-100">
+              Next: <span className="text-fuchsia-300">{chain.requiredLetter}</span> · {chain.chainLength} words · spmt &lt;word&gt;
+            </div>
+          </div>
+        ) : (
+          <div className="mt-[1.5%] flex max-h-[72%] w-full flex-col overflow-hidden rounded-2xl border border-cyan-300/20 bg-slate-950/90 px-[3%] py-[1.5%] backdrop-blur-sm">
+            <div className="text-center text-[clamp(18px,2.6vw,36px)] font-black uppercase text-cyan-100">
+              Round tally · {chain.reviewWords.length} words
+            </div>
+            <div className="mt-1 text-center text-[clamp(11px,1.3vw,19px)] font-bold text-amber-100">
+              {chain.phase === 'review' ? 'Vote spmt up <number> or spmt down <number> · ties and no votes count' : `Final: ${chain.lastTally?.accepted || 0} correct · ${chain.lastTally?.rejected || 0} voted down`}
+            </div>
+            <div className="mt-[1%] grid min-h-0 grid-cols-2 gap-x-[3%] gap-y-1 overflow-y-auto text-[clamp(11px,1.35vw,20px)] font-bold">
+              {chain.reviewWords.map((entry) => (
+                <div key={entry.number} className="truncate rounded bg-white/10 px-2 py-1">
+                  #{entry.number} {entry.word} {chain.phase === 'tally' ? entry.accepted ? '✓' : '✕' : ''} · {entry.displayName} · {entry.points} · ↑{entry.up} ↓{entry.down}
+                </div>
+              ))}
+            </div>
+            <div className="mt-1 text-center text-[clamp(11px,1.3vw,18px)] text-cyan-100">
+              {chain.reviewLeaders.map((entry, index) => `#${index + 1} ${entry.displayName} ${entry.points}`).join(' · ')}
+            </div>
+          </div>
+        )}
         {battleBar}
       </div>
     );
@@ -104,7 +126,7 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
         {phrase.maskedPhrase}
       </div>
       <div className={`absolute ${battle?.active ? 'bottom-[11%]' : 'bottom-[4%]'} text-[clamp(13px,1.6vw,23px)] font-bold uppercase tracking-[.14em] text-cyan-100/70`}>
-        {phrase.solved ? 'Solved!' : 'Guess normally in chat'}{phrase.submitterDisplayName ? ` · Submitted by ${phrase.submitterDisplayName}` : ''}
+        {phrase.solved ? 'Solved!' : 'Guess with spmt <your phrase>'}{phrase.submitterDisplayName ? ` · Submitted by ${phrase.submitterDisplayName}` : ''}
       </div>
       {battleBar}
     </div>

@@ -11,10 +11,15 @@ import { getPublicAppOrigin } from '@/lib/public-origin';
 import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
 import { setGameHubInstructions } from '@/lib/game-hub-instructions';
 import {
+  getChannelGameSettings,
+  getGameHubStore,
   joinGameHubGame,
   leaveGameHubGame,
   normalizeGameHubChannel,
   normalizeGameHubPlayerId,
+  recordPhraseGuessAttempt,
+  recordWordChainMessage,
+  recordWordChainVote,
   purchasePhraseGuessHint,
   resolveChannelGameIds,
   setChannelGameRunning,
@@ -29,7 +34,7 @@ import {
   getGamesPointsStanding,
   getPlayerGameSnapshots,
 } from '@/lib/game-hub-chat-summary';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { readAppState, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import {
   MOSAIC_COLORS,
@@ -183,6 +188,109 @@ export async function POST(req: NextRequest) {
   const activeForDirectRouting = resolveChannelGameIds(directState, channel);
   const activeActivityGame = currentActivityGameId(directState, channel, activeForDirectRouting);
   const canControl = Boolean(body.isBroadcaster || body.isModerator || body.isAdmin || username === channel);
+
+  // The main overlay rotates these games in this order. Resolve a short guess
+  // against the displayed stage, rather than charging both running games.
+  const wordStages = ['wordchain', 'phraseguess'].filter((id) => activeForDirectRouting.includes(id));
+  const stageGameId = wordStages.length ? wordStages[nebulaRotationIndexAt(Date.now(), wordStages.length)] : '';
+  if (stageGameId === 'wordchain' && /^(up|down)$/.test(command) && parts.length === 2) {
+    const result = await updateAppStateIfChanged((draft) => {
+      const outcome = recordWordChainVote(draft, {
+        channel, userId, username, word: parts[1], up: command === 'up',
+      });
+      return { changed: outcome.changed, result: outcome };
+    });
+    const responses: Record<string, string> = {
+      voted: `${command} vote recorded for “${(result as any).word}”.`,
+      unchanged: `your ${command} vote for “${(result as any).word}” is already recorded.`,
+      'not-review': 'votes open after the play timer ends. Keep the chain moving for now.',
+      'vote-closed': 'voting has closed and the round tally is on screen.',
+      'unknown-word': 'that word is not on the round review board. Use its number or spelling.',
+      'invalid-voter': 'your Twitch identity could not be read.',
+    };
+    return NextResponse.json({ handled: true, reply: `@${displayName} ${responses[result.outcome] || result.outcome}` });
+  }
+  const explicitGuess = (command === 'guess' || command === 'word'
+    || (command === 'chain' && parts[1]?.toLowerCase() !== 'theme')
+    || (command === 'phrase' && !/^(?:hint|submit|start|stop|leave|rules|help)$/.test(parts[1]?.toLowerCase() || '')))
+    && parts.length > 1;
+  const guessText = (explicitGuess ? parts.slice(1) : parts).join(' ').trim();
+  const playerId = normalizeGameHubPlayerId(userId, username);
+  const stageMember = stageGameId && getGameHubStore(directState).players[playerId]?.joinedGames?.[stageGameId]?.active;
+  const reservedRoot = new Set([
+    'instructions', 'control', 'controls', 'popout', 'help', 'rules', 'games',
+    'score', 'leader', 'points', 'pleader', 'leaderboard', 'rankings',
+    'show', 'view', 'brush', 'dig', 'answer', 'solve', 'paint',
+    'mosaic', 'chain', 'phrase',
+  ]).has(command);
+  const specializedGameCommand = parseMosaicPaintCommand(body.message) !== null
+    || parseMosaicBrushCommand(body.message) !== null
+    || parseMosaicViewCommand(body.message) !== null;
+  const directCommand = resolveDirectGameCommand(parts, activeForDirectRouting);
+  const commandCollision = !explicitGuess && parts.length === 1
+    && (reservedRoot || Boolean(resolveGameHubCommandKey(command))
+      || directCommand.recognized);
+  const settings = stageGameId ? getChannelGameSettings(directState, channel) : null;
+  const choiceKey = `${stageGameId}:${playerId}`;
+  const runId = settings?.gameRunIds?.[stageGameId] || 'initial';
+  const selectedChoice = body.selectedChoice?.gameId === stageGameId
+    && body.selectedChoice?.word === guessText.toLowerCase()
+    ? body.selectedChoice?.choice : null;
+  const savedChoice = settings?.wordGuessChoices?.[choiceKey];
+  const preferredChoice = selectedChoice || (savedChoice?.runId === runId ? savedChoice.choice : null);
+
+  if (stageGameId && stageMember && commandCollision && !preferredChoice) {
+    return NextResponse.json({
+      handled: true,
+      choices: [
+        { number: 1, gameId: stageGameId, label: `Guess “${guessText}”`, command: `spmt guess ${guessText}`, choice: 'guess', word: guessText.toLowerCase() },
+        { number: 2, gameId: stageGameId, label: `Use “spmt ${command}” command`, command: `spmt ${command}`, choice: 'command', word: guessText.toLowerCase() },
+      ],
+      reply: `@${displayName} Did you mean 1 guess “${guessText}” in ${getGameHubGame(stageGameId)?.name}, or 2 the spmt ${command} command? Type 1 or 2. I’ll remember for this game.`,
+    });
+  }
+
+  if (stageGameId && stageMember && selectedChoice) {
+    await updateAppState((draft) => {
+      const current = getChannelGameSettings(draft, channel);
+      current.wordGuessChoices ||= {};
+      current.wordGuessChoices[choiceKey] = { runId: current.gameRunIds?.[stageGameId] || 'initial', choice: selectedChoice };
+      current.wordGuessChoices = Object.fromEntries(Object.entries(current.wordGuessChoices).slice(-500));
+      return null;
+    });
+  }
+
+  const routeGuess = stageGameId && (explicitGuess || (stageMember && !reservedRoot && !specializedGameCommand
+    && !directCommand.recognized) || preferredChoice === 'guess');
+  if (routeGuess) {
+    if (!stageMember) {
+      const join = stageGameId === 'wordchain' ? 'spmt chain' : 'spmt phrase';
+      return NextResponse.json({ handled: true, reply: `@${displayName} join ${getGameHubGame(stageGameId)?.name} with ${join} before guessing.` });
+    }
+    const result = await updateAppStateIfChanged((draft) => {
+      const outcome = stageGameId === 'wordchain'
+        ? recordWordChainMessage(draft, { channel, userId, username, displayName, message: guessText, explicit: true })
+        : recordPhraseGuessAttempt(draft, { channel, userId, username, displayName, message: guessText, explicit: true });
+      return { changed: outcome.changed, result: outcome };
+    });
+    const label = stageGameId === 'wordchain' ? 'Word Chain' : 'Phrase Guess';
+    const details: Record<string, string> = stageGameId === 'wordchain' ? {
+      accepted: `“${guessText.toUpperCase()}” extends the chain · ${(result as any).points || 0} provisional points. Votes settle at round end.`,
+      review: 'the round is in review. Vote with spmt up <word> or spmt down <word>; the next chain begins shortly.',
+      'wrong-letter': 'that word starts with the wrong letter. Check the highlighted last letter on the board.',
+      used: 'that word is already in this chain.',
+      invalid: 'use one word of at least three letters.',
+      rejected: 'that word was voted down in a previous round. Try another.',
+      'not-playing': 'join first with spmt chain.',
+    } : {
+      won: `solved the phrase! +${(result as any).reward || 0} points.`,
+      wrong: `not the phrase · ${(result as any).cost || 0} Game Point spent.`,
+      'no-charge': 'that guess did not count.',
+      closed: 'this phrase has already been solved.',
+      'not-playing': 'join first with spmt phrase.',
+    };
+    return NextResponse.json({ handled: true, reply: `@${displayName} ${label}: ${details[result.outcome] || result.outcome}` });
+  }
 
   if (command === 'mosaic' && /^(?:finish|complete)$/.test(String(parts[1] || '').toLowerCase()) && parts.length === 2) {
     if (!canControl) {

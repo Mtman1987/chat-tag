@@ -37,7 +37,7 @@ const livePageByUser = new Map();
 const lastListCommandByUser = new Map();
 const CHAT_ACTIVITY_THROTTLE_MS = Math.max(
   5_000,
-  Number.parseInt(process.env.CHAT_ACTIVITY_THROTTLE_MS || '15000', 10) || 15_000,
+  Number.parseInt(process.env.CHAT_ACTIVITY_THROTTLE_MS || '60000', 10) || 60_000,
 );
 const CHAT_ACTIVITY_TRACKER_LIMIT = Math.max(
   500,
@@ -349,6 +349,26 @@ async function apiCall(endpoint, options = {}) {
     console.error(`[API Error] ${endpoint}:`, e.message);
     return null;
   }
+}
+
+// Gate lists are global and change rarely. Share one short-lived read across
+// bursts of chat commands instead of hitting the volume-backed API twice each.
+let commandGateCache = null;
+let commandGatePending = null;
+async function readCommandGates() {
+  if (commandGateCache && Date.now() < commandGateCache.expiresAt) return commandGateCache.value;
+  if (commandGatePending) return commandGatePending;
+  commandGatePending = Promise.all([
+    apiCall('/api/bot/blacklist'),
+    apiCall('/api/bot/muted'),
+  ]).then(([blacklistData, mutedData]) => {
+    const value = { blacklistData, mutedData };
+    if (blacklistData?.__ok && mutedData?.__ok) {
+      commandGateCache = { value, expiresAt: Date.now() + 3000 };
+    }
+    return value;
+  }).finally(() => { commandGatePending = null; });
+  return commandGatePending;
 }
 
 function isExpectedApiResponse(endpoint, status, data) {
@@ -1939,6 +1959,7 @@ console.log = (...args) => {
     let msg = rawMessage.toLowerCase();
     const rawChoiceKey = channel.replace('#', '').toLowerCase() + ':' + senderLogin;
     const pendingChoice = pendingGameChoices.get(rawChoiceKey);
+    let selectedChoice = null;
     const pendingChoiceNumber = /^\d{1,2}$/.test(msg) ? Number(msg) : 0;
     const mosaicShortcut = msg === '!mosaic' || msg.startsWith('!mosaic ');
     if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ') && !mosaicShortcut) {
@@ -1946,7 +1967,8 @@ console.log = (...args) => {
         if (pendingChoice?.expiresAt < Date.now()) pendingGameChoices.delete(rawChoiceKey);
         return;
       }
-      rawMessage = String(pendingChoice.choices[pendingChoiceNumber - 1].command || '');
+      selectedChoice = pendingChoice.choices[pendingChoiceNumber - 1];
+      rawMessage = String(selectedChoice.command || '');
       msg = rawMessage.toLowerCase();
       pendingGameChoices.delete(rawChoiceKey);
     }
@@ -1974,9 +1996,6 @@ console.log = (...args) => {
     recentMessages.add(msgId);
     setTimeout(() => recentMessages.delete(msgId), 5000);
     
-    // Small random delay to avoid looking too bot-like (0.5-1.5s)
-    await new Promise(r => setTimeout(r, 500 + Math.random() * 1000));
-    
     let args = normalizedMsg.toLowerCase().split(/\s+/).slice(1);
     let cmd = args[0];
     const userId = `user_${tags['user-id']}`;
@@ -1989,14 +2008,13 @@ console.log = (...args) => {
     // Blacklist check
     if (isIgnoredSender(user, channelName)) return;
 
-    const blacklistData = await apiCall('/api/bot/blacklist');
+    const { blacklistData, mutedData } = await readCommandGates();
     const channelIsBlacklisted = blacklistData?.blacklisted?.includes(channelName);
     if (channelIsBlacklisted) {
       return;
     }
     
     // Muted channel check - still process commands but don't respond
-    const mutedData = await apiCall('/api/bot/muted');
     const isMuted = mutedData?.muted?.includes(channelName);
 
     // Chat Tag predates Games Hub and is a persistent ecosystem-wide game.
@@ -2022,7 +2040,7 @@ console.log = (...args) => {
     // commands. This ordering is deliberate: legacy Tag never waits on the
     // Games Hub router before reaching its original handler.
     const sharedNebulaCommands = new Set(['join', 'leave']);
-    if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd)) {
+    if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd) || args.length === 1) {
       const gamesHubCommand = await apiCall('/api/game-hub/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2033,10 +2051,12 @@ console.log = (...args) => {
           displayName: user,
           message: rawMessage,
           messageId: tags.id || '',
+          selectedChoice: selectedChoice?.choice ? { gameId: selectedChoice.gameId, word: selectedChoice.word, choice: selectedChoice.choice } : null,
           isBroadcaster: tags?.badges?.broadcaster === '1' || senderLogin === channelName,
           isModerator: Boolean(tags?.mod),
           isAdmin: isAdminUser,
         }),
+        ...(legacyChatTagCommands.has(cmd) && !sharedNebulaCommands.has(cmd) ? { signal: AbortSignal.timeout(1500) } : {}),
       });
       if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {
         pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + 30_000 });

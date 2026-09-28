@@ -31,6 +31,11 @@ import { getGameHubInstructions, setGameHubInstructions } from '../src/lib/game-
 import {
   PHRASE_GUESS_PHRASES,
   WORD_CHAIN_THEMES,
+  WORD_CHAIN_CYCLE_MS,
+  WORD_CHAIN_ROUND_MS,
+  WORD_CHAIN_REVIEW_MS,
+  advanceWordChainRound,
+  recordWordChainVote,
   getOrCreateGameHubPlayer,
   joinGameHubGame,
   phraseGuessPublicSnapshot,
@@ -240,33 +245,41 @@ test('community Phrase Guess submissions enter rotation and reward their submitt
   assert.equal(state.gameSettings.default.gameHub.players['twitch:22'].gamePointsBalance, 50);
 });
 
-test('Word Chain settles canonical words, combos, and neutral majority votes durably', () => {
+test('Word Chain keeps play moving and settles votes after round review', () => {
   const state: any = { gameSettings: { default: {} } };
   const first = { userId: '11', username: 'alpha', displayName: 'Alpha' };
   const second = { userId: '12', username: 'beta', displayName: 'Beta' };
-  for (const identity of [first, second]) {
-    const player = getOrCreateGameHubPlayer(state, identity);
-    player.joinedGames.wordchain = { joinedAt: new Date(0).toISOString(), active: true, score: 0, wins: 0, plays: 1 };
-  }
+  for (const identity of [first, second]) joinGameHubGame(state, { ...identity, gameId: 'wordchain' });
   const stored = (id: string) => state.gameSettings.default.gameHub.players[`twitch:${id}`];
 
   assert.deepEqual(wordChainRoundAt(0), { roundSlot: 0, theme: 'Animals', seed: WORD_CHAIN_THEMES.Animals[0] });
-  const raccoon = recordWordChainMessage(state, { ...first, channel: 'space', message: 'raccoon', now: 0 });
-  const newt = recordWordChainMessage(state, { ...first, channel: 'space', message: 'newt', now: 1 });
-  assert.equal(raccoon.outcome, 'accepted');
-  assert.equal(raccoon.points, 7);
-  assert.equal(newt.outcome, 'accepted');
-  assert.equal(newt.points, 6);
-  assert.equal(stored('11').gamePointsBalance, 13);
-  assert.equal(stored('11').joinedGames.wordchain.score, 13);
-
-  const pending = recordWordChainMessage(state, { ...first, channel: 'space', message: 'truck', now: 2 });
-  assert.equal(pending.outcome, 'vote-opened');
-  assert.equal(recordWordChainMessage(state, { ...second, channel: 'space', message: 'yes', now: 3 }).outcome, 'voted');
-  const afterVote = recordWordChainMessage(state, { ...second, channel: 'space', message: 'kangaroo', now: 20_003 });
-  assert.equal(afterVote.finalized?.accepted, true);
-  assert.equal(afterVote.outcome, 'accepted');
-  assert.equal(stored('11').gamePointsBalance, 23);
+  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'raccoon', now: 0 }).outcome, 'accepted');
+  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'newt', now: 1 }).outcome, 'accepted');
+  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'truck', now: 2 }).outcome, 'accepted');
+  assert.equal(recordWordChainMessage(state, { ...second, channel: 'space', message: 'kangaroo', now: 3 }).outcome, 'accepted');
+  assert.equal(stored('11').gamePointsBalance, 0);
+  assert.equal(wordChainPublicSnapshot(state, 'space', WORD_CHAIN_ROUND_MS).phase, 'review');
+  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'otter', now: WORD_CHAIN_ROUND_MS }).outcome, 'review');
+  assert.equal(recordWordChainVote(state, { ...first, channel: 'space', word: 'truck', up: false, now: WORD_CHAIN_ROUND_MS }).outcome, 'voted');
+  assert.equal(recordWordChainVote(state, { ...second, channel: 'space', word: 'truck', up: false, now: WORD_CHAIN_ROUND_MS + 1 }).outcome, 'voted');
+  assert.equal(recordWordChainVote(state, { ...second, channel: 'space', word: 'raccoon', up: true, now: WORD_CHAIN_ROUND_MS + 2 }).outcome, 'voted');
+  const review = wordChainPublicSnapshot(state, 'space', WORD_CHAIN_ROUND_MS + 2);
+  assert.equal(review.reviewWords.length, 4);
+  assert.equal(review.reviewWords[2].down, 2);
+  const finalAt = WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS;
+  const preview = wordChainPublicSnapshot(state, 'space', finalAt);
+  assert.equal(preview.phase, 'tally');
+  assert.equal(preview.reviewWords[2].accepted, false);
+  assert.equal(preview.reviewLeaders[0].points, 15);
+  assert.equal(stored('11').gamePointsBalance, 0, 'read-only tally preview must not settle points');
+  assert.equal(recordWordChainVote(state, { ...second, channel: 'space', word: 'newt', up: false, now: finalAt }).outcome, 'vote-closed');
+  advanceWordChainRound(state, 'space', WORD_CHAIN_CYCLE_MS);
+  const tally = state.gameSettings.default.gameHub.channels.space.lastWordChainTally;
+  assert.equal(tally.accepted, 3);
+  assert.equal(tally.rejected, 1);
+  assert.equal(state.gameSettings.default.gameHub.channels.space.wordChainVerdicts['Animals:TRUCK'], false);
+  assert.equal(stored('11').joinedGames.wordchain.score, 13 + 2);
+  assert.equal(stored('11').gamePointsBalance, 15);
   assert.equal(stored('12').gamePointsBalance, 8);
 });
 
@@ -800,7 +813,25 @@ test('cross-stream Word Chain shares one chain and credits the source stream', (
   assert.equal(result.outcome, 'accepted');
   assert.equal(wordChainPublicSnapshot(draft, 'alpha', 1).currentWord, 'RABBIT');
   assert.equal(wordChainPublicSnapshot(draft, 'beta', 1).currentWord, 'RABBIT');
+  advanceWordChainRound(draft, 'beta', WORD_CHAIN_CYCLE_MS);
   const battle = streamGameBattlePublicSnapshot(draft, 'beta', 'wordchain');
   assert.ok(Number(battle?.scores.beta || 0) > 0);
   assert.equal(Number(battle?.scores.alpha || 0), 0);
+});
+
+test('word games only spend or advance on explicit guesses, with collision choice retained for one game run', () => {
+  const state: any = { gameSettings: { default: {} } };
+  const user = { channel: 'space', userId: '41', username: 'captain', displayName: 'Captain', now: 0 };
+  for (const gameId of ['wordchain', 'phraseguess']) joinGameHubGame(state, { ...user, gameId });
+  assert.equal(recordWordChainMessage(state, { ...user, message: 'spmt raccoon' }).outcome, 'ignored');
+  assert.equal(recordWordChainMessage(state, { ...user, message: 'raccoon', explicit: true }).outcome, 'accepted');
+  const phrase = phraseGuessRoundForChannel(state, 'space', 0).phrase;
+  assert.equal(recordPhraseGuessAttempt(state, { ...user, message: 'spmt ' + phrase }).outcome, 'ignored');
+  assert.equal(recordPhraseGuessAttempt(state, { ...user, message: phrase, explicit: true }).outcome, 'won');
+  const ingest = read('src/app/api/game-hub/chat/route.ts');
+  const command = read('src/app/api/game-hub/command/route.ts');
+  assert.ok(ingest.includes("privateControllerInput && gameInputIds.includes('wordchain')"));
+  assert.ok(command.includes('wordGuessChoices[choiceKey]'));
+  assert.ok(command.includes('message: guessText, explicit: true'));
+  assert.ok(command.includes('!specializedGameCommand'), 'Mosaic paint and view commands must bypass word guessing');
 });

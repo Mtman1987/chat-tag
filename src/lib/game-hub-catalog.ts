@@ -276,7 +276,7 @@ export const GAME_HUB_CATALOG: GameHubGame[] = [
     name: 'Word Chain',
     shortName: 'Word Chain',
     description: 'Players extend a shared word chain using the last letter of the previous word.',
-    howToPlay: 'Type a valid word beginning with the previous word\'s final letter. Repeated words are rejected and long words can extend the timer.',
+    howToPlay: 'Join with spmt chain, then guess with spmt followed by a word beginning with the previous word\'s final letter. Use spmt guess <word> if the word overlaps a command. Every valid word advances the chain immediately; vote up or down during the round review. Ordinary chat does not change the board.',
     runtime: 'round-state',
     status: 'prototype-ready',
     category: 'word',

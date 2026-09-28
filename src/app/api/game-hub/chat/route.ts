@@ -117,8 +117,10 @@ export async function POST(req: NextRequest) {
     const lastScoreAt = Date.parse(String(snapshotPlayer?.joinedGames?.[gameId]?.lastScoreAt || 0));
     return !Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS;
   });
-  const phraseGuessAttemptDue = gameInputIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
-  const wordChainAttemptDue = gameInputIds.includes('wordchain') && !/^\s*!?@?spmt\b/i.test(message);
+  // Public chat needs an explicit spmt command. The signed-in private controller
+  // can still simulate a plain chat guess for its own channel.
+  const phraseGuessAttemptDue = privateControllerInput && gameInputIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
+  const wordChainAttemptDue = privateControllerInput && gameInputIds.includes('wordchain') && !/^\s*!?@?spmt\b/i.test(message);
   const chatWarsAttemptDue = gameInputIds.includes('chatwars') && !/^\s*!?@?spmt\b/i.test(message);
   const activity = scoreWriteDue || phraseGuessAttemptDue || wordChainAttemptDue || chatWarsAttemptDue
     ? await updateAppStateIfChanged((state) => {

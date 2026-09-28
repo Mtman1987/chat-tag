@@ -76,6 +76,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt pet hamster', description: 'Enter as a hamster.' },
   ] },
   { gameId: 'phraseguess', key: 'phrase', aliases: ['phraseguess'], joinDescription: 'Join Phrase Guess.', joinTrigger: 'spmt phrase', commands: [
+    { trigger: 'spmt <your phrase>', description: 'Guess the phrase currently on the main stage.' },
     { trigger: 'spmt phrase hint', description: 'Buy the next shared hint with Games Points.' },
     { trigger: 'spmt phrase submit your phrase', description: 'Submit a community phrase and earn attribution points when it is solved.' },
   ] },
@@ -98,6 +99,8 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt treasure pass', description: 'Spend a fixed 250 Games Points to reveal one treasure coordinate; maximum five per board.' },
   ] },
   { gameId: 'wordchain', key: 'wordchain', aliases: ['chain'], joinDescription: 'Join Word Chain.', joinTrigger: 'spmt chain', commands: [
+    { trigger: 'spmt <word>', description: 'Extend the chain currently on the main stage. Use spmt guess <word> for a command word.' },
+    { trigger: 'spmt up <word> / spmt down <word>', description: 'During the 30-second round review, vote on any played word by spelling or board number.' },
     { trigger: 'spmt chain theme Space: rocket, planet, comet, telescope', description: 'Add a community theme with at least four starter words.' },
   ] },
   { gameId: 'wordstorm', key: 'wordstorm', aliases: ['storm'], joinDescription: 'Join Word Storm.', joinTrigger: 'spmt storm', commands: [] },
