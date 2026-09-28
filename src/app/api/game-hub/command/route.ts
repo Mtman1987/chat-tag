@@ -747,10 +747,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       handled: true,
       reply: action === 'start'
-        ? `${game.name} is ACTIVE in #${channel}. Open to play or watch: ${url} · Streamer: copy into an OBS Browser Source: ${overlayUrl}`.slice(0, 480)
+        ? `${game.name} is ACTIVE in #${channel}. Controller: ${url}`.slice(0, 480)
         : `${game.name} is now STOPPED in #${channel}.`,
       activeGameIds: activeIds,
-      ...(action === 'start' ? { launchUrl: url, overlayUrl } : {}),
+      ...(action === 'start' ? {
+        launchUrl: url,
+        overlayUrl,
+        followupReply: `📺 Put ${game.name} on #${channel} right now: ${overlayUrl}`.slice(0, 480),
+      } : {}),
     });
   }
 
