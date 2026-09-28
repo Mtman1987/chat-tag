@@ -148,8 +148,8 @@ test('main word game broadcast stages and Chat Tag leaderboard rotation are wire
   const chatTagOverlay = readFileSync(new URL('../src/app/overlay/[userId]/page.tsx', import.meta.url), 'utf8');
   const command = readFileSync(new URL('../src/app/api/game-hub/command/route.ts', import.meta.url), 'utf8');
   assert.match(surface, /GameHubWordStage/);
-  assert.match(stage, /Next word starts with/);
-  assert.match(stage, /Guess normally in chat/);
+  assert.match(stage, /Next:/);
+  assert.match(stage, /spmt &lt;word&gt;/);
   assert.match(overlayState, /activeWordLeaderboard/);
   assert.match(chatTagOverlay, /current\.activeWordLeaderboard/);
   assert.match(command, /submitWordChainTheme/);
