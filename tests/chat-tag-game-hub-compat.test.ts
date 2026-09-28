@@ -63,6 +63,7 @@ test('deployed bot build keeps proven Chat Tag commands and sender routing intac
     assert.match(patchedBot, /sharedNebulaCommands\.has\(cmd\)/);
     assert.match(patchedBot, /pendingGameChoices/);
     assert.match(patchedBot, /pendingChoiceNumber/);
+    assert.match(patchedBot, /gamesHubCommand\.followupReply/);
     assert.match(patchedBot, /const chatTagNamespace = cmd === 'chattag' \|\| cmd === 'taggame'/);
     assert.match(patchedBot, /Chat Tag is always active globally; no channel start is required/);
     assert.match(patchedBot, /CHAT_TAG_API_TIMEOUT_MS/);

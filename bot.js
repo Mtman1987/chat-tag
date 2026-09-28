@@ -2051,6 +2051,10 @@ console.log = (...args) => {
       }
       if (gamesHubCommand?.handled) {
         if (!isMuted && gamesHubCommand.reply) await reply(gamesHubCommand.reply);
+        if (!isMuted && gamesHubCommand.followupReply) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          await reply(gamesHubCommand.followupReply);
+        }
         if (gamesHubCommand.mosaicGenerationQueued) {
           void apiCall('/api/game-hub/mosaic', {
             method: 'POST',

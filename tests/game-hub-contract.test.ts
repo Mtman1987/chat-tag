@@ -411,7 +411,9 @@ test('game commands return the per-game learn-by-doing popout', () => {
   assert.match(command, /Only the streamer or a moderator can \$\{action\} \$\{game\.name\}[\s\S]*gameReplyWithPopout/);
   assert.match(command, /gameReplyWithPopout\(req, channel, game\.id, `@\$\{displayName\} \$\{game\.name\} is not ACTIVE/);
   assert.match(command, /launchUrl: url/);
-  assert.match(command, /copy into an OBS Browser Source/);
+  assert.match(command, /Controller:/);
+  assert.match(command, /followupReply/);
+  assert.match(command, /Put \$\{game\.name\} on #\$\{channel\} right now/);
   assert.match(command, /overlayUrl/);
   assert.match(overlayRoute, /instantGameOverlayProfile\(id\)/);
 });
