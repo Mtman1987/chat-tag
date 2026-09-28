@@ -45,6 +45,9 @@ test('Chat Tag header Workspace toggle owns footer visibility instead of redirec
   assert.match(worktray, /spmt:workspace-toggle/);
   assert.match(worktray, /event\.preventDefault\(\)/);
   assert.match(worktray, /setFooterVisibility\(!footerVisible\)/);
-  assert.match(worktray, /data-spmt-workspace-controls-slot/);
+  assert.match(worktray, /data-spmt-open-workspace/);
+  assert.doesNotMatch(worktray, /data-spmt-workspace-controls-slot/);
   assert.match(worktray, /Hide workspace footer/);
+  const layout = read('src/app/layout.tsx');
+  assert.doesNotMatch(layout, /workspace-controller\.js/);
 });

@@ -21,9 +21,9 @@ type MosaicSnapshot = {
 };
 
 const CLASSIC: Record<string,string> = {R:'#ef4444',B:'#3b82f6',G:'#22c55e',Y:'#eab308',P:'#a855f7',O:'#f97316',PK:'#ec4899',W:'#f8fafc',K:'#111827',C:'#06b6d4'};
-const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Commlink'] as const;
-const bingoTabs = ['Live','Mic','Command','Guide','Commlink'] as const;
-const basicTabs = ['Live','Command','Guide','Commlink'] as const;
+const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Comms Lounge'] as const;
+const bingoTabs = ['Live','Mic','Command','Guide','Comms Lounge'] as const;
+const basicTabs = ['Live','Command','Guide','Comms Lounge'] as const;
 type Tab = typeof mosaicTabs[number] | typeof bingoTabs[number] | typeof basicTabs[number];
 
 function channelOf(value: unknown) {
@@ -59,6 +59,8 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const [command,setCommand] = useState('');
   const [reply,setReply] = useState('');
   const [busy,setBusy] = useState(false);
+  const [loungeMessage,setLoungeMessage] = useState('');
+  const [loungeLog,setLoungeLog] = useState<Array<{id:number;message:string;reply:string;mode:string}>>([]);
   const [mosaic,setMosaic] = useState<MosaicSnapshot>({artwork:null,queueLength:0});
   const isMosaic = game.id === 'pixelbattle';
   const isBingo = game.id === 'bingo';
@@ -97,6 +99,23 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     await run(command);
   }
 
+  async function submitLounge(event: FormEvent) {
+    event.preventDefault();
+    const message = loungeMessage.trim();
+    if (!channel || !message || busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch('/api/game-hub/controller-command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel,message})});
+      const body = await response.json().catch(()=>({}));
+      const resultText = String(body.reply || body.error || (response.ok?'Private game input accepted.':`Private game input failed (${response.status}).`));
+      setLoungeLog((current)=>[...current,{id:Date.now(),message,reply:resultText,mode:String(body.mode||'chat')}].slice(-30));
+      if (response.ok) { setLoungeMessage(''); await refreshMosaic(); }
+    } catch (error:any) {
+      setLoungeLog((current)=>[...current,{id:Date.now(),message,reply:error?.message||'Private game input failed.',mode:'error'}].slice(-30));
+    } finally { setBusy(false); }
+  }
+
+  const overlayUrl = channel ? `/overlay/game-hub/instant.${channel}.${game.id}` : '';
   const controllerTabs = useMemo<Tab[]>(() => isMosaic ? [...mosaicTabs] : isBingo ? [...bingoTabs] : [...basicTabs], [isMosaic,isBingo]);
   const playerCommands = useMemo(() => canonicalPlayerCommands(game), [game]);
   const streamerCommands = useMemo(() => canonicalStreamerCommands(game), [game]);
@@ -147,7 +166,14 @@ export function NebulaController({ game }: { game: GameHubGame }) {
           </div>
           {game.chatSignals?.length ? <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.16em] text-violet-200">Passive input</div><p className="mt-2 text-sm text-slate-300">{game.chatSignals.join(' · ')}</p></div> : null}
         </div> : null}
-        {tab==='Commlink' ? <div className="space-y-4"><div><h2 className="text-2xl font-black">Commlink</h2><p className="text-sm text-slate-400">Communications stay in Commlink. The private command console above is game control, not another public chat transport.</p></div><iframe src="/messages" title="Commlink" className="h-[68vh] min-h-[520px] w-full rounded-2xl border border-white/10 bg-slate-950"/><a href="https://spmt.live/?view=commlink" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-bold text-cyan-100 no-underline">Open full Commlink workspace</a></div> : null}
+        {tab==='Comms Lounge' ? <div className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-2xl font-black">Private #{channel} test chat</h2><p className="mt-1 max-w-3xl text-sm text-slate-400">Nothing typed here is posted to Twitch or Discord. It is injected directly into #{channel}'s real Nebula command/chat handlers, so the selected stream overlay reacts as if the input came from that stream.</p></div>{overlayUrl?<a href={overlayUrl} target="_blank" rel="noopener noreferrer" className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-4 py-2 text-xs font-black text-emerald-100 no-underline">Open this stream overlay</a>:null}</div>
+          <div className="min-h-[300px] max-h-[52vh] space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/35 p-3">
+            {loungeLog.length ? loungeLog.map((item)=><div key={item.id} className="rounded-xl border border-white/8 bg-white/[.03] p-3"><div className="text-xs font-black text-cyan-200">You → #{channel} <span className="ml-2 font-normal uppercase text-slate-600">{item.mode}</span></div><div className="mt-1 text-sm text-white">{item.message}</div><div className="mt-2 text-xs text-slate-400">{item.reply}</div></div>) : <div className="grid min-h-[260px] place-items-center text-center text-sm text-slate-500">Send a real Nebula command such as <code>spmt D12Y</code>, or ordinary game chat for Word Chain, Phrase Guess, Chat Wars, and other chat-reactive games.</div>}
+          </div>
+          <form onSubmit={submitLounge} className="flex gap-2"><input value={loungeMessage} onChange={e=>setLoungeMessage(e.target.value)} placeholder={isMosaic?'spmt D12Y or !mosaic owl':'Type private stream game input…'} className="min-w-0 flex-1 rounded-2xl border border-cyan-300/20 bg-black/50 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/60"/><button disabled={busy||!loungeMessage.trim()} className="rounded-2xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 disabled:opacity-40">Send privately</button></form>
+          <p className="text-xs text-slate-500">Scoped to #{channel}. No Twitch message, no Discord message, no public chat spam.</p>
+        </div> : null}
       </section>
       <aside className="space-y-3">
         <div className="rounded-3xl border border-cyan-300/15 bg-cyan-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Controller status</div><dl className="mt-3 grid gap-2 text-sm"><div className="flex justify-between gap-2"><dt className="text-slate-500">Channel</dt><dd>#{channel||'—'}</dd></div>{isMosaic?<><div className="flex justify-between gap-2"><dt className="text-slate-500">Queue</dt><dd>{mosaic.queueLength}</dd></div><div className="flex justify-between gap-2"><dt className="text-slate-500">Palette</dt><dd className="capitalize">{mosaic.artwork?.paletteId||'classic'}</dd></div></>:null}</dl></div>
