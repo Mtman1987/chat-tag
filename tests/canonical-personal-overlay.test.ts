@@ -39,3 +39,12 @@ test('SPMT bridge returns signed Personal launch URL and clean canonical copy UR
   assert.match(route, /personal: personalCanonical/);
   assert.doesNotMatch(route, /access_token=|spmt_token=/i);
 });
+
+test('Chat Tag header Workspace toggle owns footer visibility instead of redirecting', () => {
+  const worktray = read('src/components/spmt-workspace-host.tsx');
+  assert.match(worktray, /spmt:workspace-toggle/);
+  assert.match(worktray, /event\.preventDefault\(\)/);
+  assert.match(worktray, /setFooterVisibility\(!footerVisible\)/);
+  assert.match(worktray, /data-spmt-workspace-controls-slot/);
+  assert.match(worktray, /Hide workspace footer/);
+});
