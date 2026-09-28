@@ -14,7 +14,7 @@ const realtimeMarker = 'Games Hub gameplay events stay realtime; Chat Tag persis
 const existingDshForward = source.indexOf("forwardToDSH({ type: 'chat'");
 const existingGameHubWrite = source.indexOf("apiCall('/api/game-hub/chat'", existingDshForward);
 const existingThrottle = source.indexOf(
-  'if (shouldForwardChatActivity(senderUserId, resolvedChannel))',
+  'shouldForwardChatActivity(senderUserId, resolvedChannel))',
   existingGameHubWrite,
 );
 const existingTagWrite = source.indexOf("apiCall('/api/tag'", existingThrottle);
@@ -44,7 +44,7 @@ if (!source.includes(realtimeMarker) && !currentPressureContract) {
 
 const dshForward = source.indexOf("forwardToDSH({ type: 'chat'");
 const gameHubWrite = source.indexOf("apiCall('/api/game-hub/chat'", dshForward);
-const throttle = source.indexOf('if (shouldForwardChatActivity(senderUserId, resolvedChannel))', gameHubWrite);
+const throttle = source.indexOf('shouldForwardChatActivity(senderUserId, resolvedChannel))', gameHubWrite);
 const tagWrite = source.indexOf("apiCall('/api/tag'", throttle);
 if (
   dshForward < 0 ||
