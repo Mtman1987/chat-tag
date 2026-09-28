@@ -173,7 +173,7 @@ export function SpmtWorkspaceHost() {
           {tenantOutputs?.public ? <button type="button" onClick={() => copyOutput(tenantOutputs.public)} className="rounded-lg px-2.5 py-2 text-xs font-medium text-white/65 hover:bg-white/10 hover:text-white">Copy Public URL</button> : null}
           {tenantOutputs?.personal ? <button type="button" onClick={() => copyOutput(tenantOutputs.personal)} className="rounded-lg px-2.5 py-2 text-xs font-medium text-white/65 hover:bg-white/10 hover:text-white">Copy Personal URL</button> : null}
           {SURFACE_CONTROLS.slice(1).map(({ id, label, Icon }) => <button key={id} type="button" onClick={() => openSurface(id)} disabled={!surfaceUrls[id]} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-30" title={`Open canonical ${label}`}><Icon className="h-4 w-4" aria-hidden /><span className="hidden md:inline">{label}</span></button>)}
-          <button type="button" onClick={() => setOpen(false)} className="inline-flex items-center rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close workspace"><X className="h-4 w-4" aria-hidden /></button>
+          <button type="button" onClick={() => setFooterVisibility(false)} className="inline-flex items-center rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close workspace"><X className="h-4 w-4" aria-hidden /></button>
         </div>
       </header>
 
@@ -185,7 +185,7 @@ export function SpmtWorkspaceHost() {
 
     <aside className="fixed inset-x-3 bottom-3 z-[110] mx-auto max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-black/80 shadow-[0_-14px_42px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:inset-x-6" aria-label="SPMT workspace tray" data-workspace-footer="true">
       <div className="flex min-h-14 flex-wrap items-center gap-2 p-2">
-        <button type="button" onClick={() => open && target.kind === 'surface' && target.id === 'worktray' ? setOpen(false) : openSurface('worktray')} className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold text-white ${open && target.kind === 'surface' && target.id === 'worktray' ? 'border-cyan-300/40 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`} aria-expanded={open}>
+        <button type="button" onClick={() => openSurface('worktray')} className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold text-white ${open && target.kind === 'surface' && target.id === 'worktray' ? 'border-cyan-300/40 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`} aria-expanded={open}>
           <LayoutGrid className="h-4 w-4 text-cyan-300" aria-hidden /><span className="hidden sm:inline">Workspace</span>
           {!loaded ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" title="Checking SPMT" /> : connected ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" title="SPMT connected" /> : <span className="h-1.5 w-1.5 rounded-full bg-amber-300" title="SPMT reconnect required" />}
         </button>
