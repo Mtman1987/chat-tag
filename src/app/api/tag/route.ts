@@ -268,20 +268,9 @@ function isPlayerImmune(state: any, player: TagPlayer | undefined, taggerId: str
 
 export async function GET() {
   try {
-    let state = await readAppState();
-    const historyChanged = Object.values(state.tagPlayers || {})
-      // readAppState returns the shared immutable snapshot. Probe history on a
-      // clone so a GET can never mutate that cache outside the write lock.
-      .map((player: any) => inferPlayerHistory(state, structuredClone(player)))
-      .some(Boolean);
-    if (historyChanged) {
-      await updateAppState((current) => {
-        for (const player of Object.values(current.tagPlayers || {}) as any[]) {
-          inferPlayerHistory(current, player);
-        }
-      });
-      state = await readAppState();
-    }
+    // GET must stay read-only and fast. Historical backfill belongs in explicit
+    // maintenance/migration paths, never in a status/rotation read.
+    const state = await readAppState();
     const blacklisted = new Set(
       (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => normalizeUsername(channel))
     );
