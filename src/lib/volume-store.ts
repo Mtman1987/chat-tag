@@ -95,12 +95,36 @@ const DATA_DIR =
 const STATE_FILE = path.join(DATA_DIR, 'app-state.json');
 const STATE_FILE_TMP = path.join(DATA_DIR, 'app-state.json.tmp');
 
+// High-churn game/runtime state is persisted independently from Chat Tag core
+// state. This preserves restart safety without forcing every gameplay mutation
+// to rewrite the entire application snapshot.
+const SHARDED_STATE_KEYS = [
+  'gameSettings',
+  'quackverseRooms',
+  'quackverse',
+  'quackversePackOpens',
+  'bingoCards',
+  'bingoEvents',
+  'overlayMessages',
+  'discordMessages',
+] as const;
+type ShardedStateKey = typeof SHARDED_STATE_KEYS[number];
+const SHARD_FILES = Object.fromEntries(
+  SHARDED_STATE_KEYS.map((key) => [key, path.join(DATA_DIR, `app-state.${key}.json`)]),
+) as Record<ShardedStateKey, string>;
+const SHARD_TMP_FILES = Object.fromEntries(
+  SHARDED_STATE_KEYS.map((key) => [key, path.join(DATA_DIR, `app-state.${key}.json.tmp`)]),
+) as Record<ShardedStateKey, string>;
+
 let bootstrapPromise: Promise<void> | null = null;
 let lock: Promise<void> = Promise.resolve();
 let cachedState: AppState | null = null;
 let cachedStatePromise: Promise<AppState> | null = null;
 let queuedUpdates = 0;
 let stateFileBytes = 0;
+let shardFileBytes: Partial<Record<ShardedStateKey, number>> = {};
+let lastBasePayload: string | null = null;
+let lastShardPayloads: Partial<Record<ShardedStateKey, string>> = {};
 let lastLoadMs = 0;
 let lastWriteMs = 0;
 let lastWriteAt: string | null = null;
@@ -264,7 +288,18 @@ async function loadState(): Promise<AppState> {
     try {
       const raw = await fs.readFile(STATE_FILE, 'utf8');
       const state = ensureDefaults(JSON.parse(raw));
+      lastBasePayload = raw;
       stateFileBytes = Buffer.byteLength(raw);
+
+      for (const key of SHARDED_STATE_KEYS) {
+        const shardRaw = await readJsonIfExists(SHARD_FILES[key]);
+        if (shardRaw === null) continue;
+        state[key] = shardRaw as never;
+        const serialized = JSON.stringify(shardRaw);
+        lastShardPayloads[key] = serialized;
+        shardFileBytes[key] = Buffer.byteLength(serialized);
+      }
+
       lastLoadMs = Date.now() - startedAt;
       if (lastLoadMs >= 250) {
         console.warn(`[StateStore] Initial volume load took ${lastLoadMs}ms (${stateFileBytes} bytes)`);
@@ -304,27 +339,46 @@ async function readState(): Promise<AppState> {
   return cachedStatePromise;
 }
 
+async function writeAtomic(filePath: string, tmpPath: string, payload: string): Promise<void> {
+  await fs.writeFile(tmpPath, payload, 'utf8');
+  try {
+    await fs.rename(tmpPath, filePath);
+  } catch (error: any) {
+    if (error?.code !== 'EEXIST' && error?.code !== 'EPERM') throw error;
+    await fs.rm(filePath, { force: true });
+    await fs.rename(tmpPath, filePath);
+  }
+}
+
 async function writeState(state: AppState): Promise<void> {
   await ensureBootstrapped();
   const startedAt = Date.now();
-  // The state file is an internal persistence format. Compact JSON materially
-  // reduces volume I/O without changing the data returned by any API.
-  const payload = JSON.stringify(state);
-  await fs.writeFile(STATE_FILE_TMP, payload, 'utf8');
-  try {
-    await fs.rename(STATE_FILE_TMP, STATE_FILE);
-  } catch (error: any) {
-    if (error?.code !== 'EEXIST' && error?.code !== 'EPERM') {
-      throw error;
-    }
-    await fs.rm(STATE_FILE, { force: true });
-    await fs.rename(STATE_FILE_TMP, STATE_FILE);
+
+  // Persist high-churn gameplay shards only when that shard actually changed.
+  for (const key of SHARDED_STATE_KEYS) {
+    const payload = JSON.stringify(state[key]);
+    if (lastShardPayloads[key] === payload) continue;
+    await writeAtomic(SHARD_FILES[key], SHARD_TMP_FILES[key], payload);
+    lastShardPayloads[key] = payload;
+    shardFileBytes[key] = Buffer.byteLength(payload);
   }
-  stateFileBytes = Buffer.byteLength(payload);
+
+  // Keep the durable Chat Tag/core snapshot compact and independent of game
+  // traffic. Existing monolithic files migrate lazily on the first write.
+  const base = structuredClone(state) as any;
+  for (const key of SHARDED_STATE_KEYS) delete base[key];
+  const payload = JSON.stringify(base);
+  if (lastBasePayload !== payload) {
+    await writeAtomic(STATE_FILE, STATE_FILE_TMP, payload);
+    lastBasePayload = payload;
+    stateFileBytes = Buffer.byteLength(payload);
+  }
+
   lastWriteMs = Date.now() - startedAt;
   lastWriteAt = nowIso();
   if (lastWriteMs >= 250) {
-    console.warn(`[StateStore] Volume write took ${lastWriteMs}ms (${stateFileBytes} bytes)`);
+    const shardBytes = Object.values(shardFileBytes).reduce((sum, value) => sum + Number(value || 0), 0);
+    console.warn(`[StateStore] Persist took ${lastWriteMs}ms (core=${stateFileBytes} bytes, shards=${shardBytes} bytes)`);
   }
 }
 
@@ -381,6 +435,7 @@ export function getVolumeStoreDiagnostics() {
   return {
     cached: cachedState !== null,
     stateFileBytes,
+    shardFileBytes,
     lastLoadMs,
     lastWriteMs,
     lastWriteAt,
