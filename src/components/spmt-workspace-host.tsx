@@ -7,7 +7,6 @@ import type { WorkspaceDockSlotV1, WorkspaceThemeTokensV1 } from '@spmt/sdk';
 
 const SPMT_ORIGIN = 'https://spmt.live';
 const PERSONAL_VISIBILITY_KEY = 'chat-tag:personal-overlay-visible';
-const FOOTER_VISIBILITY_KEY = 'chat-tag:workspace-footer-visible';
 const PERSONAL_VISIBILITY_EVENT = 'spmt:personal-overlay-visibility';
 
 type TenantOutputs = { public?: string; personal?: string };
@@ -21,10 +20,6 @@ const SURFACE_CONTROLS = [
   { id: 'settings' as const, label: 'Settings', Icon: Settings },
 ];
 
-function usableSlots(tokens: WorkspaceThemeTokensV1 | null) {
-  return (tokens?.dockSlots || []).filter((slot) => Boolean(slot.url?.trim()));
-}
-
 function fallbackSlots(): WorkspaceDockSlotV1[] {
   return ([1, 2, 3] as const).map((id) => ({ id, title: `Slot ${id}`, url: '', collapsed: true, volume: 1, muted: false }));
 }
@@ -33,7 +28,7 @@ export function SpmtWorkspaceHost() {
   const pathname = usePathname();
   const hiddenRoute = /^\/(api|auth|login|embed|headless|activity)(\/|$)/.test(pathname) || pathname.startsWith('/overlay/') || pathname === '/quackverse-overlay';
   const controllerRoute = /^\/games\/[^/]+\/controller(?:\/|$)/.test(pathname);
-  const [embedded, setEmbedded] = React.useState(false);
+  const [embedded, setEmbedded] = React.useState(true);
   const [loaded, setLoaded] = React.useState(false);
   const [connected, setConnected] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -42,14 +37,18 @@ export function SpmtWorkspaceHost() {
   const [tenantOutputs, setTenantOutputs] = React.useState<TenantOutputs | null>(null);
   const [surfaceUrls, setSurfaceUrls] = React.useState<SurfaceUrls>({});
   const [personalOverlayVisible, setPersonalOverlayVisible] = React.useState(true);
-  const [footerVisible, setFooterVisible] = React.useState(true);
+  // App launches start collapsed, matching the other workspace hosts.
+  const [footerVisible, setFooterVisible] = React.useState(false);
 
   const setFooterVisibility = React.useCallback((next: boolean) => {
-    window.localStorage.setItem(FOOTER_VISIBILITY_KEY, next ? '1' : '0');
     setFooterVisible(next);
-    if (!next) setOpen(false);
-    window.dispatchEvent(new CustomEvent('spmt:workspace-state', { detail: { open: next && open } }));
-  }, [open]);
+    setOpen(next);
+  }, []);
+
+  React.useEffect(() => {
+    if (embedded || hiddenRoute) return;
+    window.dispatchEvent(new CustomEvent('spmt:workspace-state', { detail: { open: footerVisible && open } }));
+  }, [embedded, footerVisible, hiddenRoute, open]);
 
   const reconnectHref = '/api/auth/spmt';
 
@@ -77,19 +76,19 @@ export function SpmtWorkspaceHost() {
     const isEmbedded = window.self !== window.top;
     setEmbedded(isEmbedded);
     setPersonalOverlayVisible(window.localStorage.getItem(PERSONAL_VISIBILITY_KEY) !== '0');
-    setFooterVisible(controllerRoute ? false : window.localStorage.getItem(FOOTER_VISIBILITY_KEY) !== '0');
-    void refresh();
+    if (controllerRoute) { setFooterVisible(false); setOpen(false); }
+    if (!isEmbedded) void refresh();
   }, [controllerRoute, refresh]);
 
   React.useEffect(() => {
-    if (hiddenRoute) return;
+    if (hiddenRoute || embedded) return;
     const onFocus = () => void refresh();
     const onVisibility = () => { if (!document.hidden) void refresh(); };
     const timer = window.setInterval(() => void refresh(), 30_000);
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onVisibility); };
-  }, [hiddenRoute, refresh]);
+  }, [embedded, hiddenRoute, refresh]);
 
   React.useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -101,7 +100,7 @@ export function SpmtWorkspaceHost() {
   }, [refresh]);
 
   React.useEffect(() => {
-    if (hiddenRoute) return;
+    if (hiddenRoute || embedded) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.altKey && event.shiftKey && event.key.toLowerCase() === 'f')) return;
       event.preventDefault();
@@ -117,9 +116,9 @@ export function SpmtWorkspaceHost() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('spmt:workspace-toggle', onWorkspaceToggle as EventListener);
     };
-  }, [footerVisible, hiddenRoute, setFooterVisibility]);
+  }, [embedded, footerVisible, hiddenRoute, setFooterVisibility]);
 
-  if (hiddenRoute) return null;
+  if (hiddenRoute || embedded) return null;
 
   const footerToggleTarget = (
     <button
@@ -174,7 +173,7 @@ export function SpmtWorkspaceHost() {
           {tenantOutputs?.public ? <button type="button" onClick={() => copyOutput(tenantOutputs.public)} className="rounded-lg px-2.5 py-2 text-xs font-medium text-white/65 hover:bg-white/10 hover:text-white">Copy Public URL</button> : null}
           {tenantOutputs?.personal ? <button type="button" onClick={() => copyOutput(tenantOutputs.personal)} className="rounded-lg px-2.5 py-2 text-xs font-medium text-white/65 hover:bg-white/10 hover:text-white">Copy Personal URL</button> : null}
           {SURFACE_CONTROLS.slice(1).map(({ id, label, Icon }) => <button key={id} type="button" onClick={() => openSurface(id)} disabled={!surfaceUrls[id]} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-white/65 hover:bg-white/10 hover:text-white disabled:opacity-30" title={`Open canonical ${label}`}><Icon className="h-4 w-4" aria-hidden /><span className="hidden md:inline">{label}</span></button>)}
-          <button type="button" onClick={() => setOpen(false)} className="inline-flex items-center rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close workspace"><X className="h-4 w-4" aria-hidden /></button>
+          <button type="button" onClick={() => setFooterVisibility(false)} className="inline-flex items-center rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close workspace"><X className="h-4 w-4" aria-hidden /></button>
         </div>
       </header>
 
@@ -185,14 +184,15 @@ export function SpmtWorkspaceHost() {
     </section>}
 
     <aside className="fixed inset-x-3 bottom-3 z-[110] mx-auto max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-black/80 shadow-[0_-14px_42px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:inset-x-6" aria-label="SPMT workspace tray" data-workspace-footer="true">
-      <div className="flex min-h-14 items-center gap-2 p-2">
-        <button type="button" onClick={() => open && target.kind === 'surface' && target.id === 'worktray' ? setOpen(false) : openSurface('worktray')} className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold text-white ${open && target.kind === 'surface' && target.id === 'worktray' ? 'border-cyan-300/40 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`} aria-expanded={open}>
+      <div className="flex min-h-14 flex-wrap items-center gap-2 p-2">
+        <button type="button" onClick={() => openSurface('worktray')} className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold text-white ${open && target.kind === 'surface' && target.id === 'worktray' ? 'border-cyan-300/40 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`} aria-expanded={open}>
           <LayoutGrid className="h-4 w-4 text-cyan-300" aria-hidden /><span className="hidden sm:inline">Workspace</span>
           {!loaded ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" title="Checking SPMT" /> : connected ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" title="SPMT connected" /> : <span className="h-1.5 w-1.5 rounded-full bg-amber-300" title="SPMT reconnect required" />}
         </button>
         <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
           {traySlots.map((slot) => <button key={slot.id} type="button" onClick={() => openSlot(slot)} className={`min-w-0 rounded-xl border px-2.5 py-2 text-left ${connected && target.kind === 'slot' && target.id === slot.id && open ? 'border-cyan-300/35 bg-cyan-300/[0.08]' : 'border-white/10 bg-white/[0.025] hover:bg-white/[0.06]'}`}><span className="block truncate text-[10px] font-bold text-white">{connected ? (slot.title || `Slot ${slot.id}`) : `Slot ${slot.id}`}</span><span className="mt-0.5 block text-[8px] font-semibold uppercase tracking-wide text-white/35">{connected ? (slot.collapsed ? 'Hidden' : `Slot ${slot.id}`) : 'SPMT offline'}</span></button>)}
         </div>
+        <div data-spmt-workspace-controls-slot className="pointer-events-auto flex shrink-0 items-center" />
         <button type="button" onClick={() => setFooterVisibility(false)} className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 text-[10px] font-bold text-white/60 hover:bg-white/[0.08] hover:text-white" title="Hide workspace footer">Hide</button>
         {!connected && loaded ? <a href={reconnectHref} className="hidden shrink-0 items-center gap-1.5 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[10px] font-bold text-amber-100 hover:bg-amber-300/15 md:inline-flex"><RefreshCw className="h-3.5 w-3.5" aria-hidden />Reconnect</a> : null}
       </div>

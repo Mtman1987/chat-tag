@@ -88,7 +88,8 @@ test('volume state is cached and persisted as compact JSON', () => {
   assert.match(store, /let cachedState: AppState \| null = null/);
   assert.match(store, /if \(cachedState\) return cachedState/);
   assert.match(store, /const state = structuredClone\(await readState\(\)\)/);
-  assert.match(store, /const payload = JSON\.stringify\(state\);/);
+  assert.match(store, /const payload = JSON\.stringify\(state\[key\]\);/);
+  assert.match(store, /const payload = JSON\.stringify\(base\);/);
   assert.match(store, /export async function updateAppStateIfChanged/);
 });
 
