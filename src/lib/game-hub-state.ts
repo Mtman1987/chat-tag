@@ -1,5 +1,6 @@
 import type { JsonObject } from '@/lib/volume-store';
 import { GAME_HUB_CATALOG, getGameHubGame, normalizeGameHubGameIds } from '@/lib/game-hub-registry';
+import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
 
 export const GAME_SCORE_INTERVAL_MS = 30_000;
 export const GAME_POINTS_INTERVAL_MS = 90_000;
@@ -772,6 +773,54 @@ export function getGameHubGameStats(state: any, gameId: string) {
   const game = getGameHubGame(gameId);
   if (!game) throw new Error('Unknown game.');
   const store = getGameHubStore(state);
+  if (game.id === 'chat-tag') {
+    // Chat Tag has its own persistent roster and history. The generic game-hub
+    // membership starts at zero and is not where tags are scored.
+    const counts: Record<string, { tags: number; tagged: number }> = {};
+    for (const entry of state.tagHistory || []) {
+      if (entry?.blocked) continue;
+      const from = entry.taggerId || entry.from;
+      const to = entry.taggedId || entry.to;
+      if (from && from !== 'system') {
+        (counts[from] ||= { tags: 0, tagged: 0 }).tags++;
+      }
+      if (to && to !== 'system' && to !== 'free-for-all') {
+        (counts[to] ||= { tags: 0, tagged: 0 }).tagged++;
+      }
+    }
+    const scoring = getScoringSettings(state);
+    const blacklisted = new Set(
+      (state.botSettings?.blacklistedChannels?.channels || [])
+        .map((channel: string) => normalizeGameHubChannel(channel)),
+    );
+    const tagPlayers = Object.entries(state.tagPlayers || {})
+      .filter(([, player]: [string, any]) => {
+        const username = normalizeGameHubChannel(player?.twitchUsername || player?.username);
+        return !player?.optedOut && !blacklisted.has(username);
+      })
+      .map(([key, player]: [string, any]) => {
+        const id = String(player.id || key);
+        const username = String(player.twitchUsername || player.username || key);
+        const hubPlayer = store.players[normalizeGameHubPlayerId(id.replace(/^user_/, ''), username)];
+        const tally = counts[id] || { tags: 0, tagged: 0 };
+        return {
+          id,
+          username,
+          displayName: username,
+          gamePointsBalance: hubPlayer?.gamePointsBalance || 0,
+          joinedAt: String(player.joinedAt || ''),
+          lastActiveAt: player.lastChatAt ? new Date(player.lastChatAt).toISOString() : '',
+          active: true,
+          score: scoreFromTagCounts(tally, scoring) + Number(player.bingoPoints || 0),
+          wins: Number(player.wins || 0),
+          plays: tally.tags + tally.tagged,
+        };
+      });
+    const leaderboard = [...tagPlayers].sort((a, b) =>
+      b.score - a.score || b.wins - a.wins || a.username.localeCompare(b.username)
+    ).slice(0, 50);
+    return { game, leaderboard, players: tagPlayers.slice(0, 100) };
+  }
   const players = Object.values(store.players)
     .filter((player) => Boolean(player.joinedGames?.[game.id]))
     .map((player) => ({

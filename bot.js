@@ -1918,7 +1918,10 @@ console.log = (...args) => {
         }),
       }).catch(() => {});
       // Chat Tag itself still only needs the lower-frequency heartbeat.
-      if (shouldForwardChatActivity(senderUserId, resolvedChannel)) {
+      // The away command reads immunity to toggle it. Clearing immunity for the
+      // command message first makes every attempt set away again.
+      const isAwayCommand = /^\s*(?:@spmt|!?spmt)\s+away(?:\s|$)/i.test(message);
+      if (!isAwayCommand && shouldForwardChatActivity(senderUserId, resolvedChannel)) {
         apiCall('/api/tag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
