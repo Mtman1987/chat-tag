@@ -96,8 +96,10 @@ export async function POST(req: NextRequest) {
   const playerId = normalizeGameHubPlayerId(body.userId, username);
   const snapshotPlayer = getGameHubStore(snapshot).players[playerId];
   const participatingGameIds = activeGameIds.filter((gameId) => snapshotPlayer?.joinedGames?.[gameId]?.active === true);
+  const privateControllerInput = String(body.source || '') === 'nebula-controller';
+  const gameInputIds = privateControllerInput ? activeGameIds : participatingGameIds;
   const passiveGameIds = activeGameIds.filter((gameId) => getGameHubGame(gameId)?.runtime === 'chat-reactive');
-  const eventGameIds = [...new Set([...participatingGameIds, ...passiveGameIds])];
+  const eventGameIds = [...new Set([...gameInputIds, ...passiveGameIds])];
   const baseEvent = eventGameIds.length ? appendNebulaChatEvent({
     channel,
     username,
@@ -115,9 +117,9 @@ export async function POST(req: NextRequest) {
     const lastScoreAt = Date.parse(String(snapshotPlayer?.joinedGames?.[gameId]?.lastScoreAt || 0));
     return !Number.isFinite(lastScoreAt) || now - lastScoreAt >= GAME_SCORE_INTERVAL_MS;
   });
-  const phraseGuessAttemptDue = participatingGameIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
-  const wordChainAttemptDue = participatingGameIds.includes('wordchain') && !/^\s*!?@?spmt\b/i.test(message);
-  const chatWarsAttemptDue = participatingGameIds.includes('chatwars') && !/^\s*!?@?spmt\b/i.test(message);
+  const phraseGuessAttemptDue = gameInputIds.includes('phraseguess') && !/^\s*!?@?spmt\b/i.test(message);
+  const wordChainAttemptDue = gameInputIds.includes('wordchain') && !/^\s*!?@?spmt\b/i.test(message);
+  const chatWarsAttemptDue = gameInputIds.includes('chatwars') && !/^\s*!?@?spmt\b/i.test(message);
   const activity = scoreWriteDue || phraseGuessAttemptDue || wordChainAttemptDue || chatWarsAttemptDue
     ? await updateAppStateIfChanged((state) => {
       const result = recordGameHubChatActivity(state, {
@@ -138,10 +140,10 @@ export async function POST(req: NextRequest) {
         : { changed: false, outcome: 'ignored' as const };
       return {
         changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed || wordChain.changed || chatWars.changed,
-        result: { ...result, participatingGameIds, eventGameIds, phraseGuess, wordChain, chatWars },
+        result: { ...result, participatingGameIds, gameInputIds, eventGameIds, phraseGuess, wordChain, chatWars },
       };
     })
-    : { activeGameIds, participatingGameIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const }, wordChain: { changed: false, outcome: 'ignored' as const }, chatWars: { changed: false, outcome: 'ignored' as const } };
+    : { activeGameIds, participatingGameIds, gameInputIds, eventGameIds, scoredGameIds: [], pointsAwarded: 0, phraseGuess: { changed: false, outcome: 'ignored' as const }, wordChain: { changed: false, outcome: 'ignored' as const }, chatWars: { changed: false, outcome: 'ignored' as const } };
 
   const stellaHalftimeQueued = activity.chatWars?.outcome === 'halftime-started'
     ? await queueStellaHalftime(activity.chatWars.halftime)
@@ -152,6 +154,7 @@ export async function POST(req: NextRequest) {
     id: baseEvent?.id || null,
     runtimeActionId: null,
     eventGameIds: activity.eventGameIds,
+    privateControllerInput,
     scoredGameIds: activity.scoredGameIds,
     pointsAwarded: activity.pointsAwarded,
     phraseGuess: activity.phraseGuess,

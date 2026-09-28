@@ -583,7 +583,7 @@ test('Bingo uses a shared anti-cheat board, transcript triggers, Stella defense,
   assert.match(mic, /Start listening/);
   assert.match(mic, /Manual transcript test/);
   assert.match(mic, /Raw microphone audio is not stored/);
-  assert.match(controller, /bingoTabs = \['Live','Mic','Command','Guide','Commlink'\]/);
+  assert.match(controller, /bingoTabs = \['Live','Mic','Command','Guide','Comms Lounge'\]/);
   assert.match(controller, /BingoTranscriptControl channel=\{channel\}/);
   assert.match(model, /BINGO_CLAIM_WINDOW_MS = 15_000/);
   assert.match(model, /BINGO_PHRASE_CHANGE_COST = 100/);
@@ -705,7 +705,7 @@ test('Nebula Controllers replace instruction-only popouts with private real-comm
   const privateRoute = read('src/app/api/game-hub/controller-command/route.ts');
   const mosaicFinal = read('src/app/api/game-hub/mosaic/final/route.ts');
   assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\/controller/);
-  assert.match(controller, /const basicTabs = \['Live','Command','Guide','Commlink'\]/);
+  assert.match(controller, /const basicTabs = \['Live','Command','Guide','Comms Lounge'\]/);
   assert.match(controller, /canonicalPlayerCommands/);
   assert.match(controller, /canonicalStreamerCommands/);
   assert.match(controller, /Live game surface/);
@@ -715,8 +715,12 @@ test('Nebula Controllers replace instruction-only popouts with private real-comm
   assert.match(controller, /Theme queue/);
   assert.match(controller, /Saved mosaics/);
   assert.match(controller, /Palette remix/);
-  assert.match(controller, /Commlink/);
+  assert.match(controller, /Private #\{channel\} test chat/);
+  assert.match(controller, /Open this stream overlay/);
+  assert.match(controller, /No Twitch message, no Discord message/);
   assert.match(privateRoute, /POST as runGameHubCommand/);
+  assert.match(privateRoute, /POST as runGameHubChat/);
+  assert.match(privateRoute, /privateChannel: true/);
   assert.match(privateRoute, /source: 'nebula-controller'/);
   assert.match(mosaicFinal, /image\/svg\+xml/);
 });
