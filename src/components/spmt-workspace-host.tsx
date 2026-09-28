@@ -43,6 +43,13 @@ export function SpmtWorkspaceHost() {
   const [personalOverlayVisible, setPersonalOverlayVisible] = React.useState(true);
   const [footerVisible, setFooterVisible] = React.useState(true);
 
+  const setFooterVisibility = React.useCallback((next: boolean) => {
+    window.localStorage.setItem(FOOTER_VISIBILITY_KEY, next ? '1' : '0');
+    setFooterVisible(next);
+    if (!next) setOpen(false);
+    window.dispatchEvent(new CustomEvent('spmt:workspace-state', { detail: { open: next && open } }));
+  }, [open]);
+
   const reconnectHref = '/api/auth/spmt';
 
   const refresh = React.useCallback(async () => {
@@ -96,16 +103,20 @@ export function SpmtWorkspaceHost() {
     if (hiddenRoute) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.altKey && event.shiftKey && event.key.toLowerCase() === 'f')) return;
-      event.preventDefault(); setOpen(false);
-      setFooterVisible((current) => {
-        const next = !current;
-        window.localStorage.setItem(FOOTER_VISIBILITY_KEY, next ? '1' : '0');
-        return next;
-      });
+      event.preventDefault();
+      setFooterVisibility(!footerVisible);
+    };
+    const onWorkspaceToggle = (event: Event) => {
+      event.preventDefault();
+      setFooterVisibility(!footerVisible);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [hiddenRoute]);
+    window.addEventListener('spmt:workspace-toggle', onWorkspaceToggle as EventListener);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('spmt:workspace-toggle', onWorkspaceToggle as EventListener);
+    };
+  }, [footerVisible, hiddenRoute, setFooterVisibility]);
 
   if (hiddenRoute || !footerVisible) return null;
 
@@ -160,6 +171,7 @@ export function SpmtWorkspaceHost() {
 
     <aside className="fixed inset-x-3 bottom-3 z-[110] mx-auto max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-black/80 shadow-[0_-14px_42px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:inset-x-6" aria-label="SPMT workspace tray" data-workspace-footer="true">
       <div className="flex min-h-14 items-center gap-2 p-2">
+        <div className="hidden shrink-0 items-center gap-1 md:flex" data-spmt-workspace-controls-slot />
         <button type="button" onClick={() => open && target.kind === 'surface' && target.id === 'worktray' ? setOpen(false) : openSurface('worktray')} className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold text-white ${open && target.kind === 'surface' && target.id === 'worktray' ? 'border-cyan-300/40 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'}`} aria-expanded={open}>
           <LayoutGrid className="h-4 w-4 text-cyan-300" aria-hidden /><span className="hidden sm:inline">Workspace</span>
           {!loaded ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" title="Checking SPMT" /> : connected ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" title="SPMT connected" /> : <span className="h-1.5 w-1.5 rounded-full bg-amber-300" title="SPMT reconnect required" />}
@@ -167,6 +179,7 @@ export function SpmtWorkspaceHost() {
         <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
           {traySlots.map((slot) => <button key={slot.id} type="button" onClick={() => openSlot(slot)} className={`min-w-0 rounded-xl border px-2.5 py-2 text-left ${connected && target.kind === 'slot' && target.id === slot.id && open ? 'border-cyan-300/35 bg-cyan-300/[0.08]' : 'border-white/10 bg-white/[0.025] hover:bg-white/[0.06]'}`}><span className="block truncate text-[10px] font-bold text-white">{connected ? (slot.title || `Slot ${slot.id}`) : `Slot ${slot.id}`}</span><span className="mt-0.5 block text-[8px] font-semibold uppercase tracking-wide text-white/35">{connected ? (slot.collapsed ? 'Hidden' : `Slot ${slot.id}`) : 'SPMT offline'}</span></button>)}
         </div>
+        <button type="button" onClick={() => setFooterVisibility(false)} className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 text-[10px] font-bold text-white/60 hover:bg-white/[0.08] hover:text-white" title="Hide workspace footer">Hide</button>
         {!connected && loaded ? <a href={reconnectHref} className="hidden shrink-0 items-center gap-1.5 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[10px] font-bold text-amber-100 hover:bg-amber-300/15 md:inline-flex"><RefreshCw className="h-3.5 w-3.5" aria-hidden />Reconnect</a> : null}
       </div>
     </aside>
