@@ -179,3 +179,5 @@ Also check the app mod/admin logs after auto-rotate, away toggles, fix/prune act
 - Finish shared command extraction so Discord and Twitch command logic cannot drift.
 - Finish server-side role authorization and move dangerous controls to an `/admin` surface.
 - Prune/archive remaining root utility scripts.
+
+<!-- Deployment retrigger: 2026-09-27 Chat Tag state isolation fix -->
