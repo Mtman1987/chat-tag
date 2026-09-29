@@ -112,3 +112,13 @@ test('health response exposes state-store pressure diagnostics without reading t
   assert.match(store, /lastWriteMs/);
   assert.match(store, /stateFileBytes/);
 });
+
+
+test('Twitch IRC joins retry one transient no-response timeout before deferring to the next poll', () => {
+  const bot = read('bot.js');
+  assert.match(bot, /TWITCH_JOIN_RETRY_DELAYS_MS = \[1500\]/);
+  assert.match(bot, /async function joinChannelWithRetry/);
+  assert.match(bot, /Join timed out for \$\{normalized\}; retrying once/);
+  assert.match(bot, /await joinChannelWithRetry\(client, ch\)/);
+  assert.match(bot, /await joinChannelWithRetry\(client, channel\)/);
+});

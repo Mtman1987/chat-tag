@@ -663,6 +663,30 @@ function errorMessage(err) {
   return err.message || String(err);
 }
 
+const TWITCH_JOIN_RETRY_DELAYS_MS = [1500];
+
+async function joinChannelWithRetry(client, channelName) {
+  const normalized = String(channelName || '').trim().toLowerCase().replace(/^#/, '');
+  if (!normalized) throw new Error('channel is required');
+
+  let lastError = null;
+  for (let attempt = 0; attempt <= TWITCH_JOIN_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await client.join(`#${normalized}`);
+      joinFailSilenced.delete(normalized);
+      return;
+    } catch (error) {
+      lastError = error;
+      const noResponse = errorMessage(error).toLowerCase().includes('no response');
+      if (!noResponse || attempt === TWITCH_JOIN_RETRY_DELAYS_MS.length) throw error;
+      console.warn(`[Bot] Join timed out for ${normalized}; retrying once`);
+      await sleep(TWITCH_JOIN_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+
+  throw lastError || new Error(`Failed joining ${normalized}`);
+}
+
 async function handleJoinFailure(channelName, err) {
   const msg = errorMessage(err).toLowerCase();
 
@@ -1151,7 +1175,7 @@ console.log = (...args) => {
 
     if (BOT_TEST_CHANNEL) {
       try {
-        await client.join(BOT_TEST_CHANNEL);
+        await joinChannelWithRetry(client, BOT_TEST_CHANNEL);
         console.log(`[Bot] Joined #${BOT_TEST_CHANNEL} for testing`);
       } catch (e) {
         console.error(`[Bot] Failed joining test channel #${BOT_TEST_CHANNEL}:`, e.message);
@@ -1189,7 +1213,7 @@ console.log = (...args) => {
       for (const ch of Array.from(new Set(allLiveChannels))) {
         if (alreadyJoined.has(ch)) continue;
         try {
-          await client.join(`#${ch}`);
+          await joinChannelWithRetry(client, ch);
           joinedChannels.push(ch);
           await maybeAnnounceDailyActivation(client, ch, findLiveMemberForChannel(allLiveMembers, ch));
           // Random delay 2-3s between joins (same logic as broadcasts)
@@ -1436,7 +1460,7 @@ console.log = (...args) => {
         const toJoin = Array.from(new Set(currentlyLive.filter(ch => !currentlyJoined.includes(ch))));
         for (const ch of toJoin) {
           try {
-            await client.join(`#${ch}`);
+            await joinChannelWithRetry(client, ch);
             console.log(`[Bot] Joined new live channel: ${ch}`);
             await maybeAnnounceDailyActivation(client, ch, findLiveMemberForChannel(allLiveMembers, ch));
             // Subscribe EventSub for new channel
@@ -3182,7 +3206,7 @@ console.log = (...args) => {
       req.on('end', async () => {
         try {
           const { channel } = JSON.parse(body);
-          await client.join(channel);
+          await joinChannelWithRetry(client, channel);
           console.log(`[Bot] Instant join: ${channel}`);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
