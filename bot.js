@@ -2022,6 +2022,7 @@ console.log = (...args) => {
     
     let args = normalizedMsg.toLowerCase().split(/\s+/).slice(1);
     let cmd = args[0];
+    if (cmd === 'opt-out') cmd = 'optout';
     const userId = `user_${tags['user-id']}`;
     const user = tags['display-name'] || tags['username'];
     const isAdminUser =
