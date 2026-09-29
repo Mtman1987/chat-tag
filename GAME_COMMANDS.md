@@ -45,7 +45,7 @@
 ## Special Commands
 | Command | Description |
 |---------|-------------|
-| `spmt optout` | Permanently opt out channel from bot |
+| `spmt opt-out` / `spmt optout` | Permanently opt out linked Twitch channel from all SPMT bot joins |
 | `spmt pinrank` | Pin's personal tag leaderboard |
 
 ## Pass System (NEW)
