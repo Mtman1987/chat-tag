@@ -363,7 +363,7 @@ export async function POST(req: NextRequest) {
     // Parse command
     const normalized = msg.startsWith('@spmt ') ? msg : '@' + msg;
     const args = normalized.split(/\s+/).slice(1); // remove "@spmt"
-    const cmd = args[0];
+    const cmd = args[0] === 'opt-out' ? 'optout' : args[0];
     if (debugEnabled('discord-chat') || debugEnabled('discord')) console.log(`[Discord Chat] Processing spmt ${cmd || '(empty)'}`);
 
     if (cmd === 'controls' || cmd === 'control') {
@@ -454,9 +454,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'optout') {
-      await deleteDiscordMessage(channelId, messageId);
-      await reply(`@${userName} Opt-out is Twitch-channel only. Use "spmt optout" in the Twitch channel you want removed.`);
-      return NextResponse.json({ success: true, reply: 'twitch-only' });
+      const twitchChannel = String(player?.twitchUsername || player?.username || '').trim().toLowerCase().replace(/^#/, '');
+      if (!twitchChannel) {
+        await reply(`@${userName} I could not find a linked Twitch channel to opt out. Link Twitch first, or ask an SPMT admin to remove it manually.`);
+        return NextResponse.json({ success: true, reply: 'optout-no-linked-twitch' });
+      }
+      const headers = { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() };
+      const blacklistRes = await fetch(`${getInternalAppOrigin()}/api/bot/blacklist`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ channel: twitchChannel, source: 'user-opt-out' }),
+      }).catch(() => null);
+      await fetch(`${getInternalAppOrigin()}/api/bot/channels/remove`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ channel: twitchChannel }),
+      }).catch(() => null);
+      if (!blacklistRes?.ok) {
+        await reply(`@${userName} I could not complete the opt-out right now. Please try again later.`);
+        return NextResponse.json({ success: true, reply: 'optout-failed' });
+      }
+      await reply(`@${userName} Opt-out confirmed for **${twitchChannel}**. SPMT bots will not join or speak in that Twitch channel unless you explicitly opt back in later.`);
+      return NextResponse.json({ success: true, reply: 'opted-out', twitchChannel });
     }
 
     // All other commands require being in the game
