@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isBotRequest } from '@/lib/auth';
+import { isBotRequest, isStreamWeaverGameHubRequest } from '@/lib/auth';
 import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
   canonicalJoinCommand,
@@ -170,7 +170,7 @@ function legacyChatTagRewrite(actionArgs: string[]) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isBotRequest(req)) {
+  if (!isBotRequest(req) && !isStreamWeaverGameHubRequest(req)) {
     return NextResponse.json({ error: 'Bot service authentication required.' }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));

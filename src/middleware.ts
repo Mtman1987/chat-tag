@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getBotSecret } from '@/lib/runtime-secrets';
+import { getBotSecret, getStreamweaverSecret } from '@/lib/runtime-secrets';
 import { resolveChatTagAppUserId } from '@/lib/quackverse-identity';
 
 const SPMT_BASE_URL = String(process.env.SPMT_BASE_URL || 'https://spmt.live').replace(/\/$/, '');
@@ -43,6 +43,18 @@ function hasValidBotSecret(request: NextRequest): boolean {
   if (!supplied) return false;
   try {
     return supplied === getBotSecret();
+  } catch {
+    return false;
+  }
+}
+
+function hasStreamWeaverGameHubAccess(request: NextRequest): boolean {
+  const path = request.nextUrl.pathname;
+  if (path !== '/api/game-hub/command' && path !== '/api/game-hub/bot-overlays') return false;
+  const supplied = String(request.headers.get('x-bot-secret') || '').trim();
+  if (!supplied) return false;
+  try {
+    return supplied === getStreamweaverSecret();
   } catch {
     return false;
   }
@@ -245,7 +257,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (hasValidBotSecret(request)) {
+  if (hasValidBotSecret(request) || hasStreamWeaverGameHubAccess(request)) {
     return NextResponse.next();
   }
 

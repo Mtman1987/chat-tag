@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isBotRequest } from '@/lib/auth';
+import { isBotRequest, isStreamWeaverGameHubRequest } from '@/lib/auth';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { createGameOverlayProfile, normalizeGameOverlayProfile, patchGameOverlayProfile } from '@/lib/game-hub-overlays';
 import { setChatWarsBattle, setStreamGameBattle } from '@/lib/game-hub-state';
@@ -13,7 +13,7 @@ function systemOverrides(state:any){ state.gameSettings.default ||= {}; state.ga
 function systemOwner(id:string){ const match=id.match(/^system-([a-z0-9_]+)-(?:main|activity|rain|parade)$/); return match?.[1]||''; }
 
 export async function GET(req: NextRequest) {
-  if (!isBotRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
+  if (!isBotRequest(req) && !isStreamWeaverGameHubRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
   const ownerLogin=login(req.nextUrl.searchParams.get('channel'));
   if(!ownerLogin) return NextResponse.json({error:'channel is required'},{status:400});
   const state=await readAppState();
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({profiles});
 }
 export async function POST(req: NextRequest) {
-  if (!isBotRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
+  if (!isBotRequest(req) && !isStreamWeaverGameHubRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
   const body=await req.json().catch(()=>({}));
   const ownerLogin=login(body.channel);
   if(!ownerLogin) return NextResponse.json({error:'channel is required'},{status:400});
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({profile},{status:201});
 }
 export async function PATCH(req: NextRequest) {
-  if (!isBotRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
+  if (!isBotRequest(req) && !isStreamWeaverGameHubRequest(req)) return NextResponse.json({error:'Bot service authentication required.'},{status:401});
   const body=await req.json().catch(()=>({})); const ownerLogin=login(body.channel); const id=String(body.id||'').trim();
   if(!ownerLogin||!id) return NextResponse.json({error:'channel and id are required'},{status:400});
   try {

@@ -2,21 +2,26 @@ import assert from 'node:assert/strict';
 import test, { after, before } from 'node:test';
 import { NextRequest } from 'next/server';
 import { middleware } from '../src/middleware';
-import { isBotRequest, requireAdminRequest } from '../src/lib/auth';
+import { isBotRequest, isStreamWeaverGameHubRequest, requireAdminRequest } from '../src/lib/auth';
 
 const originalEnvironment = {
   BOT_SECRET_KEY: process.env.BOT_SECRET_KEY,
+  STREAMWEAVER_SECRET: process.env.STREAMWEAVER_SECRET,
   QUACKVERSE_TUNNEL_ONLY: process.env.QUACKVERSE_TUNNEL_ONLY,
 };
 
 before(() => {
   process.env.BOT_SECRET_KEY = 'auth-routing-test-secret';
+  process.env.STREAMWEAVER_SECRET = 'streamweaver-game-hub-test-secret';
   delete process.env.QUACKVERSE_TUNNEL_ONLY;
 });
 
 after(() => {
   if (originalEnvironment.BOT_SECRET_KEY === undefined) delete process.env.BOT_SECRET_KEY;
   else process.env.BOT_SECRET_KEY = originalEnvironment.BOT_SECRET_KEY;
+
+  if (originalEnvironment.STREAMWEAVER_SECRET === undefined) delete process.env.STREAMWEAVER_SECRET;
+  else process.env.STREAMWEAVER_SECRET = originalEnvironment.STREAMWEAVER_SECRET;
 
   if (originalEnvironment.QUACKVERSE_TUNNEL_ONLY === undefined) delete process.env.QUACKVERSE_TUNNEL_ONLY;
   else process.env.QUACKVERSE_TUNNEL_ONLY = originalEnvironment.QUACKVERSE_TUNNEL_ONLY;
@@ -105,5 +110,28 @@ test('valid bot requests retain administrative service authorization', () => {
   if (result.ok) {
     assert.equal(result.user.id, 'bot-service');
     assert.equal(result.user.twitchUsername, 'bot-service');
+  }
+});
+
+test('StreamWeaver service secret reaches Nebula commands and overlay writes only', async () => {
+  for (const path of ['/api/game-hub/command', '/api/game-hub/bot-overlays']) {
+    const req = request(path, {
+      method: 'POST',
+      headers: { 'x-bot-secret': 'streamweaver-game-hub-test-secret' },
+    });
+    assert.equal((await middleware(req)).status, 200);
+    assert.equal(isStreamWeaverGameHubRequest(req), true);
+    assert.equal(isBotRequest(req), false);
+  }
+  const unrelated = request('/api/tag', {
+    method: 'POST',
+    headers: { 'x-bot-secret': 'streamweaver-game-hub-test-secret' },
+  });
+  assert.equal((await middleware(unrelated)).status, 401);
+  assert.equal(isBotRequest(unrelated), false);
+  for (const path of ['/api/game-hub/command', '/api/game-hub/bot-overlays']) {
+    const req = request(path, { method: 'POST', headers: { 'x-bot-secret': 'wrong-secret' } });
+    assert.equal((await middleware(req)).status, 401);
+    assert.equal(isStreamWeaverGameHubRequest(req), false);
   }
 });

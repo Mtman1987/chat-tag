@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, type SessionUser } from '@/lib/session';
-import { getBotSecret } from '@/lib/runtime-secrets';
+import { getBotSecret, getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 export function getSessionUserFromRequest(req: NextRequest): SessionUser | null {
   const spmtUserId = String(req.headers.get('x-spmt-user-id') || '').trim();
@@ -31,6 +31,18 @@ export function isBotRequest(req: NextRequest): boolean {
   if (!supplied) return false;
   try {
     return supplied === getBotSecret();
+  } catch {
+    return false;
+  }
+}
+
+// StreamWeaver may direct games and overlays with its dedicated service secret.
+// Keep this credential scoped to the Game Hub routes instead of granting general bot access.
+export function isStreamWeaverGameHubRequest(req: NextRequest): boolean {
+  const supplied = String(req.headers.get('x-bot-secret') || '').trim();
+  if (!supplied) return false;
+  try {
+    return supplied === getStreamweaverSecret();
   } catch {
     return false;
   }
