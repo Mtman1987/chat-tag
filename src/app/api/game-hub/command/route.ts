@@ -301,7 +301,10 @@ export async function POST(req: NextRequest) {
     && (reservedRoot || Boolean(resolveGameHubCommandKey(command))
       || directCommand.recognized);
   const settings = stageGameId ? getChannelGameSettings(directState, channel) : null;
-  const choiceKey = `${stageGameId}:${playerId}`;
+  // Remember ambiguity choices per word, not for the whole game run. Choosing
+  // "rain = guess" must never make a later real command such as "stop" become
+  // a guess automatically.
+  const choiceKey = `${stageGameId}:${playerId}:${guessText.toLowerCase()}`;
   const runId = settings?.gameRunIds?.[stageGameId] || 'initial';
   const selectedChoice = body.selectedChoice?.gameId === stageGameId
     && body.selectedChoice?.word === guessText.toLowerCase()
