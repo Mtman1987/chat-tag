@@ -951,6 +951,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${game.name} is not ACTIVE in #${channel}.`) });
   }
 
+  // Explicit game-qualified free-form guesses bypass ambiguity completely
+  // and also become the viewer's current focus for the active game run.
+  if ((game.id === 'wordchain' || game.id === 'phraseguess') && actionArgs.length) {
+    const reservedWordAction = game.id === 'wordchain'
+      ? /^(?:theme|start|stop|leave|help|rules|control|controls|popout|up|down)$/.test(action)
+      : /^(?:hint|submit|start|stop|leave|help|rules|control|controls|popout)$/.test(action);
+    if (!reservedWordAction) {
+      const guess = rawActionArgs.join(' ').trim();
+      const result = await updateAppStateIfChanged((draft) => {
+        rememberGameHubPlayerFocus(draft, channel, playerId, game.id);
+        const outcome = game.id === 'wordchain'
+          ? recordWordChainMessage(draft, { channel, userId, username, displayName, message: guess, explicit: true })
+          : recordPhraseGuessAttempt(draft, { channel, userId, username, displayName, message: guess, explicit: true });
+        return { changed: outcome.changed, result: outcome };
+      });
+      const details: Record<string, string> = game.id === 'wordchain' ? {
+        accepted: `“${guess.toUpperCase()}” extends the chain · ${(result as any).points || 0} provisional points. Votes settle at round end.`,
+        review: 'the round is in review. Vote with spmt up <word> or spmt down <word>.',
+        'wrong-letter': 'that word starts with the wrong letter.',
+        used: 'that word is already in this chain.',
+        invalid: 'use one word of at least three letters.',
+        rejected: 'that word was voted down in a previous round.',
+        'not-playing': 'join Word Chain first.',
+      } : {
+        won: `solved the phrase! +${(result as any).reward || 0} points.`,
+        wrong: `not the phrase · ${(result as any).cost || 0} Game Point spent.`,
+        'no-charge': 'that guess did not count.',
+        closed: 'this phrase has already been solved.',
+        'not-playing': 'join Phrase Guess first.',
+      };
+      return NextResponse.json({ handled: true, reply: `@${displayName} ${game.name}: ${details[(result as any).outcome] || (result as any).outcome}` });
+    }
+  }
+
+  // Explicit game-qualified commands also refresh focus, so a later short
+  // free-form payload naturally continues in the same game.
+  if (playerId && game.id !== 'chat-tag') {
+    await updateAppState((draft) => {
+      rememberGameHubPlayerFocus(draft, channel, playerId, game.id);
+      return null;
+    });
+  }
+
   if (game.id === 'chatwars' && /^(?:show|view|reveal)$/.test(action)) {
     return NextResponse.json({
       handled: true,
