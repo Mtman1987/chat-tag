@@ -38,12 +38,15 @@ import {
   recordWordChainVote,
   getOrCreateGameHubPlayer,
   joinGameHubGame,
+  rememberGameHubPlayerFocus,
+  resolveGameHubPlayerFocus,
   phraseGuessPublicSnapshot,
   phraseGuessRoundAt,
   phraseGuessRoundForChannel,
   purchasePhraseGuessHint,
   recordPhraseGuessAttempt,
   recordWordChainMessage,
+  setChannelGameRunning,
   setStreamGameBattle,
   streamGameBattlePublicSnapshot,
   submitPhraseGuessPhrase,
@@ -54,6 +57,25 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
+
+test('per-player game focus follows run IDs and expires after inactivity', () => {
+  const state: any = { gameSettings: { default: {} } };
+  const channel = 'spacemountainlive';
+  const playerId = 'twitch:42';
+
+  setChannelGameRunning(state, channel, 'pixelbattle', true);
+  setChannelGameRunning(state, channel, 'wordchain', true);
+  const remembered = rememberGameHubPlayerFocus(state, channel, playerId, 'wordchain', 1000);
+  assert.equal(remembered?.gameId, 'wordchain');
+  assert.equal(resolveGameHubPlayerFocus(state, channel, playerId, ['pixelbattle', 'wordchain'], 1000), 'wordchain');
+
+  assert.equal(resolveGameHubPlayerFocus(state, channel, playerId, ['pixelbattle', 'wordchain'], 31 * 60_000), null);
+
+  rememberGameHubPlayerFocus(state, channel, playerId, 'wordchain', 2000);
+  setChannelGameRunning(state, channel, 'wordchain', false);
+  setChannelGameRunning(state, channel, 'wordchain', true);
+  assert.equal(resolveGameHubPlayerFocus(state, channel, playerId, ['wordchain'], 2500), null);
+});
 
 test('Games Hub catalogs 18 peer games after retiring Color Wars and Memory Lane', () => {
   assert.equal(GAME_HUB_CATALOG.length, 18);
