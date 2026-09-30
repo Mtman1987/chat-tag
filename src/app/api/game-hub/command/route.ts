@@ -716,6 +716,39 @@ export async function POST(req: NextRequest) {
     command = parts[0].toLowerCase();
   }
 
+  // Universal read commands can name a game explicitly:
+  // spmt rules mosaic, spmt status wordchain, spmt score bingo.
+  const explicitInfoGame = ['help', 'rules', 'status', 'score'].includes(command) && parts.length > 1
+    ? (
+      resolveGameHubCommandKey(parts[1])
+      || resolveGameHubCommandKey(parts.slice(1, 3).join(''))
+      || resolveGameHubCommandKey(parts.slice(1, 3).join('-'))
+    )
+    : null;
+  if (explicitInfoGame) {
+    const game = getGameHubGame(explicitInfoGame.gameId)!;
+    if (command === 'help' || command === 'rules') {
+      return NextResponse.json({
+        handled: true,
+        reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${game.name}: ${game.howToPlay}`),
+      });
+    }
+    const active = activeForDirectRouting.includes(game.id) || game.id === 'chat-tag';
+    if (!active) {
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} ${game.name} is not ACTIVE in #${channel}.`,
+      });
+    }
+    const snapshot = getPlayerGameSnapshots(directState, [game.id], { userId, username })[0];
+    return NextResponse.json({
+      handled: true,
+      reply: snapshot
+        ? `@${displayName} ${game.name} ${command}: ${compactGameSnapshot(snapshot)}`
+        : `@${displayName} ${game.name} has no player state for you yet.`,
+    });
+  }
+
   // Chat Tag predates Games Hub and is a persistent ecosystem-wide game. Keep
   // its original root commands backward compatible so existing players never
   // need to rejoin or relearn commands just because Games Hub is installed.
