@@ -1157,6 +1157,20 @@ export async function POST(req: NextRequest) {
   }
 
   if (game.id === 'bingo') {
+    if (action === 'leave') {
+      const left = await updateAppState((draft) => {
+        const result = leaveGameHubGame(draft, normalizeGameHubPlayerId(userId, username), game.id);
+        recordGameHubRuntimeAction(draft, {
+          channel, gameId: game.id, actorId: userId, username, displayName,
+          action: 'leave', args: [], message: String(body.message || ''),
+        });
+        return result;
+      });
+      return NextResponse.json({
+        handled: true,
+        reply: `@${displayName} ${left ? 'left Bingo.' : 'was not joined to Bingo.'}`,
+      });
+    }
     if (!action) {
       await updateAppState((draft) => {
         const joined = joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
