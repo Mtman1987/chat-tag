@@ -240,14 +240,6 @@ function factionThread(faction: string, lineage: string) {
   return parts.join('. ');
 }
 
-function rankThread(rank: QuackverseCanonRank) {
-  if (rank === 'Prime') return 'Prime evolution: preserve the exact underlying character identity while upgrading materials, detail density and authority.';
-  if (rank === 'Ultra') return 'Ultra evolution: preserve the exact underlying character identity while presenting the most advanced form of the established equipment and power language.';
-  if (rank === 'Elite') return 'Elite evolution: preserve identity while adding visibly improved specialist equipment and finish.';
-  if (rank === 'Legendary') return 'Legendary rank: ceremonial refinement and unmistakable authority without abandoning the established identity.';
-  return '';
-}
-
 function weaponForCard(card: CanonCardLike, className: QuackverseVisualClass, affinity: QuackverseVisualAffinity) {
   const role = String(getQuackverseCanonGroup(card.id)?.subclass || card.role || '').toLowerCase();
   if (/web-slap|melee/.test(role)) return 'photon-web gauntlets and a compact energy baton';
