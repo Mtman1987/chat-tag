@@ -7,7 +7,7 @@ import { MAX_PASSES, getPassSpendDenial } from '@/lib/pass-policy';
 import { awardSpmtXp, grandfatherSpmtIdentity, publishSpmtEvent } from '@/lib/spmt-client';
 import { crownMonthKey, crownUpstreamEventId, crownXpReward } from '@/lib/chat-tag-crown-rewards';
 import { buildXpIdempotencyKey, mappedXpAwardV1, type XpMappedEventTypeV1 } from '@spmt/sdk';
-import { inferPlayerHistory, markPlayerPlayed } from '@/lib/player-history';
+import { markPlayerPlayed } from '@/lib/player-history';
 
 export const dynamic = 'force-dynamic';
 
