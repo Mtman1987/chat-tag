@@ -20,7 +20,8 @@ if (!source.includes(newTiming)) {
 
 const oldState = "  const [dimBar, setDimBar] = useState(false);";
 const newState = `${oldState}\n  const [hudVisible, setHudVisible] = useState(true);`;
-if (!source.includes('const [hudVisible, setHudVisible] = useState(true);')) {
+if (!source.includes('const [hudVisible, setHudVisible] = useState(true);')
+  && !source.includes('const [, setHudVisible] = useState(true);')) {
   if (!source.includes(oldState)) throw new Error('ChatTag overlay timing patch: HUD state marker missing');
   source = source.replace(oldState, newState);
 }
@@ -47,7 +48,9 @@ for (const marker of [
   "searchParams.get('cycle') || '420'",
   "searchParams.get('hudOn') || '45'",
   "searchParams.get('hudOff') || '120'",
-  'const [hudVisible, setHudVisible] = useState(true);',
+  ...(source.includes('const [hudVisible, setHudVisible] = useState(true);')
+    || source.includes('const [, setHudVisible] = useState(true);')
+    ? [] : ['HUD state setter']),
   ...(source.includes('idleBarOpacity') ? [] : ["opacity: dimBar ? 0.12 : (hudVisible ? 1 : 0)"]),
 ]) {
   if (!source.includes(marker)) throw new Error(`ChatTag overlay timing patch incomplete: ${marker}`);
