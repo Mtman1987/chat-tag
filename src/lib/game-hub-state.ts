@@ -75,6 +75,7 @@ export type GameHubChannelSettings = {
   stoppedGameIds: string[];
   gameRunIds?: Record<string, string>;
   wordGuessChoices?: Record<string, { runId: string; choice: 'guess' | 'command' }>;
+  playerGameFocus?: Record<string, { gameId: string; runId: string; lastUsedAt: string }>;
   updatedAt?: string;
   phraseGuessHints?: { roundSlot: number; hintsUsed: number };
   phraseGuessRound?: {
@@ -203,6 +204,55 @@ export function resolveChannelGameIds(state: any, channelValue: unknown): string
   ], 50);
   const stopped = new Set(settings.stoppedGameIds);
   return configured.filter((gameId) => !stopped.has(gameId));
+}
+
+export const GAME_FOCUS_TTL_MS = 30 * 60_000;
+
+export function rememberGameHubPlayerFocus(
+  state: any,
+  channelValue: unknown,
+  playerIdValue: unknown,
+  gameIdValue: unknown,
+  nowValue = Date.now(),
+) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const playerId = String(playerIdValue || '').trim();
+  const game = getGameHubGame(String(gameIdValue || '').trim().toLowerCase());
+  if (!channel || !playerId || !game) return null;
+  const settings = getChannelGameSettings(state, channel);
+  const runId = settings.gameRunIds?.[game.id] || 'initial';
+  const now = Math.max(0, Math.floor(Number(nowValue || Date.now())));
+  settings.playerGameFocus ||= {};
+  settings.playerGameFocus[playerId] = {
+    gameId: game.id,
+    runId,
+    lastUsedAt: new Date(now).toISOString(),
+  };
+  settings.playerGameFocus = Object.fromEntries(Object.entries(settings.playerGameFocus).slice(-500));
+  return settings.playerGameFocus[playerId];
+}
+
+export function resolveGameHubPlayerFocus(
+  state: any,
+  channelValue: unknown,
+  playerIdValue: unknown,
+  candidateGameIdsValue: unknown[],
+  nowValue = Date.now(),
+) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const playerId = String(playerIdValue || '').trim();
+  if (!channel || !playerId) return null;
+  const settings = getChannelGameSettings(state, channel);
+  const focus = settings.playerGameFocus?.[playerId];
+  if (!focus) return null;
+  const candidates = new Set(normalizeGameHubGameIds(candidateGameIdsValue, 50));
+  if (!candidates.has(focus.gameId)) return null;
+  const currentRunId = settings.gameRunIds?.[focus.gameId] || 'initial';
+  if (focus.runId !== currentRunId) return null;
+  const lastUsedAt = Date.parse(focus.lastUsedAt);
+  const now = Math.max(0, Math.floor(Number(nowValue || Date.now())));
+  if (!Number.isFinite(lastUsedAt) || now - lastUsedAt > GAME_FOCUS_TTL_MS) return null;
+  return focus.gameId;
 }
 
 export function setChannelGameRunning(state: any, channelValue: unknown, gameIdValue: unknown, running: boolean) {
