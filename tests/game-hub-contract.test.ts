@@ -873,6 +873,8 @@ test('word games only spend or advance on explicit guesses, with collision choic
   const command = read('src/app/api/game-hub/command/route.ts');
   assert.ok(ingest.includes("privateControllerInput && gameInputIds.includes('wordchain')"));
   assert.ok(command.includes('wordGuessChoices[choiceKey]'));
+  assert.ok(command.includes("const choiceKey = \`${stageGameId}:${playerId}:${guessText.toLowerCase()}\`"));
+
   assert.ok(command.includes('message: guessText, explicit: true'));
   assert.ok(command.includes('!specializedGameCommand'), 'Mosaic paint and view commands must bypass word guessing');
 });
