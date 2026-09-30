@@ -141,8 +141,22 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
     return { recognized: false, mode: 'single', intents: [] };
   }
 
+  const explicitGameFromRest = () => {
+    const candidates = [
+      rest[0] || '',
+      rest.slice(0, 2).join(''),
+      rest.slice(0, 2).join('-'),
+    ].filter(Boolean);
+    return candidates.map((candidate) => BY_KEY.get(candidate)).find(Boolean) || null;
+  };
+
   if (root === 'join' || root === 'leave') {
     const actionArgs = root === 'leave' ? ['leave'] : [];
+    const explicit = explicitGameFromRest();
+    if (explicit) {
+      const allowed = explicit.gameId === 'chat-tag' || active.has(explicit.gameId);
+      return { recognized: true, mode: 'single', intents: allowed ? [intent(explicit.gameId, actionArgs)] : [] };
+    }
     const intents = [intent('chat-tag', actionArgs), ...[...active]
       .filter((gameId) => gameId !== 'chat-tag' && BY_GAME.has(gameId))
       .map((gameId) => intent(gameId, actionArgs))];
@@ -150,11 +164,19 @@ export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValu
   }
 
   if (root === 'start') {
+    const explicit = explicitGameFromRest();
+    if (explicit && explicit.gameId !== 'chat-tag') {
+      return { recognized: true, mode: 'single', intents: [intent(explicit.gameId, ['start'])] };
+    }
     const intents = SPECS.filter((spec) => spec.gameId !== 'chat-tag').map((spec) => intent(spec.gameId, ['start']));
     return { recognized: true, mode: 'choose', intents };
   }
 
   if (root === 'stop') {
+    const explicit = explicitGameFromRest();
+    if (explicit && explicit.gameId !== 'chat-tag') {
+      return { recognized: true, mode: 'single', intents: active.has(explicit.gameId) ? [intent(explicit.gameId, ['stop'])] : [] };
+    }
     const intents = [...active]
       .filter((gameId) => gameId !== 'chat-tag' && BY_GAME.has(gameId))
       .map((gameId) => intent(gameId, ['stop']));
