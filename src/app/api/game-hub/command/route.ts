@@ -1158,7 +1158,15 @@ export async function POST(req: NextRequest) {
 
   if (game.id === 'bingo') {
     if (!action) {
-      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} open the shared player card to see phrases; claim a triggered square with spmt bingo B4.`), launchUrl: gamePopoutUrl(req, channel, game.id) });
+      await updateAppState((draft) => {
+        const joined = joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
+        if (!joined.alreadyJoined) recordGameHubRuntimeAction(draft, {
+          channel, gameId: game.id, actorId: userId, username, displayName,
+          action: 'join', args: [], message: String(body.message || ''),
+        });
+        return null;
+      });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} joined Bingo. Open the shared player card to see phrases; claim a triggered square with spmt bingo B4.`), launchUrl: gamePopoutUrl(req, channel, game.id) });
     }
     if (action === 'flip') {
       const result = await updateAppState((draft) => {
