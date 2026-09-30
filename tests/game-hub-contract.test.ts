@@ -141,6 +141,9 @@ test('every Games Hub chat command uses the spmt namespace', () => {
   assert.ok(bingo.some((command) => command.trigger === 'spmt bingo B4'));
   assert.ok(bingo.some((command) => command.trigger === 'spmt bingo flip B4'));
   assert.ok(bingo.some((command) => command.trigger === 'spmt bingo free'));
+  const route = read('src/app/api/game-hub/command/route.ts');
+  assert.match(route, /explicitInfoGame/);
+  assert.match(route, /\['help', 'rules', 'status', 'score'\]/);
 });
 
 test('direct commands preserve Chat Tag and route colors only to Chat Wars', () => {
@@ -151,6 +154,22 @@ test('direct commands preserve Chat Tag and route colors only to Chat Wars', () 
   const tagOnly = resolveDirectGameCommand(['join'], []);
   assert.equal(tagOnly.mode, 'single');
   assert.equal(tagOnly.intents[0].command, 'spmt chattag');
+
+  const joinMosaic = resolveDirectGameCommand(['join', 'mosaic'], ['pixelbattle', 'wordchain']);
+  assert.equal(joinMosaic.mode, 'single');
+  assert.equal(joinMosaic.intents[0].command, 'spmt mosaic');
+
+  const leaveChain = resolveDirectGameCommand(['leave', 'word', 'chain'], ['pixelbattle', 'wordchain']);
+  assert.equal(leaveChain.mode, 'single');
+  assert.equal(leaveChain.intents[0].command, 'spmt wordchain leave');
+
+  const startBingo = resolveDirectGameCommand(['start', 'bingo'], []);
+  assert.equal(startBingo.mode, 'single');
+  assert.equal(startBingo.intents[0].command, 'spmt bingo start');
+
+  const stopMosaic = resolveDirectGameCommand(['stop', 'mosaic'], ['pixelbattle', 'wordchain']);
+  assert.equal(stopMosaic.mode, 'single');
+  assert.equal(stopMosaic.intents[0].command, 'spmt mosaic stop');
 
   const colors = resolveDirectGameCommand(['red'], ['chatwars']);
   assert.equal(colors.mode, 'single');
