@@ -21,6 +21,8 @@ import {
   recordWordChainMessage,
   recordWordChainVote,
   purchasePhraseGuessHint,
+  rememberGameHubPlayerFocus,
+  resolveGameHubPlayerFocus,
   resolveChannelGameIds,
   setChannelGameRunning,
   submitPhraseGuessPhrase,
@@ -192,7 +194,10 @@ export async function POST(req: NextRequest) {
   // The main overlay rotates these games in this order. Resolve a short guess
   // against the displayed stage, rather than charging both running games.
   const wordStages = ['wordchain', 'phraseguess'].filter((id) => activeForDirectRouting.includes(id));
-  const stageGameId = wordStages.length ? wordStages[nebulaRotationIndexAt(Date.now(), wordStages.length)] : '';
+  const selectedGameId = String(body.selectedChoice?.gameId || '').trim().toLowerCase();
+  let stageGameId = wordStages.includes(selectedGameId)
+    ? selectedGameId
+    : wordStages.length ? wordStages[nebulaRotationIndexAt(Date.now(), wordStages.length)] : '';
   if (stageGameId === 'wordchain' && /^(up|down)$/.test(command) && parts.length === 2) {
     const result = await updateAppStateIfChanged((draft) => {
       const outcome = recordWordChainVote(draft, {
@@ -227,6 +232,71 @@ export async function POST(req: NextRequest) {
     || parseMosaicBrushCommand(body.message) !== null
     || parseMosaicViewCommand(body.message) !== null;
   const directCommand = resolveDirectGameCommand(parts, activeForDirectRouting);
+
+  // Free-form Nebula focus: the few games that legitimately accept arbitrary
+  // viewer text can share the short `spmt <payload>` form. Explicit game names
+  // still win. If several active games could consume the payload, remember a
+  // per-player choice for this game run and ask only when there is no valid focus.
+  const explicitGameSpec = resolveGameHubCommandKey(command);
+  const freeformPayload = parts.join(' ').trim();
+  const freeformCandidates: string[] = [];
+  if (!explicitGameSpec && !directCommand.recognized && !specializedGameCommand && freeformPayload) {
+    if (activeForDirectRouting.includes('pixelbattle') && freeformPayload.length >= 2) freeformCandidates.push('pixelbattle');
+    for (const gameId of wordStages) {
+      if (getGameHubStore(directState).players[playerId]?.joinedGames?.[gameId]?.active) freeformCandidates.push(gameId);
+    }
+  }
+
+  if (freeformCandidates.length) {
+    const selectedFocus = freeformCandidates.includes(selectedGameId)
+      ? selectedGameId
+      : resolveGameHubPlayerFocus(directState, channel, playerId, freeformCandidates);
+    if (selectedFocus) {
+      await updateAppState((draft) => {
+        rememberGameHubPlayerFocus(draft, channel, playerId, selectedFocus);
+        return null;
+      });
+      if (selectedFocus === 'pixelbattle') {
+        parts = ['mosaic', ...parts];
+        command = 'mosaic';
+      } else {
+        stageGameId = selectedFocus;
+      }
+    } else if (freeformCandidates.length === 1) {
+      const only = freeformCandidates[0];
+      await updateAppState((draft) => {
+        rememberGameHubPlayerFocus(draft, channel, playerId, only);
+        return null;
+      });
+      if (only === 'pixelbattle') {
+        parts = ['mosaic', ...parts];
+        command = 'mosaic';
+      } else {
+        stageGameId = only;
+      }
+    } else {
+      const choices = freeformCandidates.map((gameId, index) => {
+        const game = getGameHubGame(gameId);
+        if (gameId === 'pixelbattle') {
+          return { number: index + 1, gameId, label: `${game?.name || 'Mosaic'}: “${freeformPayload}”`, command: `spmt mosaic ${freeformPayload}` };
+        }
+        return {
+          number: index + 1,
+          gameId,
+          label: `${game?.name || gameId} guess: “${freeformPayload}”`,
+          command: `spmt ${freeformPayload}`,
+          choice: 'guess',
+          word: freeformPayload.toLowerCase(),
+        };
+      });
+      return NextResponse.json({
+        handled: true,
+        choices,
+        reply: `@${displayName} Which game did you mean? ${choices.map((choice) => `${choice.number} ${getGameHubGame(choice.gameId)?.name || choice.gameId}`).join(' · ')}. Type the number; I’ll remember for this game.`,
+      });
+    }
+  }
+
   const commandCollision = !explicitGuess && parts.length === 1
     && (reservedRoot || Boolean(resolveGameHubCommandKey(command))
       || directCommand.recognized);
