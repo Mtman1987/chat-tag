@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
@@ -65,13 +65,13 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const isMosaic = game.id === 'pixelbattle';
   const isBingo = game.id === 'bingo';
 
-  async function refreshMosaic() {
+  const refreshMosaic = useCallback(async () => {
     if (!isMosaic || !channel) return;
     try {
       const response = await fetch(`/api/game-hub/mosaic?channel=${encodeURIComponent(channel)}`,{cache:'no-store'});
       if (response.ok) setMosaic(await response.json());
     } catch {}
-  }
+  }, [isMosaic, channel]);
 
   useEffect(() => {
     if (!isMosaic || !channel) return;
@@ -80,7 +80,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     void load();
     const timer=window.setInterval(load,1200);
     return()=>{cancelled=true;window.clearInterval(timer)};
-  },[isMosaic,channel]);
+  },[isMosaic,channel,refreshMosaic]);
 
   async function run(message: string) {
     if (!channel || !message.trim() || busy) return;
