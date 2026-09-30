@@ -137,7 +137,7 @@ export default function OverlayPage() {
   const [data, setData] = useState<OverlayState>(EMPTY_OVERLAY_STATE);
   const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
   const [dimBar, setDimBar] = useState(false);
-  const [hudVisible, setHudVisible] = useState(true);
+  const [, setHudVisible] = useState(true);
   const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
   const activeBroadcastRef = useRef(false);
   const broadcastTimer = useRef<NodeJS.Timeout | null>(null);
