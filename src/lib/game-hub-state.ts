@@ -267,7 +267,11 @@ export function setChannelGameRunning(state: any, channelValue: unknown, gameIdV
   if (running) {
     if (stopped.has(game.id) || !wasConfigured) {
       settings.gameRunIds ||= {};
-      settings.gameRunIds[game.id] = new Date().toISOString();
+      const stamp = new Date().toISOString();
+      const previousRunId = String(settings.gameRunIds[game.id] || '');
+      const [previousStamp, previousSequenceText] = previousRunId.split('#');
+      const sequence = previousStamp === stamp ? Math.max(2, Number(previousSequenceText || 1) + 1) : 1;
+      settings.gameRunIds[game.id] = sequence === 1 ? stamp : `${stamp}#${sequence}`;
     }
     stopped.delete(game.id);
   } else stopped.add(game.id);
