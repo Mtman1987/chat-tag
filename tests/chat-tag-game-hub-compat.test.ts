@@ -63,12 +63,21 @@ test('deployed bot build keeps proven Chat Tag commands and sender routing intac
     assert.match(patchedBot, /sharedNebulaCommands\.has\(cmd\)/);
     assert.match(patchedBot, /pendingGameChoices/);
     assert.match(patchedBot, /pendingChoiceNumber/);
+    assert.match(patchedBot, /isPendingGameChoiceReply/);
+    const pendingChoiceIngressGuard = patchedBot.indexOf('const isPendingGameChoiceReply = Boolean(');
+    const gameChatIngress = patchedBot.indexOf("apiCall('/api/game-hub/chat'");
+    const pendingChoiceParser = patchedBot.indexOf('const pendingChoice = pendingGameChoices.get(rawChoiceKey);');
+    assert.ok(pendingChoiceIngressGuard >= 0 && gameChatIngress > pendingChoiceIngressGuard,
+      'pending numeric game choices must be identified before gameplay ingestion');
+    assert.ok(pendingChoiceParser > gameChatIngress,
+      'pending choice confirmation should still be consumed by the command parser after gameplay ingestion is skipped');
+    assert.match(patchedBot, /if \(!isPendingGameChoiceReply\) \{\s*apiCall\('\/api\/game-hub\/chat'/);
     assert.match(patchedBot, /gamesHubCommand\.followupReply/);
     assert.match(patchedBot, /const chatTagNamespace = cmd === 'chattag' \|\| cmd === 'taggame'/);
     assert.match(patchedBot, /Chat Tag is always active globally; no channel start is required/);
     assert.match(patchedBot, /CHAT_TAG_API_TIMEOUT_MS/);
 
-    const legacyGuard = patchedBot.indexOf('if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd))');
+    const legacyGuard = patchedBot.indexOf('if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd) || args.length === 1)');
     const hubCall = patchedBot.indexOf("apiCall('/api/game-hub/command'");
     const scoreHandler = patchedBot.indexOf("cmd === 'score'");
     const liveHandler = patchedBot.indexOf("cmd === 'live'");

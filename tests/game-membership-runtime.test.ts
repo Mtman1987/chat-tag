@@ -39,7 +39,7 @@ test('private controller chat drives active game mechanics without requiring pub
   const ingest = read('src/app/api/game-hub/chat/route.ts');
   assert.match(ingest, /privateControllerInput = String\(body\.source \|\| ''\) === 'nebula-controller'/);
   assert.match(ingest, /gameInputIds = privateControllerInput \? activeGameIds : participatingGameIds/);
-  assert.match(ingest, /phraseGuessAttemptDue = gameInputIds\.includes\('phraseguess'\)/);
-  assert.match(ingest, /wordChainAttemptDue = gameInputIds\.includes\('wordchain'\)/);
+  assert.match(ingest, /phraseGuessAttemptDue = privateControllerInput && gameInputIds\.includes\('phraseguess'\)/);
+  assert.match(ingest, /wordChainAttemptDue = privateControllerInput && gameInputIds\.includes\('wordchain'\)/);
   assert.match(ingest, /chatWarsAttemptDue = gameInputIds\.includes\('chatwars'\)/);
 });

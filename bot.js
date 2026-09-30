@@ -1943,24 +1943,39 @@ console.log = (...args) => {
         ? await resolveChannelFromRoomId(srcRoomId, rawCh)
         : rawCh;
       const activityChannel = (resolvedChannel !== senderLogin) ? resolvedChannel : undefined;
+      // A bare numeric reply can be a pending game-choice confirmation. Do not
+      // feed that confirmation into Word Chain/Phrase Guess as ordinary gameplay
+      // before the command router consumes it below.
+      const pendingGameChoiceKey = rawCh + ':' + senderLogin;
+      const pendingGameChoice = pendingGameChoices.get(pendingGameChoiceKey);
+      const pendingGameChoiceText = message.trim();
+      const pendingGameChoiceNumber = /^\d{1,2}$/.test(pendingGameChoiceText) ? Number(pendingGameChoiceText) : 0;
+      const isPendingGameChoiceReply = Boolean(
+        pendingGameChoice
+        && pendingGameChoice.expiresAt >= Date.now()
+        && pendingGameChoiceNumber >= 1
+        && pendingGameChoiceNumber <= pendingGameChoice.choices.length
+      );
       // Forward chat to DSH for leaderboard points
       forwardToDSH({ type: 'chat', twitchLogin: senderLogin, twitchId: tags['user-id'], username: tags['display-name'] || senderLogin, channel: resolvedChannel });
       // Games such as Chat Wars score each eligible message, so game chat cannot
       // share Chat Tag's throttled presence heartbeat. The route exits without
       // a write when no game is active.
-      apiCall('/api/game-hub/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel: resolvedChannel,
-          userId: tags['user-id'] || '',
-          username: senderLogin,
-          displayName: tags['display-name'] || senderLogin,
-          message,
-          color: tags.color || '',
-          badges: tags.badges || {},
-        }),
-      }).catch(() => {});
+      if (!isPendingGameChoiceReply) {
+        apiCall('/api/game-hub/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel: resolvedChannel,
+            userId: tags['user-id'] || '',
+            username: senderLogin,
+            displayName: tags['display-name'] || senderLogin,
+            message,
+            color: tags.color || '',
+            badges: tags.badges || {},
+          }),
+        }).catch(() => {});
+      }
       // Chat Tag itself still only needs the lower-frequency heartbeat.
       // The away command reads immunity to toggle it. Clearing immunity for the
       // command message first makes every attempt set away again.
