@@ -2050,7 +2050,19 @@ console.log = (...args) => {
 
     const { blacklistData, mutedData } = await readCommandGates();
     const channelIsBlacklisted = blacklistData?.blacklisted?.includes(channelName);
-    if (channelIsBlacklisted) {
+    const isExplicitSelfRejoin = (cmd === 'join' && !args[1]);
+    if (channelIsBlacklisted && isExplicitSelfRejoin) {
+      // A user typing "spmt join" is an explicit opt-in. Clear stale blacklist
+      // state (for example, after an accidental ban/unban) before continuing.
+      const restoreRes = await apiCall('/api/bot/blacklist', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: channelName })
+      });
+      if (restoreRes?.error) {
+        return;
+      }
+    } else if (channelIsBlacklisted) {
       return;
     }
     
