@@ -66,6 +66,8 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [addPlayerName, setAddPlayerName] = useState('');
   const [isAddingPlayer, setIsAddingPlayer] = useState(false);
+  const [blacklistedChannels, setBlacklistedChannels] = useState<string[]>([]);
+  const [isUpdatingBlacklist, setIsUpdatingBlacklist] = useState<string | null>(null);
 
   const ts = useCallback((value: any): number => {
     if (!value) return 0;
@@ -143,19 +145,38 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
     }
   }, [ts]);
 
+  const fetchBlacklist = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bot/blacklist', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBlacklistedChannels(
+        (data.blacklisted || [])
+          .map((channel: string) => channel.toLowerCase())
+          .sort()
+      );
+    } catch (error) {
+      console.error('Failed to fetch blacklist', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCommunity();
     fetchState();
+    if (showAdminControls) fetchBlacklist();
     const interval = setInterval(fetchState, 5000);
     const onVisible = () => {
-      if (!document.hidden) fetchState();
+      if (!document.hidden) {
+        fetchState();
+        if (showAdminControls) fetchBlacklist();
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [fetchCommunity, fetchState]);
+  }, [fetchCommunity, fetchState, fetchBlacklist, showAdminControls]);
 
   // Mock players if none provided (fallback)
   const fallbackPlayers: GamePlayer[] =
@@ -339,34 +360,89 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
     p.id === gameState.currentIt
   );
 
+  const handleUnblockChannel = async (channelName: string, quiet = false) => {
+    const normalized = channelName.trim().toLowerCase().replace(/^#/, '');
+    if (!normalized) return false;
+
+    setIsUpdatingBlacklist(normalized);
+    try {
+      const res = await fetch('/api/bot/blacklist', {
+        method: 'DELETE',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ channel: normalized }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || 'Could not remove blacklist entry');
+      }
+      await Promise.all([fetchBlacklist(), fetchState()]);
+      if (!quiet) {
+        toast({
+          title: 'Channel Restored',
+          description: `#${normalized} can join Chat Tag and bot channels again.`,
+        });
+      }
+      return true;
+    } catch (error: any) {
+      if (!quiet) {
+        toast({
+          variant: 'destructive',
+          title: 'Restore Failed',
+          description: error?.message || 'Could not remove blacklist entry',
+        });
+      }
+      return false;
+    } finally {
+      setIsUpdatingBlacklist(null);
+    }
+  };
+
   const handleAddPlayer = async () => {
-    const name = addPlayerName.trim().toLowerCase();
+    const name = addPlayerName.trim().toLowerCase().replace(/^@/, '');
     if (!name) return;
     setIsAddingPlayer(true);
     try {
-      // Add to tag game
+      // Admin Add is an explicit restore: clear stale blacklist/opt-out state first.
+      const restored = await handleUnblockChannel(name, true);
+      if (!restored) {
+        throw new Error(`Could not restore #${name} from the blacklist.`);
+      }
+
       const tagRes = await fetch('/api/tag', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', userId: `manual_${name}`, twitchUsername: name, avatar: '' })
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          action: 'join',
+          userId: `manual_${name}`,
+          twitchUsername: name,
+          avatar: '',
+          performedBy: sessionUsername || 'admin',
+        })
       });
-      const tagData = await tagRes.json();
-      if (tagData.error && tagData.error !== 'Already in game') {
-        toast({ variant: 'destructive', title: 'Add Failed', description: tagData.error });
-        setIsAddingPlayer(false);
-        return;
+      const tagData = await tagRes.json().catch(() => ({}));
+      if (!tagRes.ok && tagData.error !== 'Already in game') {
+        throw new Error(tagData.error || 'Could not add player to Chat Tag');
       }
-      // Add to bot channels
-      await fetch('/api/bot/channels/join', {
+
+      const channelRes = await fetch('/api/bot/channels/join', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ channel: name })
       });
+      if (!channelRes.ok) {
+        const channelData = await channelRes.json().catch(() => null);
+        throw new Error(channelData?.error || 'Player restored, but the bot could not join their channel');
+      }
+
       setAddPlayerName('');
-      toast({ title: 'Player Added', description: `${name} added to game + bot channels + community` });
-      setTimeout(fetchState, 500);
-    } catch {
-      toast({ variant: 'destructive', title: 'Add Failed' });
+      await Promise.all([fetchBlacklist(), fetchState()]);
+      toast({ title: 'Player Added', description: `${name} restored and added to Chat Tag + bot channels` });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Add Failed',
+        description: error?.message || 'Could not add player.',
+      });
     } finally {
       setIsAddingPlayer(false);
     }
@@ -564,18 +640,56 @@ export function ChatTagGame({ players = [], adminMode = false }: ChatTagGameProp
       </div>
 
       {showAdminControls && (
-      <div className="flex gap-2">
-        <Input
-          placeholder="Add player by Twitch username..."
-          value={addPlayerName}
-          onChange={(e) => setAddPlayerName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleAddPlayer(); }}
-          className="max-w-xs"
-        />
-        <Button onClick={handleAddPlayer} disabled={isAddingPlayer || !addPlayerName.trim()} size="sm">
-          {isAddingPlayer ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-          Add Player
-        </Button>
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <Input
+            placeholder="Add player by Twitch username..."
+            value={addPlayerName}
+            onChange={(e) => setAddPlayerName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddPlayer(); }}
+            className="max-w-xs"
+          />
+          <Button onClick={handleAddPlayer} disabled={isAddingPlayer || !addPlayerName.trim()} size="sm">
+            {isAddingPlayer ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+            Add Player
+          </Button>
+        </div>
+
+        <div className="rounded-md border p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium">Blocked / Opted-Out Channels ({blacklistedChannels.length})</div>
+              <div className="text-xs text-muted-foreground">
+                Unblock restores Chat Tag and bot-channel eligibility.
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={fetchBlacklist}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
+          <ScrollArea className="h-32">
+            <div className="space-y-1 pr-2">
+              {blacklistedChannels.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-2">No blocked channels.</div>
+              ) : (
+                blacklistedChannels.map((channel) => (
+                  <div key={channel} className="flex items-center justify-between rounded border p-2">
+                    <span className="font-mono text-sm">#{channel}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isUpdatingBlacklist === channel}
+                      onClick={() => handleUnblockChannel(channel)}
+                    >
+                      {isUpdatingBlacklist === channel ? 'Restoring...' : 'Unblock'}
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </div>
       </div>
       )}
 
