@@ -4,6 +4,7 @@ import { getGameHubGame } from '@/lib/game-hub-registry';
 import {
   canonicalJoinCommand,
   canonicalPlayerCommands,
+  normalizeDirectGameControlCommand,
   resolveDirectGameCommand,
   resolveGameHubCommandKey,
 } from '@/lib/game-hub-commands';
@@ -178,6 +179,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   let parts = parseSpmt(body.message);
   if (!parts.length) return NextResponse.json({ handled: false });
+
+  // Numeric start/stop menu choices are rewritten by the bot to explicit
+  // namespaced commands such as "spmt wordchain stop" or "spmt mosaic stop".
+  // Normalize them back to the universal controller form before an individual
+  // game parser can mistake start/stop for gameplay input.
+  parts = normalizeDirectGameControlCommand(parts);
 
   const channel = normalizeGameHubChannel(body.channel);
   const username = normalizeGameHubChannel(body.username);

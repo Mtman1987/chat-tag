@@ -127,6 +127,15 @@ export function resolveGameHubCommandKey(value: unknown): CanonicalGameCommandSp
   return BY_KEY.get(String(value || '').trim().toLowerCase()) || null;
 }
 
+export function normalizeDirectGameControlCommand(partsValue: string[]): string[] {
+  const parts = partsValue.map((part) => String(part || '').trim().toLowerCase()).filter(Boolean);
+  if (parts.length !== 2) return parts;
+  const spec = resolveGameHubCommandKey(parts[0]);
+  const action = parts[1];
+  if (!spec || spec.gameId === 'chat-tag' || (action !== 'start' && action !== 'stop')) return parts;
+  return [action, spec.key];
+}
+
 export function resolveDirectGameCommand(partsValue: string[], activeGameIdsValue: string[]): DirectGameCommandResolution {
   const parts = partsValue.map((part) => String(part || '').trim().toLowerCase()).filter(Boolean);
   const root = parts[0] || '';
