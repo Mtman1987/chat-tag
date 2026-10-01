@@ -12,6 +12,7 @@ import {
   GAME_HUB_COMMAND_SPECS,
   canonicalPlayerCommands,
   canonicalStreamerCommands,
+  normalizeDirectGameControlCommand,
   resolveDirectGameCommand,
 } from '../src/lib/game-hub-commands';
 import {
@@ -185,6 +186,19 @@ test('direct commands preserve Chat Tag and route colors only to Chat Wars', () 
 
   const internal = resolveDirectGameCommand(['chicken', 'start'], ['chickenroyale']);
   assert.equal(internal.recognized, false);
+
+  assert.deepEqual(normalizeDirectGameControlCommand(['wordchain', 'stop']), ['stop', 'wordchain']);
+  assert.deepEqual(normalizeDirectGameControlCommand(['chain', 'start']), ['start', 'wordchain']);
+  assert.deepEqual(normalizeDirectGameControlCommand(['mosaic', 'stop']), ['stop', 'mosaic']);
+  assert.deepEqual(normalizeDirectGameControlCommand(['mosaic', 'queue']), ['mosaic', 'queue']);
+  assert.deepEqual(normalizeDirectGameControlCommand(['chattag', 'stop']), ['chattag', 'stop']);
+
+  const route = read('src/app/api/game-hub/command/route.ts');
+  const normalizeControl = route.indexOf('parts = normalizeDirectGameControlCommand(parts)');
+  const freeformRouting = route.indexOf('const freeformCandidates');
+  const mosaicThemeRouting = route.indexOf("if (command === 'mosaic' && parts.length > 1)");
+  assert.ok(normalizeControl >= 0 && normalizeControl < freeformRouting && normalizeControl < mosaicThemeRouting,
+    'start/stop choices must normalize before free-form or Mosaic gameplay routing');
 });
 
 test('Nebula translates every legacy prototype command without changing ordinary chat', () => {
