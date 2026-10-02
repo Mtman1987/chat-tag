@@ -3,6 +3,7 @@ import { readAppState } from '@/lib/volume-store';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { instantGameOverlayProfile, normalizeGameOverlayProfile } from '@/lib/game-hub-overlays';
+import { resolveChannelGameIds } from '@/lib/game-hub-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,14 @@ export async function GET(
   const systemBase = systemProfiles[id];
   const systemOverride = systemBase ? (overrideStore[id] || {}) : null;
   const system = systemBase ? { ...systemBase, ...systemOverride } : null;
+  // The Lounge main stage is a live system surface. Its visible word games must
+  // follow the channel's actual running game state instead of a stale persisted
+  // overlay override left by an earlier hide/stop command.
+  if (system && id === 'system-spacemountainlive-main') {
+    const active = new Set(resolveChannelGameIds(state, 'spacemountainlive'));
+    system.gameIds = systemBase.gameIds.filter((gameId) => active.has(gameId));
+    system.layout = system.gameIds.length <= 1 ? 'focus' : 'rotation';
+  }
   const instant = instantGameOverlayProfile(id);
   const store = (state.gameSettings.default?.gameHubOverlayProfiles || {}) as Record<string, any>;
   const profile = system ? {
