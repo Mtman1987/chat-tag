@@ -154,6 +154,7 @@ async function withCrowns(value) {
 }
 const DSH_API_BASE = process.env.DSH_API_BASE || 'https://discord-stream-hub-new.fly.dev';
 const AUTO_ROTATE_MINUTES = Number.parseInt(process.env.AUTO_ROTATE_MINUTES || '60', 10);
+const AUTO_ROTATE_ENABLED = /^(?:1|true|yes|on)$/i.test(String(process.env.CHAT_TAG_AUTO_ROTATE_ENABLED || '0'));
 const STALE_LAST_TAG_HOURS = 6;
 const FORCE_RANDOM_IT_HOURS = 5;
 const FFA_REANNOUNCE_MINUTES = 120;
@@ -1247,8 +1248,10 @@ console.log = (...args) => {
         return;
       }
       updateWinnersCache(data);
-      
-      if (data?.currentIt && data?.lastTagTime) {
+
+      if (!AUTO_ROTATE_ENABLED) {
+        resetRotateFailures();
+      } else if (data?.currentIt && data?.lastTagTime) {
         const elapsed = Date.now() - data.lastTagTime;
         const elapsedMin = Math.floor(elapsed / 60000);
         console.log(`[Bot] Current it: ${data.currentIt}, elapsed: ${elapsedMin} minutes`);
