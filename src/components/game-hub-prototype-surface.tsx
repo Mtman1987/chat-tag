@@ -295,7 +295,7 @@ function TreasureBoard({ channel, gridOnly = false }: { channel: string; gridOnl
   const next = snapshot.turn.next || snapshot.turn.queue[1];
   const turn = <div className="shrink-0 border-b border-cyan-300/30 bg-slate-950 px-2 py-1 text-center text-[clamp(10px,1.4vw,16px)] font-bold leading-tight text-white">
     {snapshot.complete ? <b className="text-yellow-300">BOARD COMPLETE · {snapshot.foundCount}/{snapshot.treasureCount} treasures found</b> : <>
-      <div><span aria-live="polite"><span className="text-cyan-300">YOUR TURN:</span> {snapshot.turn.current?.username || 'Join with spmt treasure'}</span></div>
+      <div><span aria-live="polite"><span className="text-cyan-300">TURN:</span> {snapshot.turn.current?.username || 'Join with spmt treasure'}</span></div>
       <div><span aria-live="polite"><span className="text-amber-300">UP NEXT:</span> {next?.username || 'Waiting for another player'}</span> · <span className="text-white/70">{snapshot.turn.riddleTurn ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · RIDDLE TIMER` : snapshot.turn.current ? `${seconds}s to choose / answer` : 'No active clock'}</span></div>
     </>}
   </div>;

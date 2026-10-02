@@ -104,11 +104,29 @@ function FitText({ children, min = 11, max = 36 }: { children: string; min?: num
 
 function RotationText({ lines, glow }: { lines: string[]; glow: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [page, setPage] = useState(0);
+  // Give each ranked player the whole card, rather than shrinking five rows.
+  const ranked = lines.filter(line => /^#\d+ .+ \d+ pts$/.test(line));
+  const heading = lines.filter(line => !ranked.includes(line));
+  const pages = ranked.length
+    ? ranked.map(line => {
+        const match = line.match(/^(#\d+ .+) (\d+) pts$/)!;
+        return [...heading, match[1], `${Number(match[2]).toLocaleString()} POINTS`];
+      })
+    : Array.from({ length: Math.ceil(lines.length / 3) }, (_, index) => lines.slice(index * 3, index * 3 + 3));
+  const visibleLines = pages[page % Math.max(1, pages.length)] || [];
+  const pageKey = lines.join('\n');
+  useEffect(() => {
+    setPage(0);
+    if (pages.length <= 1) return;
+    const timer = setInterval(() => setPage(current => current + 1), 15000 / pages.length);
+    return () => clearInterval(timer);
+  }, [pageKey, pages.length]);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const fit = () => {
-      let low = 8, high = Math.min(element.clientHeight / Math.max(1, lines.length) / 1.15, 180);
+      let low = 8, high = Math.min(element.clientHeight / Math.max(1, visibleLines.length) / 1.12, 180);
       while (high - low > .25) {
         const size = (low + high) / 2;
         element.style.fontSize = `${size}px`;
@@ -122,9 +140,9 @@ function RotationText({ lines, glow }: { lines: string[]; glow: string }) {
     observer.observe(element);
     void document.fonts.ready.then(fit);
     return () => observer.disconnect();
-  }, [lines]);
-  return <div ref={ref} style={{ width: '100%', height: '92%', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', fontWeight: 900, lineHeight: 1.12, textShadow: `0 0 12px ${glow}` }}>
-    {lines.map((line, index) => <div key={index} style={{ flexShrink: 0, overflowWrap: 'anywhere' }}>{line}</div>)}
+  }, [pageKey, page]);
+  return <div ref={ref} data-rotation-page={page % Math.max(1, pages.length)} style={{ width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', fontWeight: 900, lineHeight: 1.12, textShadow: `0 0 12px ${glow}` }}>
+    {visibleLines.map((line, index) => <div key={index} style={{ flexShrink: 0, overflowWrap: 'anywhere' }}>{line}</div>)}
   </div>;
 }
 
@@ -690,7 +708,7 @@ export default function OverlayPage() {
         const treasureKey = treasure ? `${treasure.current}:${treasure.next}:${treasure.challenge?.coordinate || ''}:${treasure.challenge?.question || ''}` : '';
         if (loungeCompact && treasure && treasureKey !== previousTreasureTurn.current) {
           queueBroadcast({ type: 'history', icon: '🧭', color: '#22d3ee', glow: '#8b5cf6', payload: { treasureTurn: treasure }, lines: [
-            `YOUR TURN: ${treasure.current || 'spmt treasure to join'}`,
+            treasure.current ? `TURN: @${treasure.current.replace(/^@/, '')}` : 'JOIN: spmt treasure',
             `UP NEXT: ${treasure.next || 'Waiting for a player'}`,
             'CLOCK:',
           ] }, 15000);
@@ -752,7 +770,7 @@ export default function OverlayPage() {
         if (loungeCompact && turn) {
           const seconds = turn.expiresAt ? Math.max(0, Math.ceil((Date.parse(turn.expiresAt) - Date.now()) / 1000)) : 0;
           fireBroadcast({ type: 'history', icon: '🧭', color: '#22d3ee', glow: '#8b5cf6', payload: { treasureTurn: turn }, lines: [
-            `YOUR TURN: ${turn.current || 'spmt treasure to join'}`,
+            turn.current ? `TURN: @${turn.current.replace(/^@/, '')}` : 'JOIN: spmt treasure',
             `UP NEXT: ${turn.next || 'Waiting for a player'}`,
             `CLOCK: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`,
           ] }, 15000);
@@ -795,7 +813,7 @@ export default function OverlayPage() {
       if (!live) return null;
       const seconds = live.expiresAt ? Math.max(0, Math.ceil((Date.parse(live.expiresAt) - Date.now()) / 1000)) : 0;
       const lines = [...current.lines];
-      lines[0] = `YOUR TURN: ${live.current || 'spmt treasure to join'}`;
+      lines[0] = live.current ? `TURN: @${live.current.replace(/^@/, '')}` : 'JOIN: spmt treasure';
       lines[1] = `UP NEXT: ${live.next || 'Waiting for a player'}`;
       lines[2] = `CLOCK: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
       return { ...current, lines };
@@ -841,7 +859,7 @@ export default function OverlayPage() {
           right: loungeCompact ? 6 : 0,
           bottom: loungeCompact ? 4 : 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          zIndex: 50, padding: loungeCompact ? '4% 5%' : '3%', animation: 'broadcastIn 0.3s ease-out',
+          zIndex: 50, padding: loungeCompact ? '1% 2%' : '3%', animation: 'broadcastIn 0.3s ease-out',
         }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: `radial-gradient(ellipse at center, ${broadcast.glow}22 0%, transparent 70%)`, pointerEvents: 'none' }} />
           {broadcast.type === 'chat-wars' ? (
@@ -861,6 +879,7 @@ export default function OverlayPage() {
             </div>
           ) : <>
           <div style={{
+            display: loungeCompact ? 'none' : undefined,
             fontSize: loungeCompact ? 'min(9vw,18vh)' : (broadcast.type === 'history' ? 'min(18vw,18vh)' : 'min(21.6vw,21.6vh)'),
             marginBottom: loungeCompact ? 0 : '1vh',
             position: loungeCompact ? 'absolute' : 'static',
