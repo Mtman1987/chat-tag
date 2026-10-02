@@ -32,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="font-body antialiased min-h-screen relative">
+        <Script src="/overlay-chunk-recovery.js" strategy="beforeInteractive" />
         <Script src="https://spmt.live/shared/ecosystem-header.js" data-app="chat-tag" strategy="afterInteractive" />
         <Script src="https://spmt.live/shared/workspace-controller.js" strategy="afterInteractive" />
         <SessionProvider>

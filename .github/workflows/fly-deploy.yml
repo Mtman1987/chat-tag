@@ -107,6 +107,8 @@ jobs:
             echo "FLY_API_TOKEN is not set"
             exit 1
           fi
+      - name: Check overlay chunk recovery
+        run: node --test tests/overlay-chunk-recovery.test.cjs
       - name: Deploy chat-tag-new
         run: flyctl deploy --local-only --no-cache --lease-timeout 2m --deploy-retries 3 --config fly.toml --ha=false
       - name: Verify chat-tag-new
