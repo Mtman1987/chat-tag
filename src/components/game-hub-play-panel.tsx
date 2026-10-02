@@ -8,6 +8,7 @@ import { ChatTagGame } from '@/components/chat-tag-game';
 import { QuackverseCardGame } from '@/components/quackverse-card-game';
 import { GameHubBingoSurface } from '@/components/game-hub-bingo-surface';
 import { GameHubPrototypeSurface, type GameHubChatEvent } from '@/components/game-hub-prototype-surface';
+import { GameHubWordStage } from '@/components/game-hub-word-stage';
 import { NebulaGameFrame } from '@/components/nebula-game-frame';
 
 type ScopedGameEvent = GameHubChatEvent & { gameIds?: string[] };
@@ -127,6 +128,7 @@ export function GameHubPlayPanel({ game }: { game: GameHubGame }) {
       ? <div className="h-[min(62vh,620px)] min-h-80"><GameHubBingoSurface channel={channel} /></div>
       : <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center text-sm text-slate-400">Sign in or add <code className="mx-1 text-cyan-100">?channel=streamer</code> to open the shared Bingo card.</div>;
     if (!channel) return <div className="grid min-h-72 place-items-center rounded-2xl border border-white/10 bg-black/25 p-8 text-center text-sm text-slate-400">Open this page while signed in, or add <code className="mx-1 text-cyan-100">?channel=streamer</code>, to attach the live chat surface.</div>;
+    if (game.id === 'wordchain') return <div className="h-[min(62vh,620px)] min-h-80"><GameHubWordStage gameId="wordchain" channel={channel} /></div>;
     if (game.sourcePrototype) return <div className="h-[min(62vh,620px)] min-h-80"><NebulaGameFrame game={game} events={eventsForGame(events, game.id)} /></div>;
     return <div className="h-[min(62vh,620px)] min-h-80"><GameHubPrototypeSurface game={game} events={eventsForGame(events, game.id)} channel={channel} /></div>;
   }, [active, channel, events, game]);
