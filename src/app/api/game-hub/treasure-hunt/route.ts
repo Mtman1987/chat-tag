@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { settleTreasureTurn, treasureHuntPublicSnapshot, treasureTurnAnnouncement } from '@/lib/treasure-hunt';
+import { resolveChannelGameIds } from '@/lib/game-hub-state';
 import { queueStellaSpeech } from '@/lib/stella-tts';
 import { updateAppStateIfChanged } from '@/lib/volume-store';
 
@@ -9,7 +10,8 @@ export async function GET(req: NextRequest) {
   const channel = String(req.nextUrl.searchParams.get('channel') || '').trim();
   if (!channel) return NextResponse.json({ error: 'channel is required.' }, { status: 400 });
   const result = await updateAppStateIfChanged((state) => {
-    const settled = settleTreasureTurn(state, channel);
+    const settled = resolveChannelGameIds(state, channel).includes('treasurehunt')
+      ? settleTreasureTurn(state, channel) : { changed: false, skipped: null };
     return { changed: settled.changed, result: { snapshot: treasureHuntPublicSnapshot(state, channel), skipped: settled.skipped } };
   });
   if (result.skipped) void queueStellaSpeech(`${result.skipped.displayName} missed their turn. ${treasureTurnAnnouncement(result.snapshot)}`, channel);

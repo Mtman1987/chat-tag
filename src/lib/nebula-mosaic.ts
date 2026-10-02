@@ -1,6 +1,7 @@
 import {
   awardGameHubPoints,
   getChannelGameSettings,
+  setChannelGameRunning,
   getGameHubStore,
   getOrCreateGameHubPlayer,
   joinGameHubGame,
@@ -155,6 +156,7 @@ export function observeMosaicActiveTime(state: any, channelValue: unknown, now =
   current.lastHeartbeatAt = nowIso(now);
   current.activeIdleMs = Math.max(0, Number(current.activeIdleMs || 0)) + delta;
   if (current.activeIdleMs < MOSAIC_IDLE_MS) return true;
+  setChannelGameRunning(state, channelValue, 'pixelbattle', false);
   current.status = 'suspended';
   current.updatedAt = nowIso(now);
   mosaic.saves = [current, ...mosaic.saves.filter((item) => item.id !== current.id)].slice(0, 20);

@@ -307,7 +307,7 @@ function TreasureBoard({ channel, gridOnly = false }: { channel: string; gridOnl
       <div className="text-cyan-200">Only {snapshot.turn.current?.username || 'the active player'} answers: spmt treasure answer &lt;answer&gt;</div>
     </> : <span className="text-cyan-200">{snapshot.turn.current ? 'Choose a square: spmt dig B5' : 'Join the rotation: spmt treasure'}</span>}
   </div>;
-  if (gridOnly) return <div className="grid h-full min-h-0 w-full grid-rows-[auto_minmax(0,1fr)_auto] bg-slate-950">{turn}{board}{challenge}</div>;
+  if (gridOnly) return board;
   return <div className="grid aspect-[4/5] w-full max-w-[520px] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2">{turn}<div className="text-xs">Treasures <b>{snapshot.foundCount}/{snapshot.treasureCount}</b> · Queue {snapshot.turn.queue.map((entry) => entry.username).join(' → ') || 'empty'}</div>{board}{challenge}</div>;
 }
 

@@ -211,6 +211,7 @@ export async function POST(req: NextRequest) {
       const outcome = recordWordChainVote(draft, {
         channel, userId, username, word: parts[1], up: command === 'up',
       });
+      if (outcome.changed) recordGameHubRuntimeAction(draft, { channel, gameId: stageGameId, actorId: userId, username, displayName, action: 'guess', args: [guessText] });
       return { changed: outcome.changed, result: outcome };
     });
     const responses: Record<string, string> = {
@@ -1008,6 +1009,7 @@ export async function POST(req: NextRequest) {
         const outcome = game.id === 'wordchain'
           ? recordWordChainMessage(draft, { channel, userId, username, displayName, message: guess, explicit: true })
           : recordPhraseGuessAttempt(draft, { channel, userId, username, displayName, message: guess, explicit: true });
+        if (outcome.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'guess', args: [guess] });
         return { changed: outcome.changed, result: outcome };
       });
       const details: Record<string, string> = game.id === 'wordchain' ? {

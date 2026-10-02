@@ -19,6 +19,7 @@ interface OverlayState {
   overlayMessages?: any[];
   activeGridLeaderboard?: { gameId: string; gameName: string; theme?: string; rows: Array<{ rank: number; username: string; score: number }> } | null;
   activeWordLeaderboard?: { gameId: string; gameName: string; theme?: string; rows: Array<{ rank: number; username: string; score: number }> } | null;
+  activeTreasureTurn?: { current: string; next: string; expiresAt: string | null; challenge: { coordinate: string; clue: string; question: string } | null; rows: Array<{ username: string; score: number }> } | null;
   monthlyWinners: any[];
   timestamp: number;
 }
@@ -82,7 +83,7 @@ function FitText({ children, min = 11, max = 36 }: { children: string; min?: num
     const fit = () => {
       if (!element.clientWidth) return;
       let low = min;
-      let high = max;
+      let high = Math.min(max, (element.parentElement?.clientHeight || max) * .8);
       element.style.fontSize = `${high}px`;
       while (high - low > 0.25) {
         const size = (low + high) / 2;
@@ -101,6 +102,32 @@ function FitText({ children, min = 11, max = 36 }: { children: string; min?: num
   return <div ref={ref} title={children} style={{ width: '100%', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{children}</div>;
 }
 
+function RotationText({ lines, glow }: { lines: string[]; glow: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const fit = () => {
+      let low = 8, high = Math.min(element.clientHeight / Math.max(1, lines.length) / 1.15, 180);
+      while (high - low > .25) {
+        const size = (low + high) / 2;
+        element.style.fontSize = `${size}px`;
+        if (element.scrollHeight <= element.clientHeight && element.scrollWidth <= element.clientWidth) low = size;
+        else high = size;
+      }
+      element.style.fontSize = `${low}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    void document.fonts.ready.then(fit);
+    return () => observer.disconnect();
+  }, [lines]);
+  return <div ref={ref} style={{ width: '100%', height: '92%', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', fontWeight: 900, lineHeight: 1.12, textShadow: `0 0 12px ${glow}` }}>
+    {lines.map((line, index) => <div key={index} style={{ flexShrink: 0, overflowWrap: 'anywhere' }}>{line}</div>)}
+  </div>;
+}
+
 function StackStat({ value, label, align = 'right', compact = false }: { value: string | number; label: string; align?: 'left' | 'center' | 'right'; compact?: boolean }) {
   return (
     <div style={{
@@ -113,8 +140,8 @@ function StackStat({ value, label, align = 'right', compact = false }: { value: 
       lineHeight: 1,
       minWidth: 0,
     }}>
-      <span style={{ fontSize: compact ? '24px' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
-      <small style={{ fontSize: compact ? '10px' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
+      <span style={{ fontSize: compact ? 'min(14vw, 22vh)' : 'min(4vw, 4.5vh)', fontWeight: 900, whiteSpace: 'nowrap', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{value}</span>
+      <small style={{ fontSize: compact ? 'min(6vw, 9vh)' : 'min(1.3vw, 1.5vh)', color: '#c7ecff', opacity: 0.95, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{label}</small>
     </div>
   );
 }
@@ -147,7 +174,7 @@ export default function OverlayPage() {
   const prevOverlayMessageTs = useRef<number | null>(null);
   const prevIt = useRef<string | null>(null);
   const lastHistoryShow = useRef<number>(0);
-  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'word' | 'live'>('leaderboard');
+  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'word' | 'turn' | 'live'>('leaderboard');
   const dataRef = useRef<OverlayState | null>(null);
   const broadcastRef = useRef<Broadcast | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -695,9 +722,25 @@ export default function OverlayPage() {
       }
 
       if (nextCycleMode.current === 'word') {
-        nextCycleMode.current = 'history';
+        nextCycleMode.current = 'turn';
         if (loungeCompact && current.activeWordLeaderboard?.rows?.length) {
           fireGridLeaderboardBroadcast(current.activeWordLeaderboard);
+          return;
+        }
+      }
+
+      if (nextCycleMode.current === 'turn') {
+        nextCycleMode.current = 'history';
+        const turn = current.activeTreasureTurn;
+        if (loungeCompact && turn) {
+          const seconds = turn.expiresAt ? Math.max(0, Math.ceil((Date.parse(turn.expiresAt) - Date.now()) / 1000)) : 0;
+          fireBroadcast({ type: 'history', icon: '🧭', color: '#22d3ee', glow: '#8b5cf6', payload: { treasureTurn: turn }, lines: [
+            `YOUR TURN: ${turn.current || 'spmt treasure to join'}`,
+            `UP NEXT: ${turn.next || 'Waiting for a player'}`,
+            `CLOCK: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`,
+            ...(turn.challenge ? [`${turn.challenge.coordinate} · ${turn.challenge.clue.toUpperCase()}: ${turn.challenge.question}`] : []),
+            ...turn.rows.map(row => `${row.username}: ${row.score} pts`),
+          ] }, 15000);
           return;
         }
       }
@@ -715,6 +758,22 @@ export default function OverlayPage() {
     }, 10000);
     return () => { if (historyTimer.current) clearInterval(historyTimer.current); };
   }, [fireGridLeaderboardBroadcast, fireHistoryBroadcast, fireLeaderboardBroadcast, fireLiveBroadcast, historyInterval, isPreview, loungeCompact]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setBroadcast(current => {
+      const turn = current?.payload?.treasureTurn;
+      if (!current || !turn) return current;
+      const live = dataRef.current?.activeTreasureTurn;
+      if (!live) return null;
+      const seconds = live.expiresAt ? Math.max(0, Math.ceil((Date.parse(live.expiresAt) - Date.now()) / 1000)) : 0;
+      const lines = [...current.lines];
+      lines[0] = `YOUR TURN: ${live.current || 'spmt treasure to join'}`;
+      lines[1] = `UP NEXT: ${live.next || 'Waiting for a player'}`;
+      lines[2] = `CLOCK: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      return { ...current, lines };
+    }), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const elapsed = data.lastTagTime ? Math.floor((Date.now() - data.lastTagTime) / 60000) : 0;
   const compactAnnouncementActive = loungeCompact && Boolean(broadcast);
@@ -784,7 +843,7 @@ export default function OverlayPage() {
           }}>
             {broadcast.icon}
           </div>
-          {broadcast.lines.map((line, i) => (
+          {loungeCompact ? <RotationText lines={broadcast.lines} glow={broadcast.glow} /> : broadcast.lines.map((line, i) => (
             <div key={i} style={{
               fontSize: loungeCompact
                 ? (broadcast.type === 'history' ? 'min(5.8vw,8.2vh)' : 'min(9vw,14vh)')
@@ -882,7 +941,7 @@ export default function OverlayPage() {
             ) : (
               <>
                 <div style={{ fontSize: 'min(2.6vw, 2.4vh)', opacity: 0.95, fontWeight: 800, textTransform: 'uppercase', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>IT</div>
-                {loungeCompact ? <FitText min={13} max={36}>{crown(data.it?.username || '?')}</FitText> : <div style={{
+                {loungeCompact ? <FitText min={13} max={180}>{crown(data.it?.username || '?')}</FitText> : <div style={{
                   fontSize: 'min(7.4vw, 7.8vh)',
                   fontWeight: 900,
                   lineHeight: 0.95,

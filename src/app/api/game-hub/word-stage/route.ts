@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   advanceWordChainRound,
+  resolveChannelGameIds,
   WORD_CHAIN_CYCLE_MS,
   WORD_CHAIN_REVIEW_MS,
   WORD_CHAIN_ROUND_MS,
@@ -21,11 +22,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'game must be wordchain or phraseguess.' }, { status: 400 });
   }
   let state = await readAppState();
+  if (!resolveChannelGameIds(state, channel).includes(gameId)) return NextResponse.json({ gameId, stopped: true, snapshot: null, battle: null });
   if (gameId === 'wordchain') {
     const current = state.gameSettings?.default?.gameHub?.channels?.[channel]?.wordChainRound;
     const nowSlot = Math.floor(Date.now() / WORD_CHAIN_CYCLE_MS);
     if (current?.roundSlot !== nowSlot || (!current?.settled && Date.now() % WORD_CHAIN_CYCLE_MS >= WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS)) {
       await updateAppStateIfChanged((draft) => {
+        if (!resolveChannelGameIds(draft, channel).includes(gameId)) return { changed: false, result: null };
         const result = advanceWordChainRound(draft, channel);
         return { changed: result.changed, result: null };
       });

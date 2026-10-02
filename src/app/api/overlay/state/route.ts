@@ -184,6 +184,13 @@ export async function GET(req: NextRequest) {
     overlayMessages,
     activeGridLeaderboard: gridLeaderboard,
     activeWordLeaderboard,
+    activeTreasureTurn: activeGames.has('treasurehunt') && treasureHunt ? {
+      current: treasureHunt.turn.current?.username || '',
+      next: treasureHunt.turn.next?.username || '',
+      expiresAt: treasureHunt.turn.expiresAt,
+      challenge: treasureHunt.challenge,
+      rows: treasureHunt.leaderboard.slice(0, 4),
+    } : null,
     monthlyWinners,
     timestamp: Date.now(),
   });

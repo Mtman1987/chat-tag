@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserFromRequest } from '@/lib/auth';
+import { resolveChannelGameIds } from '@/lib/game-hub-state';
 import { queueStellaSpeech } from '@/lib/stella-tts';
 import { settleExpiredBingoClaims, sharedBingoPublicSnapshot } from '@/lib/shared-bingo';
 import { updateAppStateIfChanged } from '@/lib/volume-store';
@@ -11,7 +12,8 @@ export async function GET(req: NextRequest) {
   if (!channel) return NextResponse.json({ error: 'channel is required.' }, { status: 400 });
   const includePhrases = req.nextUrl.searchParams.get('view') === 'player' && Boolean(getSessionUserFromRequest(req));
   const result = await updateAppStateIfChanged((state) => {
-    const settled = settleExpiredBingoClaims(state, channel);
+    const settled = resolveChannelGameIds(state, channel).includes('bingo')
+      ? settleExpiredBingoClaims(state, channel) : { changed: false, blocked: [] };
     return { changed: settled.changed, result: { snapshot: sharedBingoPublicSnapshot(state, channel, { includePhrases }), blocked: settled.blocked } };
   });
   for (const coordinate of result.blocked) {

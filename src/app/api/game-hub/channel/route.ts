@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUserFromRequest } from '@/lib/auth';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalPlayerCommands, canonicalStreamerCommands, getCanonicalGameCommandSpec } from '@/lib/game-hub-commands';
-import { normalizeGameHubChannel, resolveChannelGameIds, setChannelGameRunning } from '@/lib/game-hub-state';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { normalizeGameHubChannel, resolveChannelGameIds, setChannelGameRunning, stopInactiveChannelGames } from '@/lib/game-hub-state';
+import { readAppState, updateAppStateIfChanged, updateAppState } from '@/lib/volume-store';
 import { mosaicPublicSnapshot, resumeMosaicIfNeeded } from '@/lib/nebula-mosaic';
 
 export const dynamic = 'force-dynamic';
@@ -29,10 +29,11 @@ export async function GET(req: NextRequest) {
   const channel = normalizeGameHubChannel(req.nextUrl.searchParams.get('channel'));
   if (!channel) return NextResponse.json({ error: 'channel is required.' }, { status: 400 });
 
-  // This endpoint is polled by overlays and bot-control readback. Keep it
-  // strictly read-only so high-frequency reads never queue behind the global
-  // state write lock or clone the entire durable state.
-  const state = await readAppState();
+  const state = await updateAppStateIfChanged((draft) => {
+    const before = JSON.stringify(draft.gameSettings?.default?.gameHub?.channels?.[channel]);
+    stopInactiveChannelGames(draft, channel);
+    return { changed: before !== JSON.stringify(draft.gameSettings?.default?.gameHub?.channels?.[channel]), result: draft };
+  });
   const gameIds = resolveChannelGameIds(state, channel);
   const mosaic = mosaicPublicSnapshot(state, channel);
   const suspendedGameIds = mosaic.artwork?.status === 'suspended' ? ['pixelbattle'] : [];

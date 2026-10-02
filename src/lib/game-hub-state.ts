@@ -74,6 +74,7 @@ export type GameHubChannelSettings = {
   extraGameIds: string[];
   stoppedGameIds: string[];
   gameRunIds?: Record<string, string>;
+  gameStartedAt?: Record<string, string>;
   wordGuessChoices?: Record<string, { runId: string; choice: 'guess' | 'command' }>;
   playerGameFocus?: Record<string, { gameId: string; runId: string; lastUsedAt: string }>;
   updatedAt?: string;
@@ -270,6 +271,8 @@ export function setChannelGameRunning(state: any, channelValue: unknown, gameIdV
   const wasConfigured = extras.has(game.id);
   extras.add(game.id);
   if (running) {
+    settings.gameStartedAt ||= {};
+    if (stopped.has(game.id) || !settings.gameStartedAt[game.id]) settings.gameStartedAt[game.id] = new Date().toISOString();
     if (stopped.has(game.id) || !wasConfigured) {
       settings.gameRunIds ||= {};
       const stamp = new Date().toISOString();
@@ -279,11 +282,66 @@ export function setChannelGameRunning(state: any, channelValue: unknown, gameIdV
       settings.gameRunIds[game.id] = sequence === 1 ? stamp : `${stamp}#${sequence}`;
     }
     stopped.delete(game.id);
-  } else stopped.add(game.id);
+  } else {
+    stopped.add(game.id);
+    // Stop the engine as well as its presentation. Keep earned scores/artwork.
+    const runtime = settings as any;
+    if (game.id === 'dancingparade') {
+      const parade = state.gameSettings?.default?.dancingParade?.channels?.[channel];
+      if (parade) parade.active = null;
+    }
+    if (game.id === 'treasurehunt' && runtime.treasureHunt) {
+      runtime.treasureHunt.rotation = [];
+      runtime.treasureHunt.kickVotes = [];
+      delete runtime.treasureHunt.turnExpiresAt;
+      delete runtime.treasureHunt.activeChallenge;
+    }
+    if (game.id === 'bingo' && runtime.sharedBingo) {
+      for (const square of runtime.sharedBingo.squares || []) {
+        if (square.status === 'pending') { square.status = 'open'; delete square.claimUntil; }
+      }
+    }
+    if (game.id === 'pixelbattle' && runtime.mosaic?.current?.status === 'active') {
+      runtime.mosaic.current.status = 'suspended';
+      runtime.mosaic.saves = [runtime.mosaic.current, ...(runtime.mosaic.saves || []).filter((item: any) => item.id !== runtime.mosaic.current.id)].slice(0, 20);
+    }
+    for (const [playerId, focus] of Object.entries(settings.playerGameFocus || {})) {
+      if (focus.gameId === game.id) delete settings.playerGameFocus![playerId];
+    }
+    const instruction = state.gameSettings?.default?.gameHubInstructions?.[channel];
+    if (instruction?.gameId === game.id) instruction.visible = false;
+  }
   settings.extraGameIds = normalizeGameHubGameIds([...extras], 50);
   settings.stoppedGameIds = normalizeGameHubGameIds([...stopped], 50);
   settings.updatedAt = new Date().toISOString();
   return settings;
+}
+
+export const GAME_INACTIVITY_MS = 30 * 60_000;
+
+export function stopInactiveChannelGames(state: any, channelValue: unknown, now = Date.now()) {
+  const channel = normalizeGameHubChannel(channelValue);
+  const settings = getChannelGameSettings(state, channel);
+  const stopped: string[] = [];
+  for (const id of resolveChannelGameIds(state, channel)) {
+    if (id === 'chat-tag') continue;
+    settings.gameStartedAt ||= {};
+    // Give legacy active runs a defined baseline, rather than treating reads as play.
+    settings.gameStartedAt[id] ||= settings.gameRunIds?.[id]?.split('#')[0] || new Date(now).toISOString();
+    let last = Date.parse(settings.gameStartedAt[id]);
+    const actions = state.gameSettings?.default?.gameHubRuntime?.channels?.[channel]?.games?.[id]?.actions || [];
+    for (const action of actions) {
+      if (action.action !== 'stop') last = Math.max(last, Date.parse(action.at) || 0);
+    }
+    for (const focus of Object.values(settings.playerGameFocus || {})) {
+      if (focus.gameId === id) last = Math.max(last, Date.parse(focus.lastUsedAt) || 0);
+    }
+    if (id === 'pixelbattle') last = Math.max(last, Date.parse((settings as any).mosaic?.current?.lastInteractionAt || '') || 0);
+    if (now - last < GAME_INACTIVITY_MS) continue;
+    setChannelGameRunning(state, channel, id, false);
+    stopped.push(id);
+  }
+  return stopped;
 }
 
 function normalizeMembership(value: any): GameHubMembership {

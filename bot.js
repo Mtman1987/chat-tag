@@ -1067,6 +1067,11 @@ console.log = (...args) => {
   console.log('[Bot] Username:', username);
   console.log('[Bot] Token:', token.substring(0, 10) + '...');
   scheduleNebulaGameplayEmbedRotation();
+  // Engine inactivity cleanup continues even when nobody has an overlay open.
+  setInterval(() => {
+    void apiCall('/api/game-hub/lifecycle', { method: 'POST' })
+      .catch(error => console.warn('[Nebula] Lifecycle cleanup failed:', error.message));
+  }, 30_000);
 
   // Refresh token every 2 hours to prevent stale Helix calls
   setInterval(async () => {
