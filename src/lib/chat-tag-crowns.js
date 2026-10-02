@@ -63,7 +63,13 @@ function decorateCrowns(text, winners) {
       `(^|[^\\w@./${CROWN_UNITS}])(@?)(${namePattern(winner.username)})(?![\\w])`,
       'gi'
     );
+    // Protect complete URLs, including query values and fragments. A crown in
+    // a channel query changes the tenant the overlay attempts to load.
+    const urlRanges = [...output.matchAll(/(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>"']+/gi)]
+      .map((url) => [url.index, url.index + url[0].length]);
     output = output.replace(pattern, (match, prefix, at, name, offset, full) => {
+      const nameOffset = offset + prefix.length + at.length;
+      if (urlRanges.some(([start, end]) => nameOffset >= start && nameOffset < end)) return match;
       const before = full.slice(0, offset + prefix.length);
       if (ALREADY_CROWNED.test(before)) return match;
       return `${prefix}${CROWN}${at}${name}`;
