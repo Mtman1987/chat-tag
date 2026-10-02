@@ -121,6 +121,14 @@ test('Chat Tag automatic timeout rotation is disabled unless explicitly enabled'
   assert.match(bot, /action: 'auto-rotate'/, 'manual and explicit fallback actions remain available');
 });
 
+test('automatic Chat Tag timeout rotation stays disabled unless explicitly enabled', () => {
+  const bot = read('bot.js');
+  assert.match(bot, /CHAT_TAG_AUTO_ROTATE_ENABLED \|\| '0'/);
+  assert.match(bot, /const AUTO_ROTATE_ENABLED = \/\^\(\?:1\|true\|yes\|on\)\$\/i/);
+  assert.match(bot, /if \(!AUTO_ROTATE_ENABLED\) \{\s*resetRotateFailures\(\);\s*\} else if \(data\?\.currentIt && data\?\.lastTagTime\)/);
+  assert.match(bot, /\/\/ Channel management - join new live, leave offline/);
+});
+
 test('Twitch IRC joins retry one transient no-response timeout before deferring to the next poll', () => {
   const bot = read('bot.js');
   assert.match(bot, /TWITCH_JOIN_RETRY_DELAYS_MS = \[1500\]/);
