@@ -365,8 +365,11 @@ async function writeState(state: AppState): Promise<void> {
 
   // Keep the durable Chat Tag/core snapshot compact and independent of game
   // traffic. Existing monolithic files migrate lazily on the first write.
-  const base = structuredClone(state) as any;
-  for (const key of SHARDED_STATE_KEYS) delete base[key];
+  // Shards are already serialized above. Exclude them before making the core
+  // snapshot instead of cloning several megabytes only to discard them.
+  const base = Object.fromEntries(Object.entries(state).filter(
+    ([key]) => !SHARDED_STATE_KEYS.includes(key as ShardedStateKey),
+  ));
   const payload = JSON.stringify(base);
   if (lastBasePayload !== payload) {
     await writeAtomic(STATE_FILE, STATE_FILE_TMP, payload);
