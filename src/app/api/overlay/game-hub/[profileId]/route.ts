@@ -43,10 +43,8 @@ export async function GET(
   const systemBase = systemProfiles[id];
   const systemOverride = systemBase ? (overrideStore[id] || {}) : null;
   const system = systemBase ? { ...systemBase, ...systemOverride } : null;
-  // The Lounge main stage is a live system surface. Its visible word games must
-  // follow the channel's actual running game state instead of a stale persisted
-  // overlay override left by an earlier hide/stop command.
-  if (system && id === 'system-spacemountainlive-main') {
+  // Live Lounge stages follow running games instead of stale saved game selections.
+  if (system && (id === 'system-spacemountainlive-main' || id === 'system-spacemountainlive-activity')) {
     const active = new Set(resolveChannelGameIds(state, 'spacemountainlive'));
     system.gameIds = systemBase.gameIds.filter((gameId) => active.has(gameId));
     system.layout = system.gameIds.length <= 1 ? 'focus' : 'rotation';
@@ -95,3 +93,4 @@ export async function GET(
     headers: { 'Cache-Control': 'no-store' },
   });
 }
+

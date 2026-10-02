@@ -63,7 +63,8 @@ import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
 import { nebulaRotationIndexAt } from '@/lib/nebula-rotation';
 import { instantGameOverlayProfileId } from '@/lib/game-hub-overlays';
 import { chatWarsMinimumWordLength, compactChatWarsReveal, getChatWarsPlayer, setChatWarsTeam } from '@/lib/chat-wars';
-import { answerTreasureRiddle, buyTreasurePass, digTreasure, joinTreasureRotation, leaveTreasureRotation, voteKickTreasureTurn } from '@/lib/treasure-hunt';
+import { answerTreasureRiddle, buyTreasurePass, digTreasure, joinTreasureRotation, leaveTreasureRotation, voteKickTreasureTurn, treasureHuntPublicSnapshot, treasureTurnAnnouncement } from '@/lib/treasure-hunt';
+import { queueStellaSpeech } from '@/lib/stella-tts';
 import { buyBingoCenterFree, buyBingoStellaFlip, claimSharedBingoSquare, suggestSharedBingoPhrase } from '@/lib/shared-bingo';
 import {
   addDancingParadeEmojis,
@@ -1093,13 +1094,20 @@ export async function POST(req: NextRequest) {
   }
 
   if (game.id === 'treasurehunt') {
+    const announceTurn = async (reply: string, options: { speak?: boolean; link?: boolean } = {}) => {
+      const snapshot = treasureHuntPublicSnapshot(await readAppState(), channel);
+      const turnMessage = treasureTurnAnnouncement(snapshot);
+      if (options.speak !== false && body.source !== 'nebula-controller') void queueStellaSpeech(turnMessage, channel);
+      const text = `${reply} ${turnMessage}`;
+      return NextResponse.json({ handled: true, reply: options.link ? gameReplyWithPopout(req, channel, game.id, text) : text.slice(0, 480) });
+    };
     if (!action || action === 'join') {
       const result = await updateAppState((draft) => {
         const joined = joinTreasureRotation(draft, { channel, userId, username, displayName });
         if (joined.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'join', args: [], message: String(body.message || '') });
         return joined;
       });
-      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${result.alreadyJoined ? `is already #${result.position}` : `joined at #${result.position}`} in the Treasure Hunt turn rotation${result.current ? ` · ${result.current.displayName} is up now` : ''}.`) });
+      return announceTurn(`@${displayName} ${result.alreadyJoined ? `is already #${result.position}` : `joined at #${result.position}`} in the Treasure Hunt rotation.`, { speak: result.changed, link: true });
     }
     if (action === 'leave') {
       const result = await updateAppState((draft) => {
@@ -1107,15 +1115,15 @@ export async function POST(req: NextRequest) {
         leaveGameHubGame(draft, normalizeGameHubPlayerId(userId, username), game.id);
         return left;
       });
-      return NextResponse.json({ handled: true, reply: `@${displayName} ${result.left ? 'left the Treasure Hunt rotation' : 'was not in the Treasure Hunt rotation'}${result.current ? ` · ${result.current.displayName} is up now` : ''}.` });
+      return announceTurn(`@${displayName} ${result.left ? 'left the Treasure Hunt rotation' : 'was not in the Treasure Hunt rotation'}.`, { speak: result.left });
     }
     if (action === 'status') {
-      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} open the live board for the current turn, queue, riddle, and standings.`) });
+      return announceTurn(`@${displayName} Treasure Hunt turn order:`, { speak: false, link: true });
     }
     if (action === 'kick') {
       const result = await updateAppState((draft) => voteKickTreasureTurn(draft, { channel, userId, username }));
       if (result.outcome === 'voted') return NextResponse.json({ handled: true, reply: `@${displayName} voted to skip the absent boiling-turn player · ${result.votes}/${result.needed}.` });
-      if (result.outcome === 'kicked') return NextResponse.json({ handled: true, reply: `Vote passed: ${result.kicked?.displayName || 'the absent player'} was removed from this rotation · ${result.current?.displayName || 'nobody'} is up now.` });
+      if (result.outcome === 'kicked') return announceTurn(`Vote passed: ${result.kicked?.displayName || 'the absent player'} was removed from this rotation.`);
       if (result.outcome === 'already-voted') return NextResponse.json({ handled: true, reply: `@${displayName} your vote is already counted.` });
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} vote-kick is available to joined players only while an unresolved boiling treasure turn is blocking the rotation.`) });
     }
@@ -1129,7 +1137,7 @@ export async function POST(req: NextRequest) {
       if (result.outcome === 'no-challenge') return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} there is no active riddle. Pick a square with spmt dig B5.`) });
       if (result.outcome === 'not-turn') return NextResponse.json({ handled: true, reply: `@${displayName} it is ${result.current?.displayName || 'the next player'}’s turn. Discuss the riddle in chat, but only the active player can lock in an answer.` });
       if (result.outcome === 'wrong') return NextResponse.json({ handled: true, reply: `@${displayName} that is not it · -${result.deduction} Games Points${result.changedRiddle ? ` · three misses, so Stella changed the riddle: ${result.question}` : ` · ${3 - result.wrongGuesses} guesses remain before the riddle changes`}.` });
-      return NextResponse.json({ handled: true, reply: `@${displayName} solved it! +${result.solvePoints} Games Points${result.digPoints ? ` · the digger earned +${result.digPoints}` : ''}${result.treasureCoordinate ? ` · TREASURE unearthed at ${result.treasureCoordinate} (${result.foundCount}/3)` : ''}${result.complete ? ' — BOARD COMPLETE!' : ''}.` });
+      return announceTurn(`@${displayName} solved it! +${result.solvePoints} Games Points${result.digPoints ? ` · the digger earned +${result.digPoints}` : ''}${result.treasureCoordinate ? ` · TREASURE unearthed at ${result.treasureCoordinate} (${result.foundCount}/3)` : result.clue === 'boiling' ? ' · Treasure touches that square; keep hunting for its exact square!' : ''}${result.complete ? ' — BOARD COMPLETE!' : ''}.`);
     }
     if (action === 'pass') {
       const result = await updateAppState((draft) => {
@@ -1156,7 +1164,8 @@ export async function POST(req: NextRequest) {
     if (result.outcome === 'already-dug') return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} was already dug · ${result.dig?.clue}.` });
     if (result.outcome === 'challenge-active') return NextResponse.json({ handled: true, reply: `@${displayName} finish the active ${result.challenge?.clue.toUpperCase()} riddle at ${result.challenge?.coordinate} first: ${result.challenge?.question} · answer with spmt treasure answer your answer.` });
     if (result.outcome === 'complete') return NextResponse.json({ handled: true, reply: `@${displayName} today’s Treasure Hunt is complete. A fresh map opens tomorrow.` });
-    return NextResponse.json({ handled: true, reply: `@${displayName} chose ${result.coordinate}: ${result.clue?.toUpperCase()}${result.digPoints ? ` · +${result.digPoints} Games Point` : ' · locked until solved'} · RIDDLE: ${result.question} · answer with spmt treasure answer your answer.` });
+    if (body.source !== 'nebula-controller') void queueStellaSpeech(`${displayName}, ${result.clue === 'boiling' ? 'treasure touches that square. ' : ''}${result.clue !== 'cold' ? 'You have five minutes to solve the riddle.' : 'Your clock is running.'}`, channel);
+    return NextResponse.json({ handled: true, reply: `@${displayName} chose ${result.coordinate}: ${result.clue?.toUpperCase()}${result.clue === 'boiling' ? ' · treasure touches this square; find its exact square' : ''}${result.clue !== 'cold' ? ' · five-minute riddle timer' : ''} · RIDDLE: ${result.question} · answer with spmt treasure answer your answer.` });
   }
 
   if (game.id === 'bingo' && action === 'phrases') {
