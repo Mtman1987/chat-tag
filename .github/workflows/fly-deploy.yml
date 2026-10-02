@@ -74,6 +74,8 @@ jobs:
         run: npm ci
       - name: Run auth routing regression tests
         run: npm run test:auth-routing
+      - name: Verify Twitch reply delivery
+        run: node --test tests/chat-reply-delivery.test.cjs
       - name: Run durable player history tests
         run: node --import tsx --test tests/player-history.test.ts tests/chat-tag-runtime-resilience.test.ts
       - name: Run Nebula gameplay GIF rotation tests

@@ -850,7 +850,13 @@ async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = fals
   });
   
   console.log(`[Bot] API response status: ${res.status}`);
-  if (res.ok) return { success: true };
+  if (res.ok) {
+    const result = await res.json().catch(() => null);
+    if (result?.data?.[0]?.is_sent === true) return { success: true };
+    // Twitch can accept the HTTP request while dropping the chat message.
+    // Report failure so the existing IRC fallback can deliver the reply.
+    return { success: false, reason: 'message-not-sent', status: res.status };
+  }
 
   const errorText = await res.text();
   console.log(`[Bot] API error: ${errorText}`);
@@ -2115,6 +2121,10 @@ console.log = (...args) => {
         }),
         ...(legacyChatTagCommands.has(cmd) && !sharedNebulaCommands.has(cmd) ? { signal: AbortSignal.timeout(1500) } : {}),
       });
+      if (!gamesHubCommand?.__ok && !legacyChatTagCommands.has(cmd)) {
+        if (!isMuted) await reply('@' + user + ' The game service did not answer in time. Please try that command again.');
+        return;
+      }
       if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {
         pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + 30_000 });
       }
