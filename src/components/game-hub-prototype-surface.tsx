@@ -257,7 +257,7 @@ function PixelBoard({ channel, gridOnly = false }: { channel: string; gridOnly?:
   </div>;
 }
 
-type TreasureSnapshot = { width: number; height: number; cells: Array<{ coordinate: string; state: 'hidden' | 'pending' | 'cold' | 'warm' | 'hot' | 'boiling' | 'treasure' }>; foundCount: number; treasureCount: number; complete: boolean; challenge: null | { coordinate: string; clue: 'cold' | 'warm' | 'hot' | 'boiling'; question: string; wrongGuesses: number }; turn: { current: null | { username: string; skips: number }; queue: Array<{ username: string; skips: number }>; expiresAt: string | null; kickVotes: number } };
+type TreasureSnapshot = { width: number; height: number; cells: Array<{ coordinate: string; state: 'hidden' | 'pending' | 'cold' | 'warm' | 'hot' | 'boiling' | 'treasure' }>; foundCount: number; treasureCount: number; complete: boolean; challenge: null | { coordinate: string; clue: 'cold' | 'warm' | 'hot' | 'boiling' | 'treasure'; question: string; wrongGuesses: number }; turn: { current: null | { username: string; skips: number }; queue: Array<{ username: string; skips: number }>; next: null | { username: string; skips: number }; riddleTurn: boolean; expiresAt: string | null; kickVotes: number } };
 
 function TreasureBoard({ channel, gridOnly = false }: { channel: string; gridOnly?: boolean }) {
   const [snapshot, setSnapshot] = useState<TreasureSnapshot | null>(null);
@@ -292,9 +292,23 @@ function TreasureBoard({ channel, gridOnly = false }: { channel: string; gridOnl
     ])}
   </div>;
   const seconds = snapshot.turn.expiresAt ? Math.max(0, Math.ceil((Date.parse(snapshot.turn.expiresAt) - Date.now()) / 1000)) : 0;
-  const challenge = <div className="shrink-0 bg-slate-950/95 px-2 py-1 text-center text-[clamp(7px,1vw,10px)] leading-tight text-white"><b className="text-cyan-100">{snapshot.turn.current ? `${snapshot.turn.current.username} · ${seconds}s` : 'JOIN THE ROTATION'}</b>{snapshot.challenge ? <> · <b>{snapshot.challenge.coordinate} · {snapshot.challenge.clue.toUpperCase()}</b> · {snapshot.challenge.question} <span className="text-white/55">({snapshot.challenge.wrongGuesses}/3 misses)</span></> : <> · spmt treasure</>}</div>;
-  if (gridOnly) return <div className="grid h-full w-full grid-rows-[minmax(0,1fr)_auto] bg-slate-950">{board}{challenge}</div>;
-  return <div className="grid aspect-[4/5] w-full max-w-[520px] grid-rows-[auto_minmax(0,1fr)_auto] gap-2"><div className="text-xs">Treasures <b>{snapshot.foundCount}/{snapshot.treasureCount}</b> · Queue {snapshot.turn.queue.map((entry) => entry.username).join(' → ') || 'empty'}{snapshot.complete ? ' · BOARD COMPLETE' : ''}</div>{board}{challenge}</div>;
+  const next = snapshot.turn.next || snapshot.turn.queue[1];
+  const turn = <div className="shrink-0 border-b border-cyan-300/30 bg-slate-950 px-2 py-1 text-center text-[clamp(10px,1.4vw,16px)] font-bold leading-tight text-white" aria-live="polite">
+    {snapshot.complete ? <b className="text-yellow-300">BOARD COMPLETE · {snapshot.foundCount}/{snapshot.treasureCount} treasures found</b> : <>
+      <div><span className="text-cyan-300">YOUR TURN:</span> {snapshot.turn.current?.username || 'Join with spmt treasure'}</div>
+      <div><span className="text-amber-300">UP NEXT:</span> {next?.username || 'Waiting for another player'} · <span className="text-white/70">{snapshot.turn.riddleTurn ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · RIDDLE TIMER` : snapshot.turn.current ? `${seconds}s to choose / answer` : 'No active clock'}</span></div>
+    </>}
+  </div>;
+  const challenge = <div className="shrink-0 bg-slate-950/95 px-2 py-1 text-center text-[clamp(9px,1.2vw,13px)] leading-tight text-white">
+    {snapshot.challenge ? <>
+      <b className="text-cyan-100">{snapshot.challenge.coordinate} · {snapshot.challenge.clue.toUpperCase()}</b>
+      {snapshot.challenge.clue === 'boiling' && <div className="text-amber-200">Treasure touches this square, including diagonally. Find its exact square!</div>}
+      <div>{snapshot.challenge.question} <span className="text-white/55">({snapshot.challenge.wrongGuesses}/3 misses)</span></div>
+      <div className="text-cyan-200">Only {snapshot.turn.current?.username || 'the active player'} answers: spmt treasure answer &lt;answer&gt;</div>
+    </> : <span className="text-cyan-200">{snapshot.turn.current ? 'Choose a square: spmt dig B5' : 'Join the rotation: spmt treasure'}</span>}
+  </div>;
+  if (gridOnly) return <div className="grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] bg-slate-950">{turn}{board}{challenge}</div>;
+  return <div className="grid aspect-[4/5] w-full max-w-[520px] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2">{turn}<div className="text-xs">Treasures <b>{snapshot.foundCount}/{snapshot.treasureCount}</b> · Queue {snapshot.turn.queue.map((entry) => entry.username).join(' → ') || 'empty'}</div>{board}{challenge}</div>;
 }
 
 function WordChain({ events }: { events: GameHubChatEvent[] }) {

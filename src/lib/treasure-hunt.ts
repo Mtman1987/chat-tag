@@ -19,7 +19,7 @@ export const TREASURE_TURN_MS = 90_000;
 export const TREASURE_RIDDLE_TURN_MS = 5 * 60_000;
 export const TREASURE_SKIP_LIMIT = 3;
 
-type Clue = 'cold' | 'warm' | 'hot' | 'boiling';
+type Clue = 'cold' | 'warm' | 'hot' | 'boiling' | 'treasure';
 type Riddle = { question: string; answers: string[] };
 type Dig = { playerId: string; username: string; displayName: string; clue: Clue; resolved: boolean; at: string };
 type Challenge = { coordinate: string; clue: Clue; diggerId: string; riddleIndex: number; question: string; answers: string[]; wrongGuesses: number; cycle: number; openedAt: string };
@@ -197,7 +197,7 @@ export function settleTreasureTurn(state: any, channelValue: unknown, now = Date
 export function voteKickTreasureTurn(state: any, input: { channel: unknown; userId?: unknown; username?: unknown; now?: number }) {
   const channel = normalizeGameHubChannel(input.channel); const now = Number(input.now ?? Date.now()); settleTreasureTurn(state, channel, now);
   const game = getTreasureHuntState(state, channel, now); const voterId = normalizeGameHubPlayerId(input.userId, input.username);
-  if (!game.activeChallenge || game.activeChallenge.clue !== 'boiling') return { changed: false, outcome: 'not-boiling' as const };
+  if (!game.activeChallenge || !['boiling', 'treasure'].includes(game.activeChallenge.clue)) return { changed: false, outcome: 'not-boiling' as const };
   if (!game.rotation.some((entry) => entry.playerId === voterId)) return { changed: false, outcome: 'not-joined' as const };
   if (game.rotation[0]?.playerId === voterId) return { changed: false, outcome: 'current-player' as const };
   if (game.kickVotes.includes(voterId)) return { changed: false, outcome: 'already-voted' as const, votes: game.kickVotes.length };
@@ -226,7 +226,7 @@ function distance(left: number, right: number) {
 
 function clueFor(cell: number, remaining: number[]): Clue {
   const nearest = Math.min(...remaining.map((treasure) => distance(cell, treasure)));
-  return nearest <= 1 ? 'boiling' : nearest === 2 ? 'hot' : nearest === 3 ? 'warm' : 'cold';
+  return nearest === 0 ? 'treasure' : nearest === 1 ? 'boiling' : nearest === 2 ? 'hot' : nearest === 3 ? 'warm' : 'cold';
 }
 
 function riddleFor(game: TreasureHuntState, coordinate: string, cycle: number) {
@@ -302,10 +302,11 @@ export function answerTreasureRiddle(state: any, input: { channel: unknown; answ
   if (digPoints) award(state, challenge.diggerId, digPoints, `Treasure Hunt ${challenge.clue} dig`, channel);
   award(state, joined.player.id, solvePoints, `Treasure Hunt ${challenge.clue} riddle solved`, channel);
   let treasureCoordinate = '';
-  if (challenge.clue === 'boiling') {
-    const selected = parseTreasureCoordinate(challenge.coordinate)!.index;
-    const treasure = game.treasureCells.filter((cell) => !game.foundCells.includes(cell)).sort((a, b) => distance(selected, a) - distance(selected, b))[0];
-    if (treasure !== undefined) { game.foundCells.push(treasure); treasureCoordinate = coordinateAt(treasure); }
+  // Only the dug square can be claimed, including challenges opened before this release.
+  const selected = parseTreasureCoordinate(challenge.coordinate)!.index;
+  if (game.treasureCells.includes(selected) && !game.foundCells.includes(selected)) {
+    game.foundCells.push(selected);
+    treasureCoordinate = challenge.coordinate;
   }
   const coordinate = challenge.coordinate; const clue = challenge.clue;
   delete game.activeChallenge;
@@ -341,5 +342,16 @@ export function treasureHuntPublicSnapshot(state: any, channelValue: unknown, no
   const leaderboard = Object.values(store.players).filter((player) => player.joinedGames?.[TREASURE_GAME_ID])
     .map((player) => ({ username: player.displayName || player.username, score: player.joinedGames[TREASURE_GAME_ID].score, wins: player.joinedGames[TREASURE_GAME_ID].wins }))
     .sort((left, right) => right.score - left.score || right.wins - left.wins).slice(0, 10);
-  return { width: game.width, height: game.height, roundId: game.roundId, cells, foundCount: game.foundCells.length, treasureCount: TREASURE_COUNT, complete: Boolean(game.completedAt), challenge: game.activeChallenge ? { coordinate: game.activeChallenge.coordinate, clue: game.activeChallenge.clue, question: game.activeChallenge.question, wrongGuesses: game.activeChallenge.wrongGuesses } : null, turn: { current: game.rotation[0] ? { username: game.rotation[0].displayName, skips: game.rotation[0].skips } : null, queue: game.rotation.map((entry) => ({ username: entry.displayName, skips: entry.skips })), expiresAt: game.turnExpiresAt || null, kickVotes: game.kickVotes.length }, passCost: TREASURE_PASS_COST, leaderboard, updatedAt: game.updatedAt };
+  return { width: game.width, height: game.height, roundId: game.roundId, cells, foundCount: game.foundCells.length, treasureCount: TREASURE_COUNT, complete: Boolean(game.completedAt), challenge: game.activeChallenge ? { coordinate: game.activeChallenge.coordinate, clue: game.activeChallenge.clue, question: game.activeChallenge.question, wrongGuesses: game.activeChallenge.wrongGuesses } : null, turn: { current: game.rotation[0] ? { username: game.rotation[0].displayName, skips: game.rotation[0].skips } : null, queue: game.rotation.map((entry) => ({ username: entry.displayName, skips: entry.skips })), next: game.rotation[1] ? { username: game.rotation[1].displayName, skips: game.rotation[1].skips } : null, riddleTurn: Boolean(game.activeChallenge && game.activeChallenge.clue !== 'cold'), expiresAt: game.turnExpiresAt || null, kickVotes: game.kickVotes.length }, passCost: TREASURE_PASS_COST, leaderboard, updatedAt: game.updatedAt };
+}
+
+export function treasureTurnAnnouncement(snapshot: ReturnType<typeof treasureHuntPublicSnapshot>) {
+  if (snapshot.complete) return 'Treasure Hunt board complete!';
+  const current = snapshot.turn.current?.username;
+  if (!current) return 'Join Treasure Hunt with spmt treasure.';
+  const next = snapshot.turn.next?.username;
+  const instruction = snapshot.challenge
+    ? `Answer the riddle at ${snapshot.challenge.coordinate} with spmt treasure answer your answer.`
+    : 'Choose a square with spmt dig B5.';
+  return `${current}, your turn! ${next ? `${next} is up next.` : 'No one else is queued.'} ${snapshot.turn.riddleTurn ? 'You have five minutes to solve the riddle.' : 'You have 90 seconds.'} ${instruction}`;
 }

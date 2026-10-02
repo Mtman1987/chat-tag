@@ -12,12 +12,74 @@ import {
   TREASURE_PASS_COST,
   TREASURE_PUZZLE_COUNT,
   TREASURE_TURN_MS,
+  TREASURE_RIDDLE_TURN_MS,
+  treasureTurnAnnouncement,
   TREASURE_WIDTH,
   treasureHuntPublicSnapshot,
   voteKickTreasureTurn,
 } from '../src/lib/treasure-hunt';
 
 const player = { channel: 'space', userId: '1', username: 'player', displayName: 'Player' };
+
+test('touching squares never reveal or claim the treasure, while C3 is hot for D5', () => {
+  for (const coordinate of ['C4', 'D4', 'E4', 'C5', 'E5', 'C6', 'D6', 'E6', 'C3']) {
+    const draft = state();
+    const game = getTreasureHuntState(draft, 'space', 1);
+    game.treasureCells = [parseTreasureCoordinate('D5')!.index, 400, 499];
+    assert.equal(digTreasure(draft, { ...player, coordinate, now: 2 }).clue, coordinate === 'C3' ? 'hot' : 'boiling');
+    const answer = game.activeChallenge!.answers[0];
+    const solved = answerTreasureRiddle(draft, { ...player, answer, now: 3 });
+    assert.equal(solved.treasureCoordinate, '');
+    assert.deepEqual(game.foundCells, []);
+    assert.equal(treasureHuntPublicSnapshot(draft, 'space', 3).cells.find(cell => cell.coordinate === 'D5')!.state, 'hidden');
+  }
+});
+
+test('nearby riddles expose their five-minute deadline and resume normal turns after solving', () => {
+  for (const coordinate of ['G5', 'F5', 'E5', 'D5']) {
+    const draft = state();
+    const game = getTreasureHuntState(draft, 'space', 1);
+    game.treasureCells = [parseTreasureCoordinate('D5')!.index, 400, 499];
+    digTreasure(draft, { ...player, coordinate, now: 2 });
+    joinTreasureRotation(draft, { channel: 'space', userId: '2', username: 'second', displayName: 'Second', now: 3 });
+    assert.equal(Date.parse(game.turnExpiresAt!), 2 + TREASURE_RIDDLE_TURN_MS);
+    const snapshot = treasureHuntPublicSnapshot(draft, 'space', 100_000);
+    assert.equal(snapshot.turn.riddleTurn, true);
+    assert.equal(Date.parse(snapshot.turn.expiresAt!), 2 + TREASURE_RIDDLE_TURN_MS);
+    assert.equal(snapshot.turn.next?.username, 'Second');
+    assert.match(treasureTurnAnnouncement(snapshot), /Player, your turn! Second is up next.*five minutes/);
+    assert.equal(settleTreasureTurn(draft, 'space', 100_000).changed, false);
+    const answer = game.activeChallenge!.answers[0];
+    answerTreasureRiddle(draft, { ...player, answer, now: 100_001 });
+    assert.equal(game.rotation[0].displayName, 'Second');
+    assert.equal(Date.parse(game.turnExpiresAt!), 100_001 + TREASURE_TURN_MS);
+  }
+});
+
+test('five-minute riddle timeout still skips the active player and preserves the challenge', () => {
+  const draft = state();
+  const game = getTreasureHuntState(draft, 'space', 1);
+  game.treasureCells = [0, 400, 499];
+  digTreasure(draft, { ...player, coordinate: 'B1', now: 2 });
+  joinTreasureRotation(draft, { channel: 'space', userId: '2', username: 'second', displayName: 'Second', now: 3 });
+  const expired = settleTreasureTurn(draft, 'space', 2 + TREASURE_RIDDLE_TURN_MS);
+  assert.equal(expired.skipped?.displayName, 'Player');
+  assert.equal(expired.current?.displayName, 'Second');
+  assert.equal(game.activeChallenge?.coordinate, 'B1');
+  assert.equal(Date.parse(game.turnExpiresAt!), 2 + 2 * TREASURE_RIDDLE_TURN_MS);
+});
+
+test('old boiling challenges still require an exact-square dig', () => {
+  const draft = state();
+  const game = getTreasureHuntState(draft, 'space', 1);
+  game.treasureCells = [parseTreasureCoordinate('D5')!.index, 400, 499];
+  digTreasure(draft, { ...player, coordinate: 'C3', now: 2 });
+  game.activeChallenge!.clue = 'boiling';
+  const answer = game.activeChallenge!.answers[0];
+  assert.equal(answerTreasureRiddle(draft, { ...player, answer, now: 3 }).treasureCoordinate, '');
+  assert.deepEqual(game.foundCells, []);
+});
+
 function state() { return { gameSettings: { default: {} } } as any; }
 
 test('Treasure Hunt uses the full 20x25 A1-T25 board', () => {
@@ -55,8 +117,12 @@ test('Treasure Hunt locks warm, hot, and boiling digs behind riddles with escala
   const boilingAnswer = getTreasureHuntState(draft, 'space', 8).activeChallenge!.answers[0];
   const treasure = answerTreasureRiddle(draft, { ...player, answer: boilingAnswer, now: 9 });
   assert.equal(treasure.solvePoints, 1_000);
-  assert.equal(treasure.treasureCoordinate, 'A1');
-  assert.equal(treasureHuntPublicSnapshot(draft, 'space', 9).foundCount, 1);
+  assert.equal(treasure.treasureCoordinate, '');
+  assert.equal(treasureHuntPublicSnapshot(draft, 'space', 9).foundCount, 0);
+  assert.equal(digTreasure(draft, { ...player, coordinate: 'A1', now: 10 }).clue, 'treasure');
+  const exactAnswer = game.activeChallenge!.answers[0];
+  assert.equal(answerTreasureRiddle(draft, { ...player, answer: exactAnswer, now: 11 }).treasureCoordinate, 'A1');
+  assert.equal(treasureHuntPublicSnapshot(draft, 'space', 11).foundCount, 1);
 });
 
 test('three wrong riddle answers rotate the riddle without moving the excavation', () => {
