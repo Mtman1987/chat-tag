@@ -701,7 +701,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         handled: true,
         choices,
-        reply: `@${displayName} What game would you like to ${command}? ${menu}. Type the number within 30 seconds.`.slice(0, 480),
+        reply: `@${displayName} What game would you like to ${command}? ${menu}. Reply with the number (or spmt <number>) within 2 minutes.`.slice(0, 480),
       });
     }
     if (direct.mode === 'broadcast' && direct.intents.length > 1) {
