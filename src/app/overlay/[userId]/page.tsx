@@ -339,10 +339,19 @@ export default function OverlayPage() {
 
   const fireHistoryBroadcast = useCallback(
     (history: any[]) => {
-      if (!history.length || broadcast) return;
-      const lines = history.slice(0, 6).map((h: any) => {
-        if (h.blocked) return `🛡️ ${h.tagger} → ${h.tagged} (${h.blocked})`;
-        return `${h.doublePoints ? '🔥' : '🎯'} ${h.tagger} tagged ${h.tagged}${h.doublePoints ? ' 2x!' : ''}`;
+      const isInternalActor = (value: unknown) => {
+        const name = String(value || '').trim();
+        return !name
+          || /^(?:system|free[-_ ]?for[-_ ]?all|auto[-_ ]?(?:rotate|timeout)|discord[-_ ]?admin)$/i.test(name)
+          || /^user_[a-z0-9_-]+$/i.test(name);
+      };
+      const humanHistory = history
+        .filter((h: any) => !isInternalActor(h?.tagger) && !isInternalActor(h?.tagged))
+        .slice(0, 4);
+      if (!humanHistory.length || broadcast) return;
+      const lines = humanHistory.map((h: any) => {
+        if (h.blocked) return `🛡️ ${h.tagger} → ${h.tagged}`;
+        return `${h.doublePoints ? '🔥' : '🎯'} ${h.tagger} → ${h.tagged}${h.doublePoints ? ' · 2×' : ''}`;
       });
       fireBroadcast({ type: 'history', lines, icon: '📜', color: '#9146ff', glow: '#9146ff', sound: 'history' }, 15000);
       lastHistoryShow.current = Date.now();
@@ -777,7 +786,9 @@ export default function OverlayPage() {
           </div>
           {broadcast.lines.map((line, i) => (
             <div key={i} style={{
-              fontSize: loungeCompact ? 'min(9vw,14vh)' : (broadcast.type === 'history' ? 'min(7.2vw,8.4vh)' : (i === 0 ? 'min(9.6vw,10.8vh)' : 'min(7.2vw,8.4vh)')),
+              fontSize: loungeCompact
+                ? (broadcast.type === 'history' ? 'min(5.8vw,8.2vh)' : 'min(9vw,14vh)')
+                : (broadcast.type === 'history' ? 'min(7.2vw,8.4vh)' : (i === 0 ? 'min(9.6vw,10.8vh)' : 'min(7.2vw,8.4vh)')),
               fontWeight: loungeCompact || i === 0 ? 900 : 700,
               textAlign: broadcast.type === 'history' ? 'left' : 'center',
               textShadow: `0 0 4.8vw ${broadcast.glow}, 0 0.4vh 1.2vh rgba(0,0,0,0.9)`,
@@ -785,8 +796,8 @@ export default function OverlayPage() {
               animation: `lineSlide 0.3s ease-out ${i * 0.06}s both`,
               padding: broadcast.type === 'history' ? '0.3vh 2%' : undefined,
               overflow: loungeCompact ? 'hidden' : undefined,
-              textOverflow: loungeCompact ? 'ellipsis' : undefined,
-              whiteSpace: loungeCompact ? 'nowrap' : undefined,
+              textOverflow: loungeCompact && broadcast.type !== 'history' ? 'ellipsis' : undefined,
+              whiteSpace: loungeCompact && broadcast.type !== 'history' ? 'nowrap' : 'normal',
             }}>
               {line}
             </div>
