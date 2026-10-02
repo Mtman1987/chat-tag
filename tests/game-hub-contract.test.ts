@@ -35,6 +35,7 @@ import {
   WORD_CHAIN_CYCLE_MS,
   WORD_CHAIN_ROUND_MS,
   WORD_CHAIN_REVIEW_MS,
+  WORD_CHAIN_TALLY_MS,
   advanceWordChainRound,
   recordWordChainVote,
   getOrCreateGameHubPlayer,
@@ -336,6 +337,34 @@ test('Word Chain keeps play moving and settles votes after round review', () => 
   assert.equal(stored('11').joinedGames.wordchain.score, 13 + 2);
   assert.equal(stored('11').gamePointsBalance, 15);
   assert.equal(stored('12').gamePointsBalance, 8);
+});
+
+test('Word Chain gives voting a full minute and holds five-round final standings for 30 seconds', () => {
+  assert.equal(WORD_CHAIN_REVIEW_MS, 60_000);
+  assert.equal(WORD_CHAIN_TALLY_MS, 30_000);
+
+  const state: any = { gameSettings: { default: {} } };
+  const alpha = { userId: '11', username: 'alpha', displayName: 'Alpha' };
+  const beta = { userId: '12', username: 'beta', displayName: 'Beta' };
+  for (const identity of [alpha, beta]) joinGameHubGame(state, { ...identity, gameId: 'wordchain' });
+
+  const fifthRoundAt = 4 * WORD_CHAIN_CYCLE_MS;
+  const current = advanceWordChainRound(state, 'space', fifthRoundAt).round;
+  const settings = state.gameSettings.default.gameHub.channels.space;
+  settings.wordChainGame.scores = {
+    'twitch:11': { displayName: 'Alpha', points: 20 },
+    'twitch:12': { displayName: 'Beta', points: 15 },
+  };
+  const word = `${current.currentWord.at(-1)}AAA`;
+  assert.equal(recordWordChainMessage(state, { ...alpha, channel: 'space', message: word, now: fifthRoundAt }).outcome, 'accepted');
+
+  const finalAt = fifthRoundAt + WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS;
+  const final = wordChainPublicSnapshot(state, 'space', finalAt);
+  assert.equal(final.gameEnded, true);
+  assert.equal(final.secondsLeft, 30);
+  assert.equal(final.gameWinner?.displayName, 'Alpha');
+  assert.equal(final.gameWinner?.points, 24);
+  assert.deepEqual(final.gameParticipants.map((entry) => [entry.displayName, entry.points]), [['Alpha', 24], ['Beta', 15]]);
 });
 
 test('main word games ship seeded libraries, community additions, and broadcast snapshots', () => {
