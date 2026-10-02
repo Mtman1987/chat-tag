@@ -847,6 +847,13 @@ test('Quackverse launches as a browser room while the community overlay stays pa
 });
 
 
+test('SpaceMountain main stage follows the live running word games instead of stale system overrides', () => {
+  const route = read('src/app/api/overlay/game-hub/[profileId]/route.ts');
+  assert.match(route, /resolveChannelGameIds\(state, 'spacemountainlive'\)/);
+  assert.match(route, /systemBase\.gameIds\.filter\(\(gameId\) => active\.has\(gameId\)\)/);
+  assert.match(route, /system\.gameIds\.length <= 1 \? 'focus' : 'rotation'/);
+});
+
 test('SpaceMountain parade overlay is full-screen and Overlay Bay test raids use the real raid start route', () => {
   const surface = read('src/components/game-hub-surface.tsx');
   const overlay = read('src/app/overlay/game-hub/[profileId]/page.tsx');
