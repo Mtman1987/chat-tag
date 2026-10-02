@@ -1046,6 +1046,7 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
 const username = env.TWITCH_BOT_USERNAME;
 const recentMessages = new Set();
 const pendingGameChoices = new Map();
+const GAME_CHOICE_TTL_MS = 2 * 60 * 1000;
 const BOT_TEST_CHANNEL = (env.BOT_TEST_CHANNEL || '').toLowerCase().replace(/^#/, '');
 const ALWAYS_JOINED_CHANNELS = ['mtman1987']; // Channels the bot should keep joined even while offline
 let isIrcConnected = false;
@@ -1949,7 +1950,8 @@ console.log = (...args) => {
       const pendingGameChoiceKey = rawCh + ':' + senderLogin;
       const pendingGameChoice = pendingGameChoices.get(pendingGameChoiceKey);
       const pendingGameChoiceText = message.trim();
-      const pendingGameChoiceNumber = /^\d{1,2}$/.test(pendingGameChoiceText) ? Number(pendingGameChoiceText) : 0;
+      const pendingGameChoiceMatch = pendingGameChoiceText.match(/^(?:(?:!|@)?spmt\s+)?(\d{1,2})$/i);
+      const pendingGameChoiceNumber = pendingGameChoiceMatch ? Number(pendingGameChoiceMatch[1]) : 0;
       const isPendingGameChoiceReply = Boolean(
         pendingGameChoice
         && pendingGameChoice.expiresAt >= Date.now()
@@ -1999,17 +2001,17 @@ console.log = (...args) => {
     const rawChoiceKey = channel.replace('#', '').toLowerCase() + ':' + senderLogin;
     const pendingChoice = pendingGameChoices.get(rawChoiceKey);
     let selectedChoice = null;
-    const pendingChoiceNumber = /^\d{1,2}$/.test(msg) ? Number(msg) : 0;
+    const pendingChoiceMatch = msg.match(/^(?:(?:!|@)?spmt\s+)?(\d{1,2})$/i);
+    const pendingChoiceNumber = pendingChoiceMatch ? Number(pendingChoiceMatch[1]) : 0;
     const mosaicShortcut = msg === '!mosaic' || msg.startsWith('!mosaic ');
-    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ') && !mosaicShortcut) {
-      if (!pendingChoice || pendingChoice.expiresAt < Date.now() || pendingChoiceNumber < 1 || pendingChoiceNumber > pendingChoice.choices.length) {
-        if (pendingChoice?.expiresAt < Date.now()) pendingGameChoices.delete(rawChoiceKey);
-        return;
-      }
+    if (pendingChoice && pendingChoice.expiresAt >= Date.now() && pendingChoiceNumber >= 1 && pendingChoiceNumber <= pendingChoice.choices.length) {
       selectedChoice = pendingChoice.choices[pendingChoiceNumber - 1];
       rawMessage = String(selectedChoice.command || '');
       msg = rawMessage.toLowerCase();
       pendingGameChoices.delete(rawChoiceKey);
+    } else if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ') && !mosaicShortcut) {
+      if (pendingChoice?.expiresAt < Date.now()) pendingGameChoices.delete(rawChoiceKey);
+      return;
     }
     // Normalize: ensure @spmt prefix
     const normalizedMsg = mosaicShortcut
@@ -2111,7 +2113,7 @@ console.log = (...args) => {
         ...(legacyChatTagCommands.has(cmd) && !sharedNebulaCommands.has(cmd) ? { signal: AbortSignal.timeout(1500) } : {}),
       });
       if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {
-        pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + 30_000 });
+        pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + GAME_CHOICE_TTL_MS });
       }
       if (gamesHubCommand?.rewriteCommand) {
         const rewritten = String(gamesHubCommand.rewriteCommand || '')
