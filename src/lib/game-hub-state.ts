@@ -34,8 +34,8 @@ export const PHRASE_GUESS_PHRASES = [
   'Keep your eyes on the prize',
 ] as const;
 export const WORD_CHAIN_ROUND_MS = 6 * 60_000;
-export const WORD_CHAIN_REVIEW_MS = 30_000;
-export const WORD_CHAIN_TALLY_MS = 5_000;
+export const WORD_CHAIN_REVIEW_MS = 60_000;
+export const WORD_CHAIN_TALLY_MS = 30_000;
 export const WORD_CHAIN_CYCLE_MS = WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS + WORD_CHAIN_TALLY_MS;
 export const WORD_CHAIN_THEMES = {
   Animals: ['TIGER', 'ELEPHANT', 'MONKEY', 'ZEBRA', 'ANTELOPE', 'EAGLE', 'EMU', 'OTTER', 'RABBIT', 'TURTLE', 'ELK', 'KANGAROO', 'OWL', 'LEMUR', 'RHINO', 'OCTOPUS', 'SNAKE', 'ECHIDNA', 'ALLIGATOR', 'RACCOON', 'NEWT', 'TOUCAN'],
@@ -122,6 +122,11 @@ export type GameHubChannelSettings = {
     roundSlot: number; theme: string; accepted: number; rejected: number;
     words: Array<{ word: string; up: number; down: number; accepted: boolean; points: number }>;
     leaders: Array<{ displayName: string; points: number }>;
+  };
+  wordChainGame?: {
+    gameSlot: number;
+    roundsSettled: number;
+    scores: Record<string, { displayName: string; points: number }>;
   };
   wordChainVerdicts?: Record<string, boolean>;
   chatWarsBattle?: { battleId: string; channels: string[]; createdBy: string; createdAt: string; active: boolean };
@@ -618,6 +623,11 @@ function settleWordChainRound(state: any, channel: string, settings: GameHubChan
   const previous = settings.wordChainRound;
   if (!previous || previous.settled) return false;
   previous.settled = true;
+  const gameSlot = Math.floor(previous.roundSlot / 5);
+  if (settings.wordChainGame?.gameSlot !== gameSlot) {
+    settings.wordChainGame = { gameSlot, roundsSettled: 0, scores: {} };
+  }
+  const game = settings.wordChainGame!;
   const totals = new Map<string, { displayName: string; points: number }>();
   let accepted = 0;
   let rejected = 0;
@@ -645,9 +655,14 @@ function settleWordChainRound(state: any, channel: string, settings: GameHubChan
         totals.set(entry.playerId, tally);
       }
     }
+    const gameScore = game.scores[entry.playerId] || { displayName: entry.displayName, points: 0 };
+    gameScore.displayName = entry.displayName;
+    gameScore.points += points;
+    game.scores[entry.playerId] = gameScore;
     if (valid) accepted++; else rejected++;
     return { word: entry.word, up, down, accepted: valid, points };
   });
+  game.roundsSettled = Math.min(5, game.roundsSettled + 1);
   settings.wordChainVerdicts = Object.fromEntries(Object.entries(settings.wordChainVerdicts || {}).slice(-500));
   settings.lastWordChainTally = {
     roundSlot: previous.roundSlot, theme: previous.theme, accepted, rejected, words,
@@ -667,6 +682,10 @@ export function advanceWordChainRound(state: any, channelValue: unknown, nowValu
     return { changed, round: settings.wordChainRound };
   }
   const changed = settleWordChainRound(state, channel, settings);
+  const gameSlot = Math.floor(roundSlot / 5);
+  if (settings.wordChainGame?.gameSlot !== gameSlot) {
+    settings.wordChainGame = { gameSlot, roundsSettled: 0, scores: {} };
+  }
   const catalog = wordChainThemeCatalog(settings);
   const selected = catalog[roundSlot % catalog.length];
   const seed = selected.words[Math.floor(roundSlot / catalog.length) % selected.words.length];
@@ -798,7 +817,12 @@ export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowVa
   const elapsed = now % WORD_CHAIN_CYCLE_MS;
   const review = elapsed >= WORD_CHAIN_ROUND_MS && !settlementDue;
   const entries = round.entries || [];
-  const tally = getChannelGameSettings(displayState, stateChannel).lastWordChainTally;
+  const displaySettings = getChannelGameSettings(displayState, stateChannel);
+  const tally = displaySettings.lastWordChainTally;
+  const gameParticipants = Object.values(displaySettings.wordChainGame?.scores || {})
+    .sort((left, right) => right.points - left.points || left.displayName.localeCompare(right.displayName));
+  const topGameScore = gameParticipants[0]?.points;
+  const gameWinners = topGameScore === undefined ? [] : gameParticipants.filter((entry) => entry.points === topGameScore);
   const leaders = new Map<string, { displayName: string; points: number }>();
   for (const entry of entries) {
     const current = leaders.get(entry.playerId) || { displayName: entry.displayName, points: 0 };
@@ -808,6 +832,7 @@ export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowVa
   return {
     roundSlot: round.roundSlot,
     roundNumber: round.roundSlot % 5 + 1,
+    gameSlot: Math.floor(round.roundSlot / 5),
     theme: round.theme,
     currentWord: round.currentWord,
     requiredLetter: round.currentWord.at(-1) || '',
@@ -824,6 +849,17 @@ export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowVa
     reviewLeaders: settlementDue ? tally?.leaders || []
       : review ? [...leaders.values()].sort((left, right) => right.points - left.points).slice(0, 5) : [],
     lastTally: tally || null,
+    lastPlay: entries.length ? {
+      word: entries.at(-1)!.word,
+      displayName: entries.at(-1)!.displayName,
+      points: entries.at(-1)!.points,
+      combo: round.comboMultiplier,
+      position: entries.length,
+    } : null,
+    gameEnded: settlementDue && round.roundSlot % 5 === 4,
+    gameParticipants,
+    gameWinner: settlementDue && round.roundSlot % 5 === 4 ? gameParticipants[0] || null : null,
+    gameWinners: settlementDue && round.roundSlot % 5 === 4 ? gameWinners : [],
     leaderboard: getGameHubGameStats(state, 'wordchain').leaderboard.slice(0, 5),
   };
 }
