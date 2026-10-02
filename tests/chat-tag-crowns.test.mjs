@@ -81,3 +81,11 @@ test('getWinners reads winners from app state or a plain list', () => {
   assert.equal(getWinners({ monthlyWinners: winners })[0].place, 1);
   assert.deepEqual(getWinners(null), []);
 });
+
+
+test('crowns preserve overlay URL queries and fragments while decorating nearby names', () => {
+  const list = [{ username: 'mamafiesty', place: 1 }];
+  const url = 'https://spmt.live/games/wordchain?channel=mamafiesty&owner=mamafiesty#mamafiesty';
+  assert.equal(decorateCrowns(`@mamafiesty open ${url}`, list), `👑@mamafiesty open ${url}`);
+  assert.equal(decorateCrownsDeep({ message: url, url, href: url }, list).message, url);
+});
