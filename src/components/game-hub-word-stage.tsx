@@ -13,6 +13,11 @@ type WordChainSnapshot = {
   reviewWords: Array<{ number: number; word: string; displayName: string; points: number; up: number; down: number; accepted?: boolean }>;
   reviewLeaders: Array<{ displayName: string; points: number }>;
   lastTally?: { roundSlot: number; accepted: number; rejected: number } | null;
+  lastPlay?: { word: string; displayName: string; points: number; combo: number; position: number } | null;
+  gameEnded: boolean;
+  gameParticipants: Array<{ displayName: string; points: number }>;
+  gameWinner?: { displayName: string; points: number } | null;
+  gameWinners: Array<{ displayName: string; points: number }>;
 };
 
 type PhraseGuessSnapshot = {
@@ -77,21 +82,42 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
     return (
       <div className="relative flex h-full w-full flex-col items-center overflow-hidden px-[3%] pt-[2%] text-white">
         <div className="rounded-full border border-cyan-300/35 bg-slate-950/85 px-[2.5%] py-[.8%] text-center text-[clamp(12px,1.5vw,22px)] font-black uppercase tracking-[.1em] text-cyan-100">
-          Word Chain · {chain.theme} · Round {chain.roundNumber}/5 · {chain.phase === 'tally' ? 'Tally' : chain.phase === 'review' ? 'Review' : 'Play'} {clock(chain.secondsLeft)}
+          SPMT &lt;WORD&gt; · {chain.theme} · Round {chain.roundNumber}/5 · {chain.gameEnded ? 'GAME OVER' : chain.phase === 'tally' ? 'Results' : chain.phase === 'review' ? 'Vote' : 'Play'} {clock(chain.secondsLeft)}
         </div>
         {chain.phase === 'play' ? (
-          <div className="mt-[1.5%] flex max-w-full flex-col items-center rounded-2xl bg-slate-950/80 px-[3%] py-[1.2%] text-center backdrop-blur-sm">
+          <div className="mt-[2%] flex max-w-full flex-col items-center px-[3%] py-[1.2%] text-center">
             <div className="max-w-full break-all text-[clamp(42px,8vw,112px)] font-black uppercase leading-none tracking-[.05em] drop-shadow-[0_0_22px_rgba(34,211,238,.7)]">
               {head}<span className="text-fuchsia-300">{chain.requiredLetter}</span>
             </div>
-            <div className="mt-[1%] text-[clamp(12px,1.55vw,22px)] font-bold uppercase tracking-[.1em] text-cyan-100">
-              Next: <span className="text-fuchsia-300">{chain.requiredLetter}</span> · {chain.chainLength} words · spmt &lt;word&gt;
+          </div>
+        ) : chain.gameEnded ? (
+          <div className="mt-[1.5%] flex max-h-[76%] w-full max-w-[94%] flex-col overflow-hidden rounded-2xl border border-amber-300/45 bg-slate-950/92 px-[4%] py-[2%] text-center shadow-[0_0_34px_rgba(250,204,21,.18)] backdrop-blur-sm">
+            <div className="text-[clamp(28px,4.5vw,64px)] font-black uppercase tracking-[.08em] text-amber-200">GAME OVER</div>
+            <div className="mt-1 text-[clamp(12px,1.8vw,24px)] font-black uppercase tracking-[.12em] text-cyan-100">
+              Five rounds complete · final standings
+            </div>
+            <div className="mt-[2%] text-[clamp(18px,2.8vw,40px)] font-black text-white">
+              {chain.gameWinners.length > 1
+                ? `Tie: ${chain.gameWinners.map((entry) => entry.displayName).join(' & ')} · ${chain.gameWinners[0]?.points || 0} pts`
+                : chain.gameWinner
+                  ? `🏆 ${chain.gameWinner.displayName} wins · ${chain.gameWinner.points} pts`
+                  : 'No scored plays this game'}
+            </div>
+            <div className="mt-[2%] grid min-h-0 grid-cols-2 gap-2 overflow-y-auto text-left text-[clamp(11px,1.45vw,20px)] font-bold">
+              {chain.gameParticipants.map((entry, index) => (
+                <div key={entry.displayName + index} className="flex justify-between gap-3 rounded-lg bg-white/10 px-3 py-2">
+                  <span>#{index + 1} {entry.displayName}</span><strong>{entry.points} pts</strong>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[clamp(10px,1.25vw,17px)] font-bold uppercase tracking-[.1em] text-cyan-100/75">
+              Next game begins in {clock(chain.secondsLeft)}
             </div>
           </div>
         ) : (
           <div className="mt-[1.5%] flex max-h-[72%] w-full flex-col overflow-hidden rounded-2xl border border-cyan-300/20 bg-slate-950/90 px-[3%] py-[1.5%] backdrop-blur-sm">
             <div className="text-center text-[clamp(18px,2.6vw,36px)] font-black uppercase text-cyan-100">
-              Round tally · {chain.reviewWords.length} words
+              {chain.phase === 'review' ? 'VOTING OPEN' : 'ROUND RESULTS'} · {chain.reviewWords.length} words
             </div>
             <div className="mt-1 text-center text-[clamp(11px,1.3vw,19px)] font-bold text-amber-100">
               {chain.phase === 'review' ? 'Vote spmt up <number> or spmt down <number> · ties and no votes count' : `Final: ${chain.lastTally?.accepted || 0} correct · ${chain.lastTally?.rejected || 0} voted down`}
