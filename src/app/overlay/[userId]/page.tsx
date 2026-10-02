@@ -825,7 +825,7 @@ export default function OverlayPage() {
   const compactAnnouncementActive = loungeCompact && Boolean(broadcast);
 
   return (
-    <div data-chat-tag-rotation="full-size-v2" style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff', boxSizing: 'border-box' }}>
+    <div data-chat-tag-rotation="player-cards-v3" style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff', boxSizing: 'border-box' }}>
       {confetti.map((piece) => (
         <div
           key={piece.id}
