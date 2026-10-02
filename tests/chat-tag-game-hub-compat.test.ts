@@ -63,6 +63,9 @@ test('deployed bot build keeps proven Chat Tag commands and sender routing intac
     assert.match(patchedBot, /sharedNebulaCommands\.has\(cmd\)/);
     assert.match(patchedBot, /pendingGameChoices/);
     assert.match(patchedBot, /pendingChoiceNumber/);
+    assert.match(patchedBot, /GAME_CHOICE_TTL_MS = 2 \* 60 \* 1000/);
+    assert.match(patchedBot, /pendingChoiceMatch = msg\.match/);
+    assert.match(patchedBot, /spmt\\s\+\)\?\(\\d\{1,2\}\)/);
     assert.match(patchedBot, /isPendingGameChoiceReply/);
     const pendingChoiceIngressGuard = patchedBot.indexOf('const isPendingGameChoiceReply = Boolean(');
     const gameChatIngress = patchedBot.indexOf("apiCall('/api/game-hub/chat'");
