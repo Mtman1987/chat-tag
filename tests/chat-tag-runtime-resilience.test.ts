@@ -114,6 +114,13 @@ test('health response exposes state-store pressure diagnostics without reading t
 });
 
 
+test('Chat Tag automatic timeout rotation is disabled unless explicitly enabled', () => {
+  const bot = read('bot.js');
+  assert.match(bot, /CHAT_TAG_AUTO_ROTATE_ENABLED \|\| '0'/);
+  assert.match(bot, /if \(!AUTO_ROTATE_ENABLED\) \{\s*resetRotateFailures\(\);\s*\} else if \(data\?\.currentIt && data\?\.lastTagTime\)/);
+  assert.match(bot, /action: 'auto-rotate'/, 'manual and explicit fallback actions remain available');
+});
+
 test('Twitch IRC joins retry one transient no-response timeout before deferring to the next poll', () => {
   const bot = read('bot.js');
   assert.match(bot, /TWITCH_JOIN_RETRY_DELAYS_MS = \[1500\]/);
