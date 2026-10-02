@@ -162,3 +162,13 @@ test('Word Chain neutral answers use a bounded parent majority vote', () => {
   assert.match(frame, /votes\.length === 0 \|\| yes >= no/);
   assert.match(frame, /wordVoteOpenRef/);
 });
+
+
+test('activity-game timeout stops persisted game state instead of only hiding the overlay', () => {
+  const route = readFileSync(new URL('../src/app/api/game-hub/channel/route.ts', import.meta.url), 'utf8');
+  assert.match(route, /ACTIVITY_IDLE_MS = 30 \* 60_000/);
+  assert.match(route, /getNebulaChatEvents\(channel, '', 250\)/);
+  assert.match(route, /getGameHubRuntimeActions\(draft, channel, \{ limit: 250 \}\)/);
+  assert.match(route, /setChannelGameRunning\(draft, channel, gameId, false\)/);
+  assert.match(route, /mosaicStillActive/);
+});

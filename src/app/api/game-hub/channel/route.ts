@@ -3,10 +3,15 @@ import { getSessionUserFromRequest } from '@/lib/auth';
 import { GAME_HUB_CATALOG } from '@/lib/game-hub-registry';
 import { canonicalPlayerCommands, canonicalStreamerCommands, getCanonicalGameCommandSpec } from '@/lib/game-hub-commands';
 import { normalizeGameHubChannel, resolveChannelGameIds, setChannelGameRunning } from '@/lib/game-hub-state';
-import { readAppState, updateAppState } from '@/lib/volume-store';
+import { getNebulaChatEvents } from '@/lib/game-hub-event-bus';
+import { getGameHubRuntimeActions } from '@/lib/game-hub-runtime';
+import { readAppState, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { mosaicPublicSnapshot, resumeMosaicIfNeeded } from '@/lib/nebula-mosaic';
 
 export const dynamic = 'force-dynamic';
+
+const ACTIVITY_GAME_IDS = ['chatwars', 'pixelbattle', 'treasurehunt', 'bingo'] as const;
+const ACTIVITY_IDLE_MS = 30 * 60_000;
 
 function publicGames(gameIds: string[]) {
   const active = new Set(gameIds);
@@ -28,10 +33,45 @@ function publicGames(gameIds: string[]) {
 export async function GET(req: NextRequest) {
   const channel = normalizeGameHubChannel(req.nextUrl.searchParams.get('channel'));
   if (!channel) return NextResponse.json({ error: 'channel is required.' }, { status: 400 });
-  const state = await readAppState();
-  const gameIds = resolveChannelGameIds(state, channel);
-  const mosaic = mosaicPublicSnapshot(state, channel);
-  const suspendedGameIds = mosaic.artwork?.status === 'suspended' ? ['pixelbattle'] : [];
+
+  const now = Date.now();
+  const state = await updateAppStateIfChanged((draft) => {
+    const activeGameIds = resolveChannelGameIds(draft, channel);
+    const recent = new Set<string>();
+
+    for (const event of getNebulaChatEvents(channel, '', 250)) {
+      const at = Date.parse(String((event as any)?.at || ''));
+      if (!Number.isFinite(at) || now - at > ACTIVITY_IDLE_MS) continue;
+      for (const gameId of Array.isArray((event as any)?.gameIds) ? (event as any).gameIds : []) {
+        recent.add(String(gameId));
+      }
+    }
+    for (const action of getGameHubRuntimeActions(draft, channel, { limit: 250 })) {
+      const at = Date.parse(String(action?.at || ''));
+      if (Number.isFinite(at) && now - at <= ACTIVITY_IDLE_MS) recent.add(String(action.gameId));
+    }
+
+    const mosaic = mosaicPublicSnapshot(draft, channel);
+    let changed = false;
+    for (const gameId of ACTIVITY_GAME_IDS) {
+      if (!activeGameIds.includes(gameId)) continue;
+      const mosaicStillActive = gameId === 'pixelbattle' && mosaic.artwork?.status === 'active';
+      if (recent.has(gameId) || mosaicStillActive) continue;
+      setChannelGameRunning(draft, channel, gameId, false);
+      changed = true;
+    }
+
+    return {
+      changed,
+      result: {
+        gameIds: resolveChannelGameIds(draft, channel),
+        suspendedGameIds: mosaic.artwork?.status === 'suspended' ? ['pixelbattle'] : [],
+      },
+    };
+  });
+
+  const gameIds = (state as any).gameIds || [];
+  const suspendedGameIds = (state as any).suspendedGameIds || [];
   return NextResponse.json({ channel, gameIds, games: publicGames(gameIds), suspendedGameIds });
 }
 
