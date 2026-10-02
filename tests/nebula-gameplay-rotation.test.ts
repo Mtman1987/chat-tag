@@ -164,11 +164,12 @@ test('Word Chain neutral answers use a bounded parent majority vote', () => {
 });
 
 
-test('activity-game timeout stops persisted game state instead of only hiding the overlay', () => {
+test('high-frequency channel state reads never take the shared write lock', () => {
   const route = readFileSync(new URL('../src/app/api/game-hub/channel/route.ts', import.meta.url), 'utf8');
-  assert.match(route, /ACTIVITY_IDLE_MS = 30 \* 60_000/);
-  assert.match(route, /getNebulaChatEvents\(channel, '', 250\)/);
-  assert.match(route, /getGameHubRuntimeActions\(draft, channel, \{ limit: 250 \}\)/);
-  assert.match(route, /setChannelGameRunning\(draft, channel, gameId, false\)/);
-  assert.match(route, /mosaicStillActive/);
+  const getStart = route.indexOf('export async function GET');
+  const postStart = route.indexOf('export async function POST');
+  const getBody = route.slice(getStart, postStart);
+  assert.match(getBody, /const state = await readAppState\(\)/);
+  assert.doesNotMatch(getBody, /updateAppState(?:IfChanged)?\(/);
+  assert.doesNotMatch(getBody, /setChannelGameRunning\(/);
 });
