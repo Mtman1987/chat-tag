@@ -174,8 +174,9 @@ export default function OverlayPage() {
   const prevOverlayMessageTs = useRef<number | null>(null);
   const prevIt = useRef<string | null>(null);
   const lastHistoryShow = useRef<number>(0);
-  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'word' | 'turn' | 'live'>('leaderboard');
+  const nextCycleMode = useRef<'history' | 'leaderboard' | 'grid' | 'word' | 'turn' | 'riddle' | 'live'>('leaderboard');
   const dataRef = useRef<OverlayState | null>(null);
+  const previousTreasureTurn = useRef('');
   const broadcastRef = useRef<Broadcast | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -685,6 +686,22 @@ export default function OverlayPage() {
             fireBroadcast({ type: 'newit', lines: [`${newIt} is now IT!`], icon: '🎯', color: '#00d9ff', glow: '#00d9ff', sound: 'new-it' }, 11000);
           }
         }
+        const treasure = next.activeTreasureTurn;
+        const treasureKey = treasure ? `${treasure.current}:${treasure.next}:${treasure.challenge?.coordinate || ''}:${treasure.challenge?.question || ''}` : '';
+        if (loungeCompact && treasure && treasureKey !== previousTreasureTurn.current) {
+          queueBroadcast({ type: 'history', icon: '🧭', color: '#22d3ee', glow: '#8b5cf6', payload: { treasureTurn: treasure }, lines: [
+            `YOUR TURN: ${treasure.current || 'spmt treasure to join'}`,
+            `UP NEXT: ${treasure.next || 'Waiting for a player'}`,
+            'CLOCK:',
+          ] }, 15000);
+        }
+        if (loungeCompact && treasure?.challenge && treasureKey !== previousTreasureTurn.current) {
+          queueBroadcast({ type: 'history', icon: '🧭', color: '#22d3ee', glow: '#8b5cf6', lines: [
+            `${treasure.challenge.coordinate} · ${treasure.challenge.clue.toUpperCase()}`,
+            treasure.challenge.question, 'spmt treasure answer <answer>',
+          ] }, 15000);
+        }
+        previousTreasureTurn.current = treasureKey;
         prevIt.current = newIt;
         setData(next);
         dataRef.current = next;
@@ -693,7 +710,7 @@ export default function OverlayPage() {
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [buildBroadcastFromOverlayMessage, fireBroadcast, isPreview, queueBroadcast, userId]);
+  }, [buildBroadcastFromOverlayMessage, fireBroadcast, isPreview, queueBroadcast, userId, loungeCompact]);
 
   useEffect(() => {
     broadcastRef.current = broadcast;
@@ -703,7 +720,7 @@ export default function OverlayPage() {
     if (isPreview) return;
     historyTimer.current = setInterval(() => {
       const current = dataRef.current;
-      if (!current || broadcastRef.current || Date.now() - lastHistoryShow.current <= historyInterval) return;
+      if (!current || broadcastRef.current || Date.now() - lastHistoryShow.current <= (loungeCompact && current.activeTreasureTurn ? 15000 : historyInterval)) return;
 
       if (nextCycleMode.current === 'leaderboard') {
         nextCycleMode.current = 'grid';
@@ -730,7 +747,7 @@ export default function OverlayPage() {
       }
 
       if (nextCycleMode.current === 'turn') {
-        nextCycleMode.current = 'history';
+        nextCycleMode.current = 'riddle';
         const turn = current.activeTreasureTurn;
         if (loungeCompact && turn) {
           const seconds = turn.expiresAt ? Math.max(0, Math.ceil((Date.parse(turn.expiresAt) - Date.now()) / 1000)) : 0;
@@ -738,8 +755,19 @@ export default function OverlayPage() {
             `YOUR TURN: ${turn.current || 'spmt treasure to join'}`,
             `UP NEXT: ${turn.next || 'Waiting for a player'}`,
             `CLOCK: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`,
-            ...(turn.challenge ? [`${turn.challenge.coordinate} · ${turn.challenge.clue.toUpperCase()}: ${turn.challenge.question}`] : []),
-            ...turn.rows.map(row => `${row.username}: ${row.score} pts`),
+          ] }, 15000);
+          return;
+        }
+      }
+
+      if (nextCycleMode.current === 'riddle') {
+        nextCycleMode.current = 'history';
+        const riddle = current.activeTreasureTurn?.challenge;
+        if (loungeCompact && riddle) {
+          fireBroadcast({ type: 'history', icon: '🧭', color: '#22d3ee', glow: '#8b5cf6', lines: [
+            `${riddle.coordinate} · ${riddle.clue.toUpperCase()}`,
+            riddle.question,
+            'spmt treasure answer <answer>',
           ] }, 15000);
           return;
         }
@@ -779,7 +807,7 @@ export default function OverlayPage() {
   const compactAnnouncementActive = loungeCompact && Boolean(broadcast);
 
   return (
-    <div style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff', boxSizing: 'border-box' }}>
+    <div data-chat-tag-rotation="full-size-v2" style={{ background: 'transparent', width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', fontFamily: "'Segoe UI', Arial, sans-serif", color: '#fff', boxSizing: 'border-box' }}>
       {confetti.map((piece) => (
         <div
           key={piece.id}

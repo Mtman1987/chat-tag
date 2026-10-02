@@ -3,6 +3,7 @@ import { isBotRequest } from '@/lib/auth';
 import { getBotSecret } from '@/lib/runtime-secrets';
 import { getGameHubGame } from '@/lib/game-hub-registry';
 import { appendNebulaChatEvent } from '@/lib/game-hub-event-bus';
+import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
 import { recordChatWarsMessage } from '@/lib/chat-wars';
 import {
   GAME_SCORE_INTERVAL_MS,
@@ -140,6 +141,14 @@ export async function POST(req: NextRequest) {
       const chatWars = chatWarsAttemptDue
         ? recordChatWarsMessage(state, { channel, userId: body.userId, username, displayName: cleanText(body.displayName || username, 80), message })
         : { changed: false, outcome: 'ignored' as const };
+      const played = new Set(result.scoredGameIds);
+      if (chatWars.changed) played.add('chatwars');
+      if (phraseGuess.changed) played.add('phraseguess');
+      if (wordChain.changed) played.add('wordchain');
+      for (const gameId of played) recordGameHubRuntimeAction(state, {
+        channel, gameId, actorId: body.userId, username, displayName: body.displayName,
+        action: 'play', message,
+      });
       return {
         changed: result.scoredGameIds.length > 0 || result.pointsAwarded > 0 || phraseGuess.changed || wordChain.changed || chatWars.changed,
         result: { ...result, participatingGameIds, gameInputIds, eventGameIds, phraseGuess, wordChain, chatWars },
