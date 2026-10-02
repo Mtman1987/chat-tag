@@ -1094,11 +1094,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (game.id === 'treasurehunt') {
-    const announceTurn = async (reply: string) => {
+    const announceTurn = async (reply: string, options: { speak?: boolean; link?: boolean } = {}) => {
       const snapshot = treasureHuntPublicSnapshot(await readAppState(), channel);
       const turnMessage = treasureTurnAnnouncement(snapshot);
-      void queueStellaSpeech(turnMessage, channel);
-      return NextResponse.json({ handled: true, reply: `${reply} ${turnMessage}`.slice(0, 480) });
+      if (options.speak !== false && body.source !== 'nebula-controller') void queueStellaSpeech(turnMessage, channel);
+      const text = `${reply} ${turnMessage}`;
+      return NextResponse.json({ handled: true, reply: options.link ? gameReplyWithPopout(req, channel, game.id, text) : text.slice(0, 480) });
     };
     if (!action || action === 'join') {
       const result = await updateAppState((draft) => {
@@ -1106,7 +1107,7 @@ export async function POST(req: NextRequest) {
         if (joined.changed) recordGameHubRuntimeAction(draft, { channel, gameId: game.id, actorId: userId, username, displayName, action: 'join', args: [], message: String(body.message || '') });
         return joined;
       });
-      return announceTurn(`@${displayName} ${result.alreadyJoined ? `is already #${result.position}` : `joined at #${result.position}`} in the Treasure Hunt rotation.`);
+      return announceTurn(`@${displayName} ${result.alreadyJoined ? `is already #${result.position}` : `joined at #${result.position}`} in the Treasure Hunt rotation.`, { speak: result.changed, link: true });
     }
     if (action === 'leave') {
       const result = await updateAppState((draft) => {
@@ -1114,10 +1115,10 @@ export async function POST(req: NextRequest) {
         leaveGameHubGame(draft, normalizeGameHubPlayerId(userId, username), game.id);
         return left;
       });
-      return announceTurn(`@${displayName} ${result.left ? 'left the Treasure Hunt rotation' : 'was not in the Treasure Hunt rotation'}.`);
+      return announceTurn(`@${displayName} ${result.left ? 'left the Treasure Hunt rotation' : 'was not in the Treasure Hunt rotation'}.`, { speak: result.left });
     }
     if (action === 'status') {
-      return announceTurn(`@${displayName} Treasure Hunt turn order:`);
+      return announceTurn(`@${displayName} Treasure Hunt turn order:`, { speak: false, link: true });
     }
     if (action === 'kick') {
       const result = await updateAppState((draft) => voteKickTreasureTurn(draft, { channel, userId, username }));
@@ -1163,7 +1164,7 @@ export async function POST(req: NextRequest) {
     if (result.outcome === 'already-dug') return NextResponse.json({ handled: true, reply: `@${displayName} ${result.coordinate} was already dug · ${result.dig?.clue}.` });
     if (result.outcome === 'challenge-active') return NextResponse.json({ handled: true, reply: `@${displayName} finish the active ${result.challenge?.clue.toUpperCase()} riddle at ${result.challenge?.coordinate} first: ${result.challenge?.question} · answer with spmt treasure answer your answer.` });
     if (result.outcome === 'complete') return NextResponse.json({ handled: true, reply: `@${displayName} today’s Treasure Hunt is complete. A fresh map opens tomorrow.` });
-    void queueStellaSpeech(`${displayName}, ${result.clue === 'boiling' ? 'treasure touches that square. ' : ''}${result.clue !== 'cold' ? 'You have five minutes to solve the riddle.' : 'Your clock is running.'}`, channel);
+    if (body.source !== 'nebula-controller') void queueStellaSpeech(`${displayName}, ${result.clue === 'boiling' ? 'treasure touches that square. ' : ''}${result.clue !== 'cold' ? 'You have five minutes to solve the riddle.' : 'Your clock is running.'}`, channel);
     return NextResponse.json({ handled: true, reply: `@${displayName} chose ${result.coordinate}: ${result.clue?.toUpperCase()}${result.clue === 'boiling' ? ' · treasure touches this square; find its exact square' : ''}${result.clue !== 'cold' ? ' · five-minute riddle timer' : ''} · RIDDLE: ${result.question} · answer with spmt treasure answer your answer.` });
   }
 

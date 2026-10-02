@@ -189,7 +189,7 @@ export function leaveTreasureRotation(state: any, input: { channel: unknown; use
 
 export function settleTreasureTurn(state: any, channelValue: unknown, now = Date.now()) {
   const game = getTreasureHuntState(state, channelValue, now);
-  if (!game.rotation.length || !game.turnExpiresAt || Date.parse(game.turnExpiresAt) > now) return { changed: false, skipped: null, dropped: null, current: game.rotation[0] || null };
+  if (game.completedAt || !game.rotation.length || !game.turnExpiresAt || Date.parse(game.turnExpiresAt) > now) return { changed: false, skipped: null, dropped: null, current: game.rotation[0] || null };
   const result = advanceTurn(game, now, { skipped: true });
   return { changed: true, ...result };
 }
@@ -310,7 +310,7 @@ export function answerTreasureRiddle(state: any, input: { channel: unknown; answ
   }
   const coordinate = challenge.coordinate; const clue = challenge.clue;
   delete game.activeChallenge;
-  if (game.foundCells.length >= TREASURE_COUNT) { game.completedAt = new Date(now).toISOString(); joined.membership.wins += 1; }
+  if (game.foundCells.length >= TREASURE_COUNT) { game.completedAt = new Date(now).toISOString(); delete game.turnExpiresAt; joined.membership.wins += 1; }
   else advanceTurn(game, now);
   game.updatedAt = new Date(now).toISOString();
   return { changed: true, outcome: 'solved' as const, coordinate, clue, digPoints, solvePoints, treasureCoordinate, foundCount: game.foundCells.length, complete: Boolean(game.completedAt) };

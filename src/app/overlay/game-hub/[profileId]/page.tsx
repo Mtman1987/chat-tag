@@ -181,7 +181,7 @@ export default function GameHubOverlayPage() {
         : [];
     }));
     return profile.gameIds
-      .filter((gameId) => active.has(gameId) && !suspended.has(gameId) && (!requireRecentPlay || recentlyPlayed.has(gameId) || gameId === 'pixelbattle'))
+      .filter((gameId) => active.has(gameId) && !suspended.has(gameId) && (!requireRecentPlay || recentlyPlayed.has(gameId) || gameId === 'pixelbattle' || gameId === 'treasurehunt'))
       .map((gameId) => GAME_HUB_CATALOG.find((game) => game.id === gameId))
       .filter((game): game is GameHubGame => Boolean(game));
   }, [activeGameIds, activityNow, events, profile, suspendedGameIds]);
@@ -256,3 +256,4 @@ export default function GameHubOverlayPage() {
     </main>
   );
 }
+

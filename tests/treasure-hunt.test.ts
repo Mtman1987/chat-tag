@@ -187,3 +187,18 @@ test('Treasure Pass has a fixed price and reveals an exact unfound coordinate', 
   assert.match(pass.coordinate || '', /^[A-T](?:2[0-5]|1\d|[1-9])$/);
   assert.equal(draft.gameSettings.default.gameHub.players['twitch:1'].gamePointsBalance, 0);
 });
+
+
+test('completed boards never settle or announce missed turns', () => {
+  const draft = state();
+  const game = getTreasureHuntState(draft, 'space', 1);
+  game.treasureCells = [0, 1, 2];
+  game.foundCells = [0, 1];
+  digTreasure(draft, { ...player, coordinate: 'C1', now: 2 });
+  const answer = game.activeChallenge!.answers[0];
+  assert.equal(answerTreasureRiddle(draft, { ...player, answer, now: 3 }).complete, true);
+  assert.equal(game.turnExpiresAt, undefined);
+  game.turnExpiresAt = new Date(4).toISOString();
+  assert.equal(settleTreasureTurn(draft, 'space', 500_000).changed, false);
+  assert.equal(game.rotation[0].skips, 0);
+});

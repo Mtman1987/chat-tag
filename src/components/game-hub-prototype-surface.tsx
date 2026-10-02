@@ -293,10 +293,10 @@ function TreasureBoard({ channel, gridOnly = false }: { channel: string; gridOnl
   </div>;
   const seconds = snapshot.turn.expiresAt ? Math.max(0, Math.ceil((Date.parse(snapshot.turn.expiresAt) - Date.now()) / 1000)) : 0;
   const next = snapshot.turn.next || snapshot.turn.queue[1];
-  const turn = <div className="shrink-0 border-b border-cyan-300/30 bg-slate-950 px-2 py-1 text-center text-[clamp(10px,1.4vw,16px)] font-bold leading-tight text-white" aria-live="polite">
+  const turn = <div className="shrink-0 border-b border-cyan-300/30 bg-slate-950 px-2 py-1 text-center text-[clamp(10px,1.4vw,16px)] font-bold leading-tight text-white">
     {snapshot.complete ? <b className="text-yellow-300">BOARD COMPLETE · {snapshot.foundCount}/{snapshot.treasureCount} treasures found</b> : <>
-      <div><span className="text-cyan-300">YOUR TURN:</span> {snapshot.turn.current?.username || 'Join with spmt treasure'}</div>
-      <div><span className="text-amber-300">UP NEXT:</span> {next?.username || 'Waiting for another player'} · <span className="text-white/70">{snapshot.turn.riddleTurn ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · RIDDLE TIMER` : snapshot.turn.current ? `${seconds}s to choose / answer` : 'No active clock'}</span></div>
+      <div><span aria-live="polite"><span className="text-cyan-300">YOUR TURN:</span> {snapshot.turn.current?.username || 'Join with spmt treasure'}</span></div>
+      <div><span aria-live="polite"><span className="text-amber-300">UP NEXT:</span> {next?.username || 'Waiting for another player'}</span> · <span className="text-white/70">{snapshot.turn.riddleTurn ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · RIDDLE TIMER` : snapshot.turn.current ? `${seconds}s to choose / answer` : 'No active clock'}</span></div>
     </>}
   </div>;
   const challenge = <div className="shrink-0 bg-slate-950/95 px-2 py-1 text-center text-[clamp(9px,1.2vw,13px)] leading-tight text-white">
