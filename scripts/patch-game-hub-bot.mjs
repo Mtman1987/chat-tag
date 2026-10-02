@@ -8,15 +8,17 @@ const original = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 let source = original;
 
 const choiceStoreMarker = 'const pendingGameChoices = new Map();';
+const choiceTtlMarker = 'const GAME_CHOICE_TTL_MS = 2 * 60 * 1000;';
 const choiceStoreTarget = 'const recentMessages = new Set();';
 if (!source.includes(choiceStoreMarker)) {
   if (!source.includes(choiceStoreTarget)) throw new Error('Game choice store target was not found.');
   source = source.replace(choiceStoreTarget, `${choiceStoreTarget}\nconst pendingGameChoices = new Map();`);
 }
+if (!source.includes(choiceTtlMarker)) source = source.replace(choiceStoreMarker, `${choiceStoreMarker}\n${choiceTtlMarker}`);
 
 const numericChoiceMarker = 'const pendingChoice = pendingGameChoices.get(rawChoiceKey);';
 const numericChoiceTarget = `    const rawMessage = message.trim();\n    const msg = rawMessage.toLowerCase();\n    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ')) return;\n    // Normalize: ensure @spmt prefix\n    const normalizedMsg = (msg.startsWith('spmt ') || msg.startsWith('!spmt '))\n      ? '@' + rawMessage.trim().replace(/^!/, '')\n      : rawMessage.trim();`;
-const numericChoiceReplacement = `    let rawMessage = message.trim();\n    let msg = rawMessage.toLowerCase();\n    const rawChoiceKey = channel.replace('#', '').toLowerCase() + ':' + senderLogin;\n    const pendingChoice = pendingGameChoices.get(rawChoiceKey);\n    const pendingChoiceNumber = /^\\d{1,2}$/.test(msg) ? Number(msg) : 0;\n    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ')) {\n      if (!pendingChoice || pendingChoice.expiresAt < Date.now() || pendingChoiceNumber < 1 || pendingChoiceNumber > pendingChoice.choices.length) {\n        if (pendingChoice?.expiresAt < Date.now()) pendingGameChoices.delete(rawChoiceKey);\n        return;\n      }\n      rawMessage = String(pendingChoice.choices[pendingChoiceNumber - 1].command || '');\n      msg = rawMessage.toLowerCase();\n      pendingGameChoices.delete(rawChoiceKey);\n    }\n    // Normalize: ensure @spmt prefix\n    const normalizedMsg = (msg.startsWith('spmt ') || msg.startsWith('!spmt '))\n      ? '@' + rawMessage.trim().replace(/^!/, '')\n      : rawMessage.trim();`;
+const numericChoiceReplacement = `    let rawMessage = message.trim();\n    let msg = rawMessage.toLowerCase();\n    const rawChoiceKey = channel.replace('#', '').toLowerCase() + ':' + senderLogin;\n    const pendingChoice = pendingGameChoices.get(rawChoiceKey);\n    const pendingChoiceMatch = msg.match(/^(?:(?:!|@)?spmt\\s+)?(\\d{1,2})$/i);\n    const pendingChoiceNumber = pendingChoiceMatch ? Number(pendingChoiceMatch[1]) : 0;\n    if (!msg.startsWith('@spmt ') && !msg.startsWith('spmt ') && !msg.startsWith('!spmt ')) {\n      if (!pendingChoice || pendingChoice.expiresAt < Date.now() || pendingChoiceNumber < 1 || pendingChoiceNumber > pendingChoice.choices.length) {\n        if (pendingChoice?.expiresAt < Date.now()) pendingGameChoices.delete(rawChoiceKey);\n        return;\n      }\n      rawMessage = String(pendingChoice.choices[pendingChoiceNumber - 1].command || '');\n      msg = rawMessage.toLowerCase();\n      pendingGameChoices.delete(rawChoiceKey);\n    }\n    // Normalize: ensure @spmt prefix\n    const normalizedMsg = (msg.startsWith('spmt ') || msg.startsWith('!spmt '))\n      ? '@' + rawMessage.trim().replace(/^!/, '')\n      : rawMessage.trim();`;
 if (!source.includes(numericChoiceMarker)) {
   if (!source.includes(numericChoiceTarget)) throw new Error('Numeric game choice parser target was not found.');
   source = source.replace(numericChoiceTarget, numericChoiceReplacement);
@@ -79,7 +81,7 @@ commandReplacement = commandReplacement
   )
   .replace(
     '      if (gamesHubCommand?.rewriteCommand) {',
-    "      if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {\n        pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + 30_000 });\n      }\n      if (gamesHubCommand?.rewriteCommand) {",
+    "      if (Array.isArray(gamesHubCommand?.choices) && gamesHubCommand.choices.length) {\n        pendingGameChoices.set(rawChoiceKey, { choices: gamesHubCommand.choices, expiresAt: Date.now() + GAME_CHOICE_TTL_MS });\n      }\n      if (gamesHubCommand?.rewriteCommand) {",
   )
   .replace(
     '      if (gamesHubCommand?.handled) {',
@@ -142,6 +144,7 @@ if (
   !source.includes("const chatTagNamespace = cmd === 'chattag' || cmd === 'taggame'") ||
   !source.includes('sharedNebulaCommands.has(cmd)') ||
   !source.includes(choiceStoreMarker) ||
+  !source.includes(choiceTtlMarker) ||
   !source.includes(numericChoiceMarker) ||
   !source.includes(mosaicShortcutMarker) ||
   !source.includes("messageId: tags.id || ''") ||
