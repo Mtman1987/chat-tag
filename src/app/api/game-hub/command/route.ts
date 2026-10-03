@@ -194,6 +194,14 @@ export async function POST(req: NextRequest) {
   if (!channel || !username) return NextResponse.json({ handled: false });
 
   let command = parts[0].toLowerCase();
+  if (command === 'quackdex' || (['quackverse', 'quack'].includes(command) && parts[1]?.toLowerCase() === 'quackdex')) {
+    const launchUrl = `${gamePopoutUrl(req, channel, 'quackverse')}&tab=Quackdex`;
+    return NextResponse.json({
+      handled: true,
+      reply: `🦆 @${displayName} Quackdex: your cards, decks, other players’ collections, and trades. ${launchUrl}`.slice(0, 480),
+      launchUrl,
+    });
+  }
   const directState = await readAppState();
   const activeForDirectRouting = resolveChannelGameIds(directState, channel);
   const activeActivityGame = currentActivityGameId(directState, channel, activeForDirectRouting);
