@@ -1,3 +1,4 @@
+import type { QuackverseTradeOffer } from './quackverse-trades';
 export type QuackversePlayerId = 'playerOne' | 'playerTwo';
 
 export type QuackverseSavedPiece = {
@@ -60,6 +61,7 @@ export type QuackverseSavedState = {
 };
 
 export type QuackverseCollectionState = {
+  tradeOffers?: QuackverseTradeOffer[];
   cards: number[];
   deck: number[];
   activeDeckId: string;
@@ -168,6 +170,7 @@ export function normalizeQuackverseCollection(value: Partial<QuackverseCollectio
         .filter((deck) => deck.id)
     : [];
   return {
+    tradeOffers: Array.isArray(value?.tradeOffers) ? value.tradeOffers.slice(-200) : [],
     cards: Array.isArray(value?.cards) ? value.cards.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.cards,
     deck: Array.isArray(value?.deck) ? value.deck.map(Number).filter((cardId) => Number.isFinite(cardId)) : fallback.deck,
     activeDeckId: typeof value?.activeDeckId === 'string' && value.activeDeckId.trim() ? value.activeDeckId.trim() : fallback.activeDeckId,

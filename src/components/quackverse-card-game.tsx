@@ -54,6 +54,7 @@ import {
 } from '@/lib/quackverse-state';
 import { useSession } from '@/contexts/session-context';
 import { QuackverseArtManager } from '@/components/quackverse-art-manager';
+import { QuackdexTrading } from '@/components/quackdex-trading';
 
 type PlayerId = 'playerOne' | 'playerTwo';
 type ActionMode = 'select' | 'move' | 'attack';
@@ -2177,6 +2178,132 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
     return () => clearTimeout(timeout);
   }, [activePlayer, npcPlayers, runNpcTurn, turnNumber, winner]);
 
+  const quackdexPanel = (
+    <div className="space-y-4">
+      <div><h2 className="font-headline text-xl text-white">Quackdex</h2><p className="text-sm text-slate-300">Your cards, saved decks, other players’ collections, and trades.</p></div>
+      
+            <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+              <section className="rounded-lg border border-white/10 bg-black/20 p-4">
+                <h3 className="font-headline text-lg text-white">My Quackverse Cards</h3>
+                <div className="mt-3">
+                  <Button type="button" className="w-full" disabled={pendingPacks <= 0 || isOpeningPack} onClick={openPack}>
+                    {isOpeningPack ? 'Opening...' : `Open Pack (${pendingPacks}/${dailyPackLimit} left today)`}
+                  </Button>
+                </div>
+                {packError && <div className="mt-2 rounded-md border border-amber-300/30 bg-amber-300/10 p-2 text-xs text-amber-100">{packError}</div>}
+                <div className="mt-3 text-sm text-slate-300">
+                  Owned: {collection.length} cards · Unique: {collectionSummary.length}/{quackverseCards.length} · Deck: {deck.length}/20
+                </div>
+                <div className="mt-2 rounded-md bg-white/[0.05] p-2 text-xs text-slate-400">
+                  Pack slots: utility common/uncommon, utility up to epic, duck common/uncommon, duck uncommon/rare, wild.
+                </div>
+                {packAuditPanel}
+                {lastPack.length > 0 && (
+                  <div className="mt-3 grid grid-cols-5 gap-2">
+                    {lastPack.map((card) => (
+                      <button key={`${card.id}-${card.name}`} type="button" className="rounded-md border border-white/10 bg-white/[0.04] p-2 text-left text-[0.65rem] text-slate-200 hover:border-cyan-300/60" onClick={() => setSelectedCardId(card.id)}>
+                        <div className="font-semibold text-white">{card.name}</div>
+                        <div>{card.rarity}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-white">Pack Preview</div>
+                    <div className="text-xs text-slate-400">Click a card above to inspect it</div>
+                  </div>
+                  <div className="max-w-md">
+                    <CardFace card={selectedCard} selected />
+                  </div>
+                  {selectedCard.flavor && (
+                    <p className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm italic text-slate-300">
+                      {selectedCard.flavor}
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-white/10 bg-black/20 p-4">
+                <h3 className="font-headline text-lg text-white">Deck Builder</h3>
+                <p className="mt-1 text-sm text-slate-400">Build your Quackverse deck from cards you own. Add cards below, name your deck, and save it.</p>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
+                  <div className="rounded-md bg-white/[0.05] p-2">Cards {deck.length}/20</div>
+                  <div className="rounded-md bg-white/[0.05] p-2">Ducks {deckDuckCount}/10+</div>
+                  <div className="rounded-md bg-white/[0.05] p-2">Gear {deckEquipmentCount}/8 max</div>
+                </div>
+                <div className={cn('mt-2 rounded-md p-2 text-xs', isDeckPlayable ? 'bg-emerald-400/10 text-emerald-100' : 'bg-amber-400/10 text-amber-100')}>
+                  {isDeckPlayable ? 'Deck is playable for testing.' : 'Deck needs 20 cards, at least 10 ducks, and no more than 8 equipment cards.'}
+                </div>
+                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Saved Decks</div>
+                      <div className="text-xs text-slate-400">Active: {activeDeckId === 'default' ? 'Current Deck' : savedDecks.find((item) => item.id === activeDeckId)?.name || activeDeckId}</div>
+                    </div>
+                    <Button type="button" size="sm" variant="secondary" disabled={deck.length === 0} onClick={saveCurrentDeck}>
+                      Save Deck
+                    </Button>
+                  </div>
+                  {savedDecks.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {savedDecks.map((savedDeck) => (
+                        <Button
+                          key={savedDeck.id}
+                          type="button"
+                          size="sm"
+                          variant={savedDeck.id === activeDeckId ? 'default' : 'secondary'}
+                          onClick={() => activateSavedDeck(savedDeck.id)}
+                        >
+                          {savedDeck.name} {savedDeck.wins}W/{savedDeck.losses}L
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <ScrollArea className="h-80 pr-3">
+                    <div className="space-y-2">
+                      {collectionSummary.length === 0 ? (
+                        <div className="rounded-md bg-white/[0.05] p-2 text-sm text-slate-400">Open a pack to start collecting.</div>
+                      ) : (
+                        collectionSummary.map(({ card, quantity }) => (
+                          <div key={card.id} className="flex items-center justify-between gap-2 rounded-md bg-white/[0.05] p-2 text-sm">
+                            <button type="button" className="min-w-0 flex-1 text-left text-slate-200" onClick={() => setSelectedCardId(card.id)}>
+                              <span className="font-semibold text-white">{card.name}</span>
+                              <span className="ml-2 text-slate-400">x{quantity}</span>
+                            </button>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => addToDeck(card.id)}>Add</Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                  <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                    <div className="mb-2 text-sm font-semibold text-white">Current Deck</div>
+                    <div className="flex flex-wrap gap-2">
+                      {deck.length === 0 ? (
+                        <div className="text-sm text-slate-400">No cards added yet.</div>
+                      ) : (
+                        deck.map((cardId, index) => {
+                          const card = quackverseCards.find((item) => item.id === cardId);
+                          return (
+                            <button key={`${cardId}-${index}`} type="button" className="rounded-md bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100" onClick={() => removeFromDeck(cardId)}>
+                              {card?.name || cardId}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+      <QuackdexTrading onCollectionChanged={refreshCollection} />
+    </div>
+  );
+
   if (!isCommandLayout) {
     return (
       <div className="space-y-5">
@@ -2232,7 +2359,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-secondary/50 p-1 sm:grid-cols-4">
             <TabsTrigger value="play">Play</TabsTrigger>
             <TabsTrigger value="cards">Cards</TabsTrigger>
-            <TabsTrigger value="collection">Collection</TabsTrigger>
+            <TabsTrigger value="collection">Quackdex</TabsTrigger>
             <TabsTrigger value="guide">Guide</TabsTrigger>
           </TabsList>
 
@@ -2610,125 +2737,7 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
             </div>
           </TabsContent>
 
-          <TabsContent value="collection">
-            <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-              <section className="rounded-lg border border-white/10 bg-black/20 p-4">
-                <h3 className="font-headline text-lg text-white">Collection Lab</h3>
-                <div className="mt-3">
-                  <Button type="button" className="w-full" disabled={pendingPacks <= 0 || isOpeningPack} onClick={openPack}>
-                    {isOpeningPack ? 'Opening...' : `Open Pack (${pendingPacks}/${dailyPackLimit} left today)`}
-                  </Button>
-                </div>
-                {packError && <div className="mt-2 rounded-md border border-amber-300/30 bg-amber-300/10 p-2 text-xs text-amber-100">{packError}</div>}
-                <div className="mt-3 text-sm text-slate-300">
-                  Owned: {collection.length} cards · Unique: {collectionSummary.length}/{quackverseCards.length} · Deck: {deck.length}/20
-                </div>
-                <div className="mt-2 rounded-md bg-white/[0.05] p-2 text-xs text-slate-400">
-                  Pack slots: utility common/uncommon, utility up to epic, duck common/uncommon, duck uncommon/rare, wild.
-                </div>
-                {packAuditPanel}
-                {lastPack.length > 0 && (
-                  <div className="mt-3 grid grid-cols-5 gap-2">
-                    {lastPack.map((card) => (
-                      <button key={`${card.id}-${card.name}`} type="button" className="rounded-md border border-white/10 bg-white/[0.04] p-2 text-left text-[0.65rem] text-slate-200 hover:border-cyan-300/60" onClick={() => setSelectedCardId(card.id)}>
-                        <div className="font-semibold text-white">{card.name}</div>
-                        <div>{card.rarity}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-white">Pack Preview</div>
-                    <div className="text-xs text-slate-400">Click a card above to inspect it</div>
-                  </div>
-                  <div className="max-w-md">
-                    <CardFace card={selectedCard} selected />
-                  </div>
-                  {selectedCard.flavor && (
-                    <p className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm italic text-slate-300">
-                      {selectedCard.flavor}
-                    </p>
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-white/10 bg-black/20 p-4">
-                <h3 className="font-headline text-lg text-white">Deck Builder</h3>
-                <p className="mt-1 text-sm text-slate-400">Prototype flow: open packs, collect cards, then add owned copies to a simple deck.</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-300">
-                  <div className="rounded-md bg-white/[0.05] p-2">Cards {deck.length}/20</div>
-                  <div className="rounded-md bg-white/[0.05] p-2">Ducks {deckDuckCount}/10+</div>
-                  <div className="rounded-md bg-white/[0.05] p-2">Gear {deckEquipmentCount}/8 max</div>
-                </div>
-                <div className={cn('mt-2 rounded-md p-2 text-xs', isDeckPlayable ? 'bg-emerald-400/10 text-emerald-100' : 'bg-amber-400/10 text-amber-100')}>
-                  {isDeckPlayable ? 'Deck is playable for testing.' : 'Deck needs 20 cards, at least 10 ducks, and no more than 8 equipment cards.'}
-                </div>
-                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-white">Saved Decks</div>
-                      <div className="text-xs text-slate-400">Active: {activeDeckId === 'default' ? 'Current Deck' : savedDecks.find((item) => item.id === activeDeckId)?.name || activeDeckId}</div>
-                    </div>
-                    <Button type="button" size="sm" variant="secondary" disabled={deck.length === 0} onClick={saveCurrentDeck}>
-                      Save Deck
-                    </Button>
-                  </div>
-                  {savedDecks.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {savedDecks.map((savedDeck) => (
-                        <Button
-                          key={savedDeck.id}
-                          type="button"
-                          size="sm"
-                          variant={savedDeck.id === activeDeckId ? 'default' : 'secondary'}
-                          onClick={() => activateSavedDeck(savedDeck.id)}
-                        >
-                          {savedDeck.name} {savedDeck.wins}W/{savedDeck.losses}L
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <ScrollArea className="h-80 pr-3">
-                    <div className="space-y-2">
-                      {collectionSummary.length === 0 ? (
-                        <div className="rounded-md bg-white/[0.05] p-2 text-sm text-slate-400">Open a pack to start collecting.</div>
-                      ) : (
-                        collectionSummary.map(({ card, quantity }) => (
-                          <div key={card.id} className="flex items-center justify-between gap-2 rounded-md bg-white/[0.05] p-2 text-sm">
-                            <button type="button" className="min-w-0 flex-1 text-left text-slate-200" onClick={() => setSelectedCardId(card.id)}>
-                              <span className="font-semibold text-white">{card.name}</span>
-                              <span className="ml-2 text-slate-400">x{quantity}</span>
-                            </button>
-                            <Button type="button" size="sm" variant="secondary" onClick={() => addToDeck(card.id)}>Add</Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                  <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                    <div className="mb-2 text-sm font-semibold text-white">Current Deck</div>
-                    <div className="flex flex-wrap gap-2">
-                      {deck.length === 0 ? (
-                        <div className="text-sm text-slate-400">No cards added yet.</div>
-                      ) : (
-                        deck.map((cardId, index) => {
-                          const card = quackverseCards.find((item) => item.id === cardId);
-                          return (
-                            <button key={`${cardId}-${index}`} type="button" className="rounded-md bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100" onClick={() => removeFromDeck(cardId)}>
-                              {card?.name || cardId}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-          </TabsContent>
+          <TabsContent value="collection">{quackdexPanel}</TabsContent>
 
           <TabsContent value="guide">
             <Accordion type="multiple" defaultValue={['rules', 'learn']} className="space-y-3">
@@ -2857,12 +2866,15 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
         </div>
 
         <Tabs defaultValue="controls" className="space-y-3">
-          <TabsList className="grid h-auto w-full grid-cols-4 bg-secondary/50 p-1">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-secondary/50 p-1 sm:grid-cols-5">
+            <TabsTrigger value="quackdex">Quackdex</TabsTrigger>
             <TabsTrigger value="controls">Controls</TabsTrigger>
             <TabsTrigger value="board">Board</TabsTrigger>
             <TabsTrigger value="setup">Setup</TabsTrigger>
             <TabsTrigger value="log">Log</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="quackdex">{quackdexPanel}</TabsContent>
 
           <TabsContent value="controls" className="space-y-3">
             {seatControlPanel}
