@@ -8,6 +8,7 @@ const game=id=>({id,name:id==='pixelbattle'?'Mosaic':id,commands:[]});
 const state={};
 const post=mod('src/app/api/game-hub/command/route.ts',id=>{
  if(id==='next/server')return {NextResponse:{json:(body,init)=>({body,status:init?.status||200})}};
+ if(id==='@/lib/chat-tag-checkin')return {runChatTagCheckin:async(s,input)=>({handled:true,reply:'Space Mountain check-in in #'+input.channel})};
  if(id==='@/lib/auth')return {isBotRequest:()=>true,isStreamWeaverGameHubRequest:()=>false};
  if(id==='@/lib/game-hub-commands')return commands;
  if(id==='@/lib/public-origin')return {getPublicAppOrigin:()=> 'https://chat-tag-new.fly.dev'};
@@ -28,5 +29,6 @@ require('node:test')('system commands bypass focused Mosaic themes and stop the 
  const dex=await post(req('spmt quackdex'));assert.match(dex.body.launchUrl,/tab=Quackdex/);assert.equal(queued,0);
  for(const text of ['spmt stop','spmt stop mosaic','spmt mosaic stop']){active=['pixelbattle'];writes=[];const res=await post(req(text));assert.equal(queued,0);assert.ok(writes.some(x=>x.id==='pixelbattle'&&!x.on));assert.deepEqual(active,[]);}
  active=['pixelbattle'];for(const text of ['spmt rank','spmt commands','spmt say','spmt raffle','spmt checkin']){await post(req(text));assert.equal(queued,0);}
+ const checkin=await post(req('spmt checkin'));assert.equal(checkin.body.handled,true);assert.match(checkin.body.reply,/Space Mountain check-in in #spacemountainlive/);assert.equal(queued,0);
  const owl=await post(req('spmt owl'));assert.equal(queued,1);assert.equal(owl.body.mosaicGenerationQueued,true);
 });

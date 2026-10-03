@@ -2119,7 +2119,8 @@ console.log = (...args) => {
           isModerator: Boolean(tags?.mod),
           isAdmin: isAdminUser,
         }),
-        ...(legacyChatTagCommands.has(cmd) && !sharedNebulaCommands.has(cmd) ? { signal: AbortSignal.timeout(1500) } : {}),
+        ...(cmd === 'checkin' ? { signal: AbortSignal.timeout(100000) }
+          : legacyChatTagCommands.has(cmd) && !sharedNebulaCommands.has(cmd) ? { signal: AbortSignal.timeout(1500) } : {}),
       });
       if (!gamesHubCommand?.__ok && !legacyChatTagCommands.has(cmd)) {
         if (!isMuted) await reply('@' + user + ' The game service did not answer in time. Please try that command again.');
