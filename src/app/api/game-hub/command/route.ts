@@ -241,6 +241,10 @@ export async function POST(req: NextRequest) {
   const stageMember = stageGameId && getGameHubStore(directState).players[playerId]?.joinedGames?.[stageGameId]?.active;
   const reservedRoot = new Set([
     'instructions', 'control', 'controls', 'popout', 'help', 'rules', 'games',
+    'start', 'stop', 'status', 'quackdex', 'pack', 'quackpack', 'refillpacks',
+    'admin', 'away', 'discord', 'givepass', 'kick', 'live', 'mod', 'more', 'mute',
+    'optout', 'pass', 'pinrank', 'players', 'rank', 'sleep', 'support', 'tag',
+    'ticket', 'twitch', 'unmute', 'wake', 'whosit', 'commands', 'say', 'raffle',
     'score', 'leader', 'points', 'pleader', 'leaderboard', 'rankings',
     'show', 'view', 'brush', 'dig', 'answer', 'solve', 'paint',
     'mosaic', 'chain', 'phrase',
@@ -257,7 +261,7 @@ export async function POST(req: NextRequest) {
   const explicitGameSpec = resolveGameHubCommandKey(command);
   const freeformPayload = parts.join(' ').trim();
   const freeformCandidates: string[] = [];
-  if (!explicitGameSpec && !directCommand.recognized && !specializedGameCommand && freeformPayload) {
+  if (!reservedRoot && !explicitGameSpec && !directCommand.recognized && !specializedGameCommand && freeformPayload) {
     if (activeForDirectRouting.includes('pixelbattle') && freeformPayload.length >= 2) freeformCandidates.push('pixelbattle');
     for (const gameId of wordStages) {
       if (getGameHubStore(directState).players[playerId]?.joinedGames?.[gameId]?.active) freeformCandidates.push(gameId);
@@ -314,8 +318,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const commandCollision = !explicitGuess && parts.length === 1
-    && (reservedRoot || Boolean(resolveGameHubCommandKey(command))
+  const commandCollision = !reservedRoot && !explicitGuess && parts.length === 1
+    && (Boolean(resolveGameHubCommandKey(command))
       || directCommand.recognized);
   const settings = stageGameId ? getChannelGameSettings(directState, channel) : null;
   // Remember ambiguity choices per word, not for the whole game run. Choosing
@@ -351,7 +355,7 @@ export async function POST(req: NextRequest) {
   }
 
   const routeGuess = stageGameId && (explicitGuess || (stageMember && !reservedRoot && !specializedGameCommand
-    && !directCommand.recognized) || preferredChoice === 'guess');
+    && !directCommand.recognized) || (!reservedRoot && preferredChoice === 'guess'));
   if (routeGuess) {
     if (!stageMember) {
       const join = stageGameId === 'wordchain' ? 'spmt chain' : 'spmt phrase';
