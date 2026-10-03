@@ -84,6 +84,12 @@ jobs:
         run: node --import tsx --test tests/game-hub-contract.test.ts tests/quackdex-trades.test.ts tests/game-hub-command-routing.test.cjs tests/chat-tag-checkin.test.cjs
       - name: Run canonical Personal overlay regression
         run: node --import tsx --test tests/canonical-personal-overlay.test.ts tests/admin-shell-parity.test.ts tests/layout-cleanup.test.ts
+      - name: Validate bot Docker patches
+        run: |
+          node scripts/patch-game-hub-bot.mjs
+          node scripts/patch-live-chat-pressure.mjs
+          node scripts/patch-quackverse-pack-bot.mjs
+          node --check bot.js
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
