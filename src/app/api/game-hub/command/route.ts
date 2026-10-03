@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
     }));
   }
   if (command === 'quackdex' || (['quackverse', 'quack'].includes(command) && parts[1]?.toLowerCase() === 'quackdex')) {
-    const launchUrl = `${gamePopoutUrl(req, channel, 'quackverse')}&tab=Quackdex`;
+    const launchUrl = `${publicOrigin(req)}/quackdex?channel=${encodeURIComponent(channel)}&tab=Quackdex`;
     return NextResponse.json({
       handled: true,
       reply: `🦆 @${displayName} Quackdex: your cards, decks, other players’ collections, and trades. ${launchUrl}`.slice(0, 480),
@@ -1394,3 +1394,4 @@ export async function POST(req: NextRequest) {
       : `@${displayName} joined ${game.name} · ${actionArgs.join(' ')} registered.`,
   });
 }
+
