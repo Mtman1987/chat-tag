@@ -26,9 +26,10 @@ const post=mod('src/app/api/game-hub/command/route.ts',id=>{
 require('node:test')('system commands bypass focused Mosaic themes and stop the game', async()=>{
  const req=message=>({json:async()=>({message,channel:'spacemountainlive',username:'mtman1987',userId:'1',displayName:'M.T.',isAdmin:true})});
  const lead=await post(req('spmt leader'));assert.match(lead.body.reply,/Nebula Arcade profile/);assert.equal(queued,0);
- const dex=await post(req('spmt quackdex'));assert.match(dex.body.launchUrl,/tab=Quackdex/);assert.equal(queued,0);
+ const dex=await post(req('spmt quackdex'));assert.match(dex.body.launchUrl,/\/quackdex\?/);assert.match(dex.body.launchUrl,/tab=Quackdex/);assert.equal(queued,0);
  for(const text of ['spmt stop','spmt stop mosaic','spmt mosaic stop']){active=['pixelbattle'];writes=[];const res=await post(req(text));assert.equal(queued,0);assert.ok(writes.some(x=>x.id==='pixelbattle'&&!x.on));assert.deepEqual(active,[]);}
  active=['pixelbattle'];for(const text of ['spmt rank','spmt commands','spmt say','spmt raffle','spmt checkin']){await post(req(text));assert.equal(queued,0);}
  const checkin=await post(req('spmt checkin'));assert.equal(checkin.body.handled,true);assert.match(checkin.body.reply,/Space Mountain check-in in #spacemountainlive/);assert.equal(queued,0);
  const owl=await post(req('spmt owl'));assert.equal(queued,1);assert.equal(owl.body.mosaicGenerationQueued,true);
 });
+

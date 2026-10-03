@@ -9,12 +9,12 @@ import { readAppState, updateAppState, type AppState } from '@/lib/volume-store'
 export const dynamic='force-dynamic';
 function playerDirectory(app:AppState) {
  const state=normalizeQuackverseState(app.quackverse);
- const players=new Map<string,{userId:string;username:string;cards:number[]}>();
+ const players=new Map<string,{userId:string;username:string;cards:number[];spareCards:{cardId:number;quantity:number}[]}>();
  for(const [key,record] of [...Object.entries(app.users||{}),...Object.entries(app.tagPlayers||{})]) {
    const userId=normalizeQuackverseUserId(record.id||key);
    const username=String(record.twitchUsername||'').trim().toLowerCase();
    const collection=state.collections[userId];
-   if(username&&collection?.cards.length)players.set(userId,{userId,username,cards:collection.cards});
+   if(username&&collection?.cards.length)players.set(userId,{userId,username,cards:collection.cards,spareCards:[...new Set(collection.cards)].map(cardId=>({cardId,quantity:spareQuackverseCopies(collection,cardId)}))});
  }
  return [...players.values()].sort((a,b)=>a.username.localeCompare(b.username));
 }
@@ -50,3 +50,4 @@ export async function POST(req:NextRequest) {
  return NextResponse.json({offer});
  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Trade failed.'},{status:400})}
 }
+

@@ -6,7 +6,7 @@ import type { GameHubGame } from '@/lib/game-hub-catalog';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
 import { GameHubPlayPanel } from '@/components/game-hub-play-panel';
-import { QuackverseCardGame } from '@/components/quackverse-card-game';
+import { Quackdex } from '@/components/quackdex';
 import { BingoTranscriptControl } from '@/components/bingo-transcript-control';
 
 type MosaicSnapshot = {
@@ -53,11 +53,11 @@ function MosaicBoard({ snapshot }: { snapshot: MosaicSnapshot }) {
   </div>;
 }
 
-export function NebulaController({ game }: { game: GameHubGame }) {
+export function NebulaController({ game, initialTab }: { game: GameHubGame; initialTab?: 'Quackdex' }) {
   const params = useSearchParams();
   const { user } = useSession();
   const channel = channelOf(params.get('channel') || user?.twitchUsername || '');
-  const [tab,setTab] = useState<Tab>(game.id === 'quackverse' && params.get('tab')?.toLowerCase() === 'quackdex' ? 'Quackdex' : game.id === 'pixelbattle' ? 'Board' : 'Live');
+  const [tab,setTab] = useState<Tab>(initialTab || (game.id === 'quackverse' && params.get('tab')?.toLowerCase() === 'quackdex' ? 'Quackdex' : game.id === 'pixelbattle' ? 'Board' : 'Live'));
   const [command,setCommand] = useState('');
   const [reply,setReply] = useState('');
   const [busy,setBusy] = useState(false);
@@ -67,6 +67,10 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const isMosaic = game.id === 'pixelbattle';
   const isBingo = game.id === 'bingo';
   const isQuackverse = game.id === 'quackverse';
+
+  useEffect(() => {
+    if (isQuackverse && (initialTab === 'Quackdex' || params.get('tab')?.toLowerCase() === 'quackdex')) setTab('Quackdex');
+  }, [initialTab, isQuackverse, params]);
 
   const refreshMosaic = useCallback(async () => {
     if (!isMosaic || !channel) return;
@@ -127,18 +131,18 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     .slice(0, 12), [playerCommands, streamerCommands]);
   const premium = mosaic.premium;
   return <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white">
-    <header className="sticky top-0 z-20 border-b border-cyan-300/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl">
+    <header className={`${tab === 'Quackdex' ? 'relative' : 'sticky top-0'} z-20 border-b border-cyan-300/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl`}>
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-        <div><div className="text-[10px] font-black uppercase tracking-[.26em] text-cyan-300">Nebula Controller</div><h1 className="text-xl font-black">{game.name}</h1><p className="text-xs text-slate-400">Private control service · #{channel || 'no-channel'}</p></div>
+        <div><div className="text-[10px] font-black uppercase tracking-[.26em] text-cyan-300">Nebula Controller</div><h1 className="text-xl font-black">{isQuackverse && tab === 'Quackdex' ? 'Quackdex' : game.name}</h1><p className="text-xs text-slate-400">{tab === 'Quackdex' ? 'Your cards, decks, and trades' : `Private control service · #${channel || 'no-channel'}`}</p></div>
         <div className="flex flex-wrap gap-2">
           {controllerTabs.map(item=><button key={item} onClick={()=>setTab(item)} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${tab===item?'border-cyan-300/50 bg-cyan-300/15 text-cyan-100':'border-white/10 bg-white/[.03] text-slate-400 hover:bg-white/[.06]'}`}>{item}</button>)}
         </div>
       </div>
     </header>
-    <main className="mx-auto grid max-w-7xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <main className={`mx-auto grid max-w-7xl gap-4 p-4 ${tab === 'Quackdex' ? '' : 'lg:grid-cols-[minmax(0,1fr)_300px]'}`}>
       <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-2xl">
         {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game surface</div><p className="mt-1 text-sm text-slate-400">This is the same game surface used elsewhere in Nebula, wrapped in private controller chrome.</p></div><GameHubPlayPanel game={game}/></div>) : null}
-        {tab==='Quackdex' && isQuackverse ? <QuackverseCardGame layout="command" collectionOnly /> : null}
+        {tab==='Quackdex' && isQuackverse ? <Quackdex /> : null}
         {tab==='Mic' && isBingo ? <BingoTranscriptControl channel={channel}/> : null}
         {tab==='Command' ? <div className="space-y-5">
           <div><h2 className="text-2xl font-black">Private command console</h2><p className="mt-1 text-sm text-slate-400">Runs the real Nebula command handler without sending a message to Twitch or Discord.</p></div>
@@ -179,10 +183,11 @@ export function NebulaController({ game }: { game: GameHubGame }) {
           <p className="text-xs text-slate-500">Scoped to #{channel}. No Twitch message, no Discord message, no public chat spam.</p>
         </div> : null}
       </section>
-      <aside className="space-y-3">
+      {tab !== 'Quackdex' ? <aside className="space-y-3">
         <div className="rounded-3xl border border-cyan-300/15 bg-cyan-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Controller status</div><dl className="mt-3 grid gap-2 text-sm"><div className="flex justify-between gap-2"><dt className="text-slate-500">Channel</dt><dd>#{channel||'—'}</dd></div>{isMosaic?<><div className="flex justify-between gap-2"><dt className="text-slate-500">Queue</dt><dd>{mosaic.queueLength}</dd></div><div className="flex justify-between gap-2"><dt className="text-slate-500">Palette</dt><dd className="capitalize">{mosaic.artwork?.paletteId||'classic'}</dd></div></>:null}</dl></div>
         {isMosaic ? <div className="rounded-3xl border border-violet-300/15 bg-violet-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-violet-200">Project features</div><p className="mt-2 text-xs text-slate-400">{premium?.testingFree!==false?'Unlocked during testing.':'Entitlements apply.'}</p><div className="mt-3 grid gap-1.5 text-xs text-slate-300"><span>✓ Solo projects</span><span>✓ Saved projects</span><span>✓ Friend sessions</span><span>✓ Palette remix</span></div></div> : null}
-      </aside>
+      </aside> : null}
     </main>
   </div>;
 }
+
