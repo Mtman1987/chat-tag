@@ -875,7 +875,7 @@ function detectFormations(grid: GridSlot[]): DetectedFormation[] {
   return formations;
 }
 
-export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'command' } = {}) {
+export function QuackverseCardGame({ layout = 'full', collectionOnly = false }: { layout?: 'full' | 'command'; collectionOnly?: boolean } = {}) {
   const isCommandLayout = layout === 'command';
   const { user } = useSession();
   const isAdmin = isClientAdminUsername(user?.twitchUsername);
@@ -2303,6 +2303,8 @@ export function QuackverseCardGame({ layout = 'full' }: { layout?: 'full' | 'com
       <QuackdexTrading onCollectionChanged={refreshCollection} />
     </div>
   );
+
+  if (collectionOnly) return <>{cardInspector}{quackdexPanel}</>;
 
   if (!isCommandLayout) {
     return (

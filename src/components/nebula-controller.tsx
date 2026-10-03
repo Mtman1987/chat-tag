@@ -6,6 +6,7 @@ import type { GameHubGame } from '@/lib/game-hub-catalog';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
 import { GameHubPlayPanel } from '@/components/game-hub-play-panel';
+import { QuackverseCardGame } from '@/components/quackverse-card-game';
 import { BingoTranscriptControl } from '@/components/bingo-transcript-control';
 
 type MosaicSnapshot = {
@@ -24,7 +25,8 @@ const CLASSIC: Record<string,string> = {R:'#ef4444',B:'#3b82f6',G:'#22c55e',Y:'#
 const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Comms Lounge'] as const;
 const bingoTabs = ['Live','Mic','Command','Guide','Comms Lounge'] as const;
 const basicTabs = ['Live','Command','Guide','Comms Lounge'] as const;
-type Tab = typeof mosaicTabs[number] | typeof bingoTabs[number] | typeof basicTabs[number];
+const quackverseTabs = ['Live','Quackdex','Command','Guide','Comms Lounge'] as const;
+type Tab = typeof quackverseTabs[number] | typeof mosaicTabs[number] | typeof bingoTabs[number] | typeof basicTabs[number];
 
 function channelOf(value: unknown) {
   return String(value || '').trim().toLowerCase().replace(/^#/,'');
@@ -55,7 +57,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const params = useSearchParams();
   const { user } = useSession();
   const channel = channelOf(params.get('channel') || user?.twitchUsername || '');
-  const [tab,setTab] = useState<Tab>(game.id === 'pixelbattle' ? 'Board' : 'Live');
+  const [tab,setTab] = useState<Tab>(game.id === 'quackverse' && params.get('tab')?.toLowerCase() === 'quackdex' ? 'Quackdex' : game.id === 'pixelbattle' ? 'Board' : 'Live');
   const [command,setCommand] = useState('');
   const [reply,setReply] = useState('');
   const [busy,setBusy] = useState(false);
@@ -64,6 +66,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   const [mosaic,setMosaic] = useState<MosaicSnapshot>({artwork:null,queueLength:0});
   const isMosaic = game.id === 'pixelbattle';
   const isBingo = game.id === 'bingo';
+  const isQuackverse = game.id === 'quackverse';
 
   const refreshMosaic = useCallback(async () => {
     if (!isMosaic || !channel) return;
@@ -116,7 +119,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
   }
 
   const overlayUrl = channel ? `/overlay/game-hub/instant.${channel}.${game.id}` : '';
-  const controllerTabs = useMemo<Tab[]>(() => isMosaic ? [...mosaicTabs] : isBingo ? [...bingoTabs] : [...basicTabs], [isMosaic,isBingo]);
+  const controllerTabs = useMemo<Tab[]>(() => isMosaic ? [...mosaicTabs] : isBingo ? [...bingoTabs] : isQuackverse ? [...quackverseTabs] : [...basicTabs], [isMosaic,isBingo,isQuackverse]);
   const playerCommands = useMemo(() => canonicalPlayerCommands(game), [game]);
   const streamerCommands = useMemo(() => canonicalStreamerCommands(game), [game]);
   const quickCommands = useMemo(() => [...playerCommands, ...streamerCommands]
@@ -135,6 +138,7 @@ export function NebulaController({ game }: { game: GameHubGame }) {
     <main className="mx-auto grid max-w-7xl gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
       <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-2xl">
         {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game surface</div><p className="mt-1 text-sm text-slate-400">This is the same game surface used elsewhere in Nebula, wrapped in private controller chrome.</p></div><GameHubPlayPanel game={game}/></div>) : null}
+        {tab==='Quackdex' && isQuackverse ? <QuackverseCardGame layout="command" collectionOnly /> : null}
         {tab==='Mic' && isBingo ? <BingoTranscriptControl channel={channel}/> : null}
         {tab==='Command' ? <div className="space-y-5">
           <div><h2 className="text-2xl font-black">Private command console</h2><p className="mt-1 text-sm text-slate-400">Runs the real Nebula command handler without sending a message to Twitch or Discord.</p></div>

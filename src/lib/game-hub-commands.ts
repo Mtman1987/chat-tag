@@ -27,6 +27,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt status', description: 'Show the current Chat Tag state.' },
   ] },
   { gameId: 'quackverse', key: 'quackverse', aliases: ['quack'], joinDescription: 'Open the shared Quackverse browser room.', joinTrigger: 'spmt quackverse', commands: [
+    { trigger: 'spmt quackdex', description: 'Open the Quackdex controller tab for your cards, decks, player collections, and trades.' },
     { trigger: 'spmt pack', description: 'Open a Quackverse booster pack; the reveal appears on stream.' },
     { trigger: 'spmt quackpack', description: 'Open a Quackverse booster pack; the reveal appears on stream.' },
   ] },
