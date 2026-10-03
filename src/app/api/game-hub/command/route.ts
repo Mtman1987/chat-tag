@@ -1,3 +1,4 @@
+import { runChatTagCheckin } from '@/lib/chat-tag-checkin';
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest, isStreamWeaverGameHubRequest } from '@/lib/auth';
 import { getGameHubGame } from '@/lib/game-hub-registry';
@@ -194,6 +195,11 @@ export async function POST(req: NextRequest) {
   if (!channel || !username) return NextResponse.json({ handled: false });
 
   let command = parts[0].toLowerCase();
+  if (command === 'checkin') {
+    return NextResponse.json(await runChatTagCheckin(await readAppState(), {
+      channel, username, userId, displayName, messageId: String(body.messageId || body.eventId || ''),
+    }));
+  }
   if (command === 'quackdex' || (['quackverse', 'quack'].includes(command) && parts[1]?.toLowerCase() === 'quackdex')) {
     const launchUrl = `${gamePopoutUrl(req, channel, 'quackverse')}&tab=Quackdex`;
     return NextResponse.json({
