@@ -245,6 +245,7 @@ export async function POST(req: NextRequest) {
     'admin', 'away', 'discord', 'givepass', 'kick', 'live', 'mod', 'more', 'mute',
     'optout', 'pass', 'pinrank', 'players', 'rank', 'sleep', 'support', 'tag',
     'ticket', 'twitch', 'unmute', 'wake', 'whosit', 'commands', 'say', 'raffle',
+    'checkin', 'partner', 'crew', 'crewcheckin', 'modcheckin', 'spacemountain', 'space',
     'score', 'leader', 'points', 'pleader', 'leaderboard', 'rankings',
     'show', 'view', 'brush', 'dig', 'answer', 'solve', 'paint',
     'mosaic', 'chain', 'phrase',

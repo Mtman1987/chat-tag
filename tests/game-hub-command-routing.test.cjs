@@ -27,6 +27,6 @@ require('node:test')('system commands bypass focused Mosaic themes and stop the 
  const lead=await post(req('spmt leader'));assert.match(lead.body.reply,/Nebula Arcade profile/);assert.equal(queued,0);
  const dex=await post(req('spmt quackdex'));assert.match(dex.body.launchUrl,/tab=Quackdex/);assert.equal(queued,0);
  for(const text of ['spmt stop','spmt stop mosaic','spmt mosaic stop']){active=['pixelbattle'];writes=[];const res=await post(req(text));assert.equal(queued,0);assert.ok(writes.some(x=>x.id==='pixelbattle'&&!x.on));assert.deepEqual(active,[]);}
- active=['pixelbattle'];for(const text of ['spmt rank','spmt commands','spmt say','spmt raffle']){await post(req(text));assert.equal(queued,0);}
+ active=['pixelbattle'];for(const text of ['spmt rank','spmt commands','spmt say','spmt raffle','spmt checkin']){await post(req(text));assert.equal(queued,0);}
  const owl=await post(req('spmt owl'));assert.equal(queued,1);assert.equal(owl.body.mosaicGenerationQueued,true);
 });
