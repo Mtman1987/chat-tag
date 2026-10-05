@@ -91,6 +91,7 @@ async function dshRequest(path: string, init: RequestInit) {
       ...(init.headers || {}),
     },
     cache: 'no-store',
+    signal: init.signal || AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`DSH pack media failed ${response.status}: ${await response.text().catch(() => '')}`);
   return response.json() as Promise<any>;
@@ -147,3 +148,4 @@ export async function waitForQuackversePackGif(eventId: string, timeoutMs = 120_
   const result = await waitForQuackversePackGifResult(eventId, timeoutMs);
   return result.gifUrl;
 }
+

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
 import { editDiscordSentMessage } from '@/lib/discord-message-edit';
 import { scheduleDiscordMessageCleanup, sendDiscordMessage } from '@/lib/discord-webhooks';
@@ -9,6 +9,7 @@ import {
 } from '@/lib/quackverse-pack-media';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 180;
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const CLEANUP_DELAY_MS = 10 * 60 * 1000;
@@ -100,91 +101,86 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'packId, pack, and Discord channel are required' }, { status: 400 });
   }
 
-  const baseEmbed = buildPackEmbed({ username, pack, packsRemaining, collectionIds, animationPending: true });
-  const sent = await sendDiscordMessage({
-    channelId,
-    content: '',
-    username: CHAT_TAG_WEBHOOK_NAME,
-    embeds: [baseEmbed],
-    allowedMentions: { parse: [] },
-    botToken: DISCORD_BOT_TOKEN,
-    recordHistorySource: 'quackverse/pack-present',
-  });
-  if (!sent.ok) {
-    return NextResponse.json({ error: sent.error }, { status: 502 });
-  }
+  // GIF rendering can take two minutes. Acknowledge the presentation without
+  // holding the bot's ten-second command request open; Next keeps after() alive.
+  after(async () => {
+    const baseEmbed = buildPackEmbed({ username, pack, packsRemaining, collectionIds, animationPending: true });
+    const sent = await sendDiscordMessage({
+      channelId,
+      content: '',
+      username: CHAT_TAG_WEBHOOK_NAME,
+      embeds: [baseEmbed],
+      allowedMentions: { parse: [] },
+      botToken: DISCORD_BOT_TOKEN,
+      recordHistorySource: 'quackverse/pack-present',
+    });
+    if (!sent.ok) {
+      console.error('[Quackverse Pack Present] Discord send failed', { packId, error: sent.error });
+      return;
+    }
 
-  try {
-    const event = createQuackversePackMediaEvent({ eventId: packId, username, cards: pack });
-    await queueQuackversePackGif(event, streamweaverTenantId);
-    const render = await waitForQuackversePackGifResult(event.eventId);
+    try {
+      const event = createQuackversePackMediaEvent({ eventId: packId, username, cards: pack });
+      await queueQuackversePackGif(event, streamweaverTenantId);
+      const render = await waitForQuackversePackGifResult(event.eventId);
 
-    if (render.gifUrl) {
-      const attachmentName = 'pack-animation.gif';
-      const edited = await editDiscordSentMessage({
+      if (render.gifUrl) {
+        const attachmentName = 'pack-animation.gif';
+        const edited = await editDiscordSentMessage({
+          channelId,
+          result: sent,
+          botToken: DISCORD_BOT_TOKEN,
+          embeds: [buildPackEmbed({
+            username,
+            pack,
+            packsRemaining,
+            collectionIds,
+            gifUrl: `attachment://${attachmentName}`,
+          })],
+          attachmentUrl: render.gifUrl,
+          attachmentName,
+        });
+        scheduleDiscordMessageCleanup(channelId, sent, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
+        console.log('[Quackverse Pack Present] GIF ready', {
+          packId,
+          channelId,
+          messageId: sent.messageId,
+          edited,
+          attempts: render.attempts,
+          gifUrl: render.gifUrl,
+        });
+        return;
+      }
+
+      await editDiscordSentMessage({
         channelId,
         result: sent,
         botToken: DISCORD_BOT_TOKEN,
-        embeds: [buildPackEmbed({
-          username,
-          pack,
-          packsRemaining,
-          collectionIds,
-          gifUrl: `attachment://${attachmentName}`,
-        })],
-        attachmentUrl: render.gifUrl,
-        attachmentName,
-      });
+        embeds: [buildPackEmbed({ username, pack, packsRemaining, collectionIds, animationUnavailable: true })],
+      }).catch(() => false);
       scheduleDiscordMessageCleanup(channelId, sent, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
-      console.log('[Quackverse Pack Present] GIF ready', {
+      console.error('[Quackverse Pack Present] GIF unavailable', {
         packId,
         channelId,
         messageId: sent.messageId,
-        edited,
-        attempts: render.attempts,
-        gifUrl: render.gifUrl,
-      });
-      return NextResponse.json({ success: true, messageId: sent.messageId, gifUrl: render.gifUrl, edited });
-    }
-
-    await editDiscordSentMessage({
-      channelId,
-      result: sent,
-      botToken: DISCORD_BOT_TOKEN,
-      embeds: [buildPackEmbed({ username, pack, packsRemaining, collectionIds, animationUnavailable: true })],
-    }).catch(() => false);
-    scheduleDiscordMessageCleanup(channelId, sent, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
-    console.error('[Quackverse Pack Present] GIF unavailable', {
-      packId,
-      channelId,
-      messageId: sent.messageId,
-      status: render.status,
-      attempts: render.attempts,
-      timedOut: render.timedOut,
-      error: render.error,
-    });
-    return NextResponse.json({
-      success: false,
-      messageId: sent.messageId,
-      render: {
         status: render.status,
         attempts: render.attempts,
         timedOut: render.timedOut,
         error: render.error,
-      },
-    }, { status: 502 });
-  } catch (error) {
-    scheduleDiscordMessageCleanup(channelId, sent, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
-    console.error('[Quackverse Pack Present] Renderer request failed', {
-      packId,
-      channelId,
-      messageId: sent.messageId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return NextResponse.json({
-      success: false,
-      messageId: sent.messageId,
-      error: error instanceof Error ? error.message : String(error),
-    }, { status: 502 });
-  }
+      });
+    } catch (error) {
+      await editDiscordSentMessage({
+        channelId, result: sent, botToken: DISCORD_BOT_TOKEN,
+        embeds: [buildPackEmbed({ username, pack, packsRemaining, collectionIds, animationUnavailable: true })],
+      }).catch(() => false);
+      scheduleDiscordMessageCleanup(channelId, sent, DISCORD_BOT_TOKEN, CLEANUP_DELAY_MS);
+      console.error('[Quackverse Pack Present] Renderer request failed', {
+        packId,
+        channelId,
+        messageId: sent.messageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+  return NextResponse.json({ success: true, queued: true, packId }, { status: 202 });
 }

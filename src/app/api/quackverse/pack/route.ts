@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { getSessionUserFromRequest, isBotRequest } from '@/lib/auth';
 import { isAdminUsername } from '@/lib/admin';
 import { getCollectionForUser, normalizeQuackverseUserId, quackverseUserIdFromSession } from '@/lib/quackverse-access';
@@ -114,6 +114,7 @@ async function notifyStreamWeaverPackOverlay(input: {
   const pack = input.pack.map((card) => quackverseOverlayCard(card, input.origin));
 
   const response = await fetch(`${STREAMWEAVER_URL}/api/quackverse/pack-overlay`, {
+    signal: AbortSignal.timeout(10_000),
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -401,17 +402,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...payload, error: (result as any).error }, { status: (result as any).status || 400 });
   }
   if (payload.packId && Array.isArray(payload.pack)) {
-    try {
-      await notifyStreamWeaverPackOverlay({
-        origin: publicOrigin,
-        username: normalizedUsername || userRecordId || userId,
-        packId: payload.packId,
-        pack: payload.pack,
-        tenantId: overlayTenantId,
-      });
-    } catch (error) {
-      console.warn('[Quackverse] StreamWeaver overlay notify failed:', error instanceof Error ? error.message : error);
-    }
+    const openedPack = { packId: payload.packId, pack: payload.pack };
+    after(async () => {
+      try {
+        await notifyStreamWeaverPackOverlay({
+          origin: publicOrigin,
+          username: normalizedUsername || userRecordId || userId,
+          packId: openedPack.packId,
+          pack: openedPack.pack,
+          tenantId: overlayTenantId,
+        });
+      } catch (error) {
+        console.warn('[Quackverse] StreamWeaver overlay notify failed:', error instanceof Error ? error.message : error);
+      }
+    });
   }
   return NextResponse.json(payload);
 }
+

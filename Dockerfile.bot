@@ -12,6 +12,7 @@ LABEL BUILD_SHA=$BUILD_SHA
 COPY package*.json ./
 RUN npm ci --only=production
 COPY bot.js ./
+COPY scripts/lib/twitch-transport.cjs ./scripts/lib/twitch-transport.cjs
 COPY scripts/lib/word-chain-lifecycle.cjs ./scripts/lib/word-chain-lifecycle.cjs
 COPY scripts/patch-game-hub-bot.mjs ./scripts/patch-game-hub-bot.mjs
 COPY scripts/patch-live-chat-pressure.mjs ./scripts/patch-live-chat-pressure.mjs
@@ -24,3 +25,4 @@ RUN node scripts/patch-live-chat-pressure.mjs
 RUN node scripts/patch-quackverse-pack-bot.mjs
 RUN node -e "require('./src/lib/chat-tag-crowns')"
 CMD ["node", "bot.js"]
+

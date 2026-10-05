@@ -17,7 +17,9 @@ function findPlayerIdByChannel(state: any, channel: string): string | null {
     if (username === normalized) return id;
   }
 
-  return null;
+  // Channel overlays already use the normalized login when no Tag player
+  // exists. Use the same identity so Lounge/Nebula-only channels receive messages.
+  return normalized;
 }
 
 export async function GET(req: NextRequest) {
@@ -77,3 +79,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
