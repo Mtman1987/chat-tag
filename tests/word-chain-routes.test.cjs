@@ -91,7 +91,7 @@ test('lifecycle settles and retains tenant results without overlay polling, then
 });
 
 test('short and namespaced guesses open only one immediate spelling appeal', async () => {
-  const h = harness(0);
+  const h = harness(30_000);
   const { POST } = h.load('src/app/api/game-hub/command/route.ts');
   const settings = engine.getChannelGameSettings(h.read(), 'tenant');
   settings.wordChainRound.currentWord = 'LEAF';
@@ -105,7 +105,7 @@ test('short and namespaced guesses open only one immediate spelling appeal', asy
 });
 
 test('yes and no route to appeals while other games are active, and lifecycle closes votes durably', async () => {
-  const h = harness(0);
+  const h = harness(30_000);
   const settings = engine.getChannelGameSettings(h.read(), 'tenant');
   settings.wordChainRound.currentWord = 'FROG';
   const command = h.load('src/app/api/game-hub/command/route.ts').POST;
@@ -114,7 +114,7 @@ test('yes and no route to appeals while other games are active, and lifecycle cl
     assert.match((await command(h.request(text))).body.reply, /vote (already )?recorded for GAMERS/);
   }
   assert.deepEqual(engine.getChannelGameSettings(h.read(), 'tenant').wordChainRound.wordAppeal.votes, { 'twitch:1': true });
-  h.setNow(90_000);
+  h.setNow(120_000);
   const lifecycle = h.load('src/app/api/game-hub/lifecycle/route.ts').POST;
   const request = body => ({ json: async () => body });
   const first = await lifecycle(request({}));
@@ -125,4 +125,16 @@ test('yes and no route to appeals while other games are active, and lifecycle cl
   assert.equal((await lifecycle(request({}))).body.wordChainResults.length, 0);
   assert.match((await command(h.request('spmt wordchain gamers'))).body.reply, /extends the chain/);
   assert.match((await command(h.request('spmt yes'))).body.reply, /no open Word Chain word appeal/);
+});
+
+test('short and namespaced commands report the remaining same-player cooldown', async () => {
+  const h = harness(0);
+  const { POST } = h.load('src/app/api/game-hub/command/route.ts');
+  assert.match((await POST(h.request('spmt wordchain newt'))).body.reply, /wait 30s.*another player gets a word accepted/);
+  engine.setChannelGameRunning(h.read(), 'tenant', 'phraseguess', false);
+  engine.setChannelGameRunning(h.read(), 'tenant', 'pixelbattle', false);
+  h.setNow(29_001);
+  assert.match((await POST(h.request('spmt newt'))).body.reply, /wait 1s/);
+  h.setNow(30_000);
+  assert.match((await POST(h.request('spmt newt'))).body.reply, /extends the chain/);
 });

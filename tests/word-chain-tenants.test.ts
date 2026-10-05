@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import './word-chain-spelling.test';
 import './word-chain-appeals.test';
+import './word-chain-cooldown.test';
 import { advanceWordChainRound, getChannelGameSettings, getGameHubStore, joinGameHubGame,
   recordWordChainMessage, recordWordChainVote, setStreamGameBattle, submitWordChainTheme,
   wordChainPublicSnapshot, WORD_CHAIN_CYCLE_MS, WORD_CHAIN_ROUND_MS, WORD_CHAIN_REVIEW_MS, WORD_CHAIN_THEMES } from '../src/lib/game-hub-state';

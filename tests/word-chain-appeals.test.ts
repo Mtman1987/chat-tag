@@ -81,6 +81,10 @@ test('linked tenants share votes; unrelated tenants cannot vote on or inherit th
   const round = advanceWordChainRound(state, 'tenant', 0).round;
   round.currentWord = 'FROG';
   guess(state);
+  const pending = Object.values(getGameHubStore(state).channels).flatMap((settings: any) => settings.pendingWordChainResults || []);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].channel, 'linked');
+  assert.equal(pending[0].expiresAt, 90_000, 'a queued prompt must expire when its vote closes');
   assert.equal(recordWordChainAppealVote(state, { channel: 'unrelated', userId: '2', yes: true, now: 1 }).outcome, 'no-appeal');
   assert.equal(recordWordChainAppealVote(state, { channel: 'linked', userId: '2', yes: true, now: 1 }).outcome, 'voted');
   assert.equal(recordWordChainAppealVote(state, { channel: 'tenant', userId: '2', yes: true, now: 2 }).outcome, 'unchanged');

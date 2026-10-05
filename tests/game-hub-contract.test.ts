@@ -310,9 +310,9 @@ test('Word Chain keeps play moving and settles votes after round review', () => 
 
   assert.deepEqual(wordChainRoundAt(0), { roundSlot: 0, theme: 'Animals', seed: WORD_CHAIN_THEMES.Animals[0] });
   assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'raccoon', now: 0 }).outcome, 'accepted');
-  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'newt', now: 1 }).outcome, 'accepted');
-  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'truck', now: 2 }).outcome, 'accepted');
-  assert.equal(recordWordChainMessage(state, { ...second, channel: 'space', message: 'kangaroo', now: 3 }).outcome, 'accepted');
+  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'newt', now: 30_000 }).outcome, 'accepted');
+  assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'truck', now: 60_000 }).outcome, 'accepted');
+  assert.equal(recordWordChainMessage(state, { ...second, channel: 'space', message: 'kangaroo', now: 60_001 }).outcome, 'accepted');
   assert.equal(stored('11').gamePointsBalance, 0);
   assert.equal(wordChainPublicSnapshot(state, 'space', WORD_CHAIN_ROUND_MS).phase, 'review');
   assert.equal(recordWordChainMessage(state, { ...first, channel: 'space', message: 'otter', now: WORD_CHAIN_ROUND_MS }).outcome, 'review');
