@@ -60,3 +60,30 @@ test('a failed tenant does not block result delivery to another tenant', async (
   assert.deepEqual(sent, ['beta']);
   assert.deepEqual(acknowledgements, ['b1']);
 });
+
+test('overflow results send once per tenant per poll while other tenants receive their results', async () => {
+  let queue = [
+    { id: 'a1', channel: 'alpha', message: 'round' },
+    { id: 'a2', channel: 'alpha', message: 'overflow' },
+    { id: 'a3', channel: 'alpha', message: 'more players' },
+    { id: 'b1', channel: 'beta', message: 'round' },
+  ];
+  const sent = [];
+  const tick = createWordChainLifecycleRunner({
+    apiCall: async (url, options) => {
+      const body = JSON.parse(options.body);
+      queue = queue.filter(event => !body.acknowledgedResults.includes(event.id));
+      return { wordChainResults: body.ackOnly ? [] : queue };
+    },
+    send: async (channel, message) => { sent.push(`${channel}:${message}`); },
+  });
+  await tick();
+  assert.deepEqual(sent, ['alpha:round', 'beta:round']);
+  assert.deepEqual(queue.map(event => event.id), ['a2', 'a3']);
+  await tick();
+  assert.deepEqual(sent, ['alpha:round', 'beta:round', 'alpha:overflow']);
+  await tick();
+  await tick();
+  assert.deepEqual(sent, ['alpha:round', 'beta:round', 'alpha:overflow', 'alpha:more players']);
+  assert.equal(queue.length, 0);
+});

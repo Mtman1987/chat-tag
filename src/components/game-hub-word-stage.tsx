@@ -10,6 +10,7 @@ type WordChainSnapshot = {
   chainLength: number;
   secondsLeft: number;
   phase: 'play' | 'review' | 'tally';
+  wordAppeal?: { word: string; secondsLeft: number; yes: number; no: number } | null;
   reviewWords: Array<{ number: number; word: string; displayName: string; points: number; up: number; down: number; accepted?: boolean }>;
   reviewLeaders: Array<{ displayName: string; points: number }>;
   lastTally?: { roundSlot: number; accepted: number; rejected: number } | null;
@@ -84,6 +85,9 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
         <div className="rounded-full border border-cyan-300/35 bg-slate-950/85 px-[2.5%] py-[.8%] text-center text-[clamp(12px,1.5vw,22px)] font-black uppercase tracking-[.1em] text-cyan-100">
           SPMT &lt;WORD&gt; · {chain.theme} · Round {chain.roundNumber}/5 · {chain.gameEnded ? 'GAME OVER' : chain.phase === 'tally' ? 'Results' : chain.phase === 'review' ? 'Vote' : 'Play'} {clock(chain.secondsLeft)}
         </div>
+        {chain.wordAppeal ? <div className="mt-2 rounded-lg border border-amber-300/40 bg-slate-950/90 px-3 py-2 text-center text-[clamp(11px,1.5vw,21px)] font-bold text-amber-100">
+          Allow {chain.wordAppeal.word} this round? · spmt yes / spmt no · {clock(chain.wordAppeal.secondsLeft)} · {chain.wordAppeal.yes} yes / {chain.wordAppeal.no} no
+        </div> : null}
         {chain.phase === 'play' ? (
           <div className="mt-[2%] flex max-w-full flex-col items-center px-[3%] py-[1.2%] text-center">
             <div className="max-w-full break-all text-[clamp(42px,8vw,112px)] font-black uppercase leading-none tracking-[.05em] drop-shadow-[0_0_22px_rgba(34,211,238,.7)]">

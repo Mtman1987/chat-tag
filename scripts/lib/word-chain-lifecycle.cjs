@@ -17,16 +17,19 @@ function createWordChainLifecycleRunner({ apiCall, send, warn = console.warn }) 
       const acknowledgedResults = [...delivered];
       const result = await request({ acknowledgedResults });
       acknowledgedResults.forEach(id => delivered.delete(id));
-      const failedChannels = new Set();
+      const attemptedChannels = new Set();
       for (const event of result.wordChainResults || []) {
-        if (delivered.has(event.id) || failedChannels.has(event.channel)) continue;
+        if (delivered.has(event.id) || attemptedChannels.has(event.channel)) continue;
+        // One result per tenant per 30-second poll. Long scoreboards and any
+        // older queued messages must not arrive as a back-to-back burst.
+        attemptedChannels.add(event.channel);
         try {
           await send(event.channel, event.message);
           delivered.add(event.id);
         } catch (error) {
           warn(`[WordChain] Result delivery failed for #${event.channel}: ${error?.message || error}`);
-          // Preserve this tenant's order without blocking other tenants' results.
-          failedChannels.add(event.channel);
+          // Retry this tenant's first pending message on the next poll without
+          // blocking results for other tenants.
         }
       }
       if (delivered.size) {

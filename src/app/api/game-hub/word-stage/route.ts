@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (gameId === 'wordchain') {
     const current = state.gameSettings?.default?.gameHub?.channels?.[channel]?.wordChainRound;
     const nowSlot = Math.floor(Date.now() / WORD_CHAIN_CYCLE_MS);
-    if (current?.roundSlot !== nowSlot || (!current?.settled && Date.now() % WORD_CHAIN_CYCLE_MS >= WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS)) {
+    if (current?.roundSlot !== nowSlot || (current?.wordAppeal && current.wordAppeal.expiresAt <= Date.now()) || (!current?.settled && Date.now() % WORD_CHAIN_CYCLE_MS >= WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS)) {
       await updateAppStateIfChanged((draft) => {
         if (!resolveChannelGameIds(draft, channel).includes(gameId)) return { changed: false, result: null };
         const result = advanceWordChainRound(draft, channel);
