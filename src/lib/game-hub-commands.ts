@@ -102,7 +102,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
   { gameId: 'wordchain', key: 'wordchain', aliases: ['chain'], joinDescription: 'Join Word Chain.', joinTrigger: 'spmt chain', commands: [
     { trigger: 'spmt <word>', description: 'Extend the chain currently on the main stage. Use spmt guess <word> for a command word.' },
     { trigger: 'spmt up <word> / spmt down <word>', description: 'During the 60-second round review, vote on any played word by spelling or board number.' },
-    { trigger: 'spmt chain theme Space: rocket, planet, comet, telescope', description: 'Add a community theme with at least four starter words.' },
+    { trigger: 'spmt chain theme Dinosaurs', description: 'Queue a theme for the next round. Optionally add a colon and at least four starter words.' },
   ] },
   { gameId: 'wordstorm', key: 'wordstorm', aliases: ['storm'], joinDescription: 'Join Word Storm.', joinTrigger: 'spmt storm', commands: [] },
 ];
@@ -257,3 +257,4 @@ export function canonicalCommandSummary(gameOrId: GameHubGame | string): string 
 }
 
 export const GAME_HUB_COMMAND_SPECS = SPECS;
+

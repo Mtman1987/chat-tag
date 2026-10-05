@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
-import { stopInactiveChannelGames } from '@/lib/game-hub-state';
+import { advanceWordChainRound, getGameHubStore, resolveChannelGameIds, stopInactiveChannelGames } from '@/lib/game-hub-state';
 import { updateAppStateIfChanged } from '@/lib/volume-store';
 export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   if (!isBotRequest(req)) return NextResponse.json({ error: 'Bot authentication required.' }, { status: 401 });
-  const stopped = await updateAppStateIfChanged(state => {
-    const before = JSON.stringify(state.gameSettings.default.gameHub);
-    const channels = Object.keys(state.gameSettings.default.gameHub?.channels || {});
-    const result = channels.flatMap(channel => stopInactiveChannelGames(state, channel).map(gameId => ({ channel, gameId })));
-    return { changed: before !== JSON.stringify(state.gameSettings.default.gameHub), result };
+  const body = await req.json().catch(() => ({}));
+  const acknowledged = new Set(Array.isArray(body.acknowledgedResults) ? body.acknowledgedResults.filter((id: unknown) => typeof id === 'string').slice(0, 200) : []);
+  const result = await updateAppStateIfChanged(state => {
+    const store = getGameHubStore(state);
+    const before = JSON.stringify(store);
+    const now = Date.now();
+    const channels = Object.keys(store.channels);
+    const stopped = body.ackOnly ? [] : channels.flatMap(channel => stopInactiveChannelGames(state, channel, now).map(gameId => ({ channel, gameId })));
+    if (!body.ackOnly) for (const channel of channels) {
+      if (resolveChannelGameIds(state, channel).includes('wordchain')) advanceWordChainRound(state, channel, now);
+    }
+    const wordChainResults = Object.values(store.channels).flatMap(settings => {
+      if (!settings.pendingWordChainResults?.length) return [];
+      settings.pendingWordChainResults = settings.pendingWordChainResults.filter(event =>
+        !acknowledged.has(event.id) && event.expiresAt > now && resolveChannelGameIds(state, event.channel).includes('wordchain'));
+      return settings.pendingWordChainResults;
+    }).slice(0, 50);
+    return { changed: before !== JSON.stringify(store), result: { stopped, wordChainResults: body.ackOnly ? [] : wordChainResults } };
   });
-  return NextResponse.json({ stopped });
+  return NextResponse.json(result);
 }

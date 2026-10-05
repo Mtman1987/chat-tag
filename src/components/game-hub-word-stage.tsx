@@ -87,7 +87,7 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
         {chain.phase === 'play' ? (
           <div className="mt-[2%] flex max-w-full flex-col items-center px-[3%] py-[1.2%] text-center">
             <div className="max-w-full break-all text-[clamp(42px,8vw,112px)] font-black uppercase leading-none tracking-[.05em] drop-shadow-[0_0_22px_rgba(34,211,238,.7)]">
-              {head}<span className="text-fuchsia-300">{chain.requiredLetter}</span>
+              {chain.currentWord ? <>{head}<span className="text-fuchsia-300">{chain.requiredLetter}</span></> : 'Start with any word'}
             </div>
           </div>
         ) : chain.gameEnded ? (
@@ -106,9 +106,12 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
             <div className="mt-[2%] grid min-h-0 grid-cols-2 gap-2 overflow-y-auto text-left text-[clamp(11px,1.45vw,20px)] font-bold">
               {chain.gameParticipants.map((entry, index) => (
                 <div key={entry.displayName + index} className="flex justify-between gap-3 rounded-lg bg-white/10 px-3 py-2">
-                  <span>#{index + 1} {entry.displayName}</span><strong>{entry.points} pts</strong>
+                  <span>#{index + 1} {entry.displayName}</span><strong>{entry.points} total · {chain.reviewLeaders.find(player => player.displayName === entry.displayName)?.points || 0} round</strong>
                 </div>
               ))}
+            </div>
+            <div className="mt-1 text-center text-[clamp(11px,1.3vw,18px)] font-bold text-amber-200">
+              Overall top 3: {chain.gameParticipants.slice(0, 3).map((entry, index) => `#${index + 1} ${entry.displayName} (${entry.points})`).join(' · ') || 'No scores yet'}
             </div>
             <div className="mt-2 text-[clamp(10px,1.25vw,17px)] font-bold uppercase tracking-[.1em] text-cyan-100/75">
               Next game begins in {clock(chain.secondsLeft)}
@@ -130,8 +133,11 @@ export function GameHubWordStage({ gameId, channel }: { gameId: 'wordchain' | 'p
               ))}
             </div>
             <div className="mt-1 text-center text-[clamp(11px,1.3vw,18px)] text-cyan-100">
-              {chain.reviewLeaders.map((entry, index) => `#${index + 1} ${entry.displayName} ${entry.points}`).join(' · ')}
+              Round scores: {chain.reviewLeaders.map((entry) => `${entry.displayName} (${entry.points})`).join(' · ') || 'No plays this round'}
             </div>
+            {chain.phase === 'tally' ? <div className="mt-1 text-center text-[clamp(11px,1.3vw,18px)] font-bold text-amber-200">
+              Overall top 3: {chain.gameParticipants.slice(0, 3).map((entry, index) => `#${index + 1} ${entry.displayName} (${entry.points})`).join(' · ') || 'No scores yet'}
+            </div> : null}
           </div>
         )}
         {battleBar}

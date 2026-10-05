@@ -380,9 +380,9 @@ test('main word games ship seeded libraries, community additions, and broadcast 
   assert.equal(theme.inventorySize, 1);
   assert.throws(() => submitWordChainTheme(state, { ...creator, name: 'Weather', words: 'cloud, mist, wind, hail', now: 1 }), /already exists/i);
   const chain = wordChainPublicSnapshot(state, 'space', 0);
-  assert.equal(chain.theme, 'Animals');
-  assert.equal(chain.currentWord, 'TIGER');
-  assert.equal(chain.requiredLetter, 'R');
+  assert.equal(chain.theme, 'Weather');
+  assert.equal(chain.currentWord, 'STORM');
+  assert.equal(chain.requiredLetter, 'M');
   const phrase = phraseGuessPublicSnapshot(state, 'space', 0);
   assert.ok(phrase.maskedPhrase.includes('•'));
   assert.equal(phrase.secondsLeft, 360);
@@ -928,3 +928,4 @@ test('word games only spend or advance on explicit guesses, with collision choic
   assert.ok(command.includes('message: guessText, explicit: true'));
   assert.ok(command.includes('!specializedGameCommand'), 'Mosaic paint and view commands must bypass word guessing');
 });
+

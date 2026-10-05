@@ -1073,11 +1073,6 @@ console.log = (...args) => {
   console.log('[Bot] Username:', username);
   console.log('[Bot] Token:', token.substring(0, 10) + '...');
   scheduleNebulaGameplayEmbedRotation();
-  // Engine inactivity cleanup continues even when nobody has an overlay open.
-  setInterval(() => {
-    void apiCall('/api/game-hub/lifecycle', { method: 'POST' })
-      .catch(error => console.warn('[Nebula] Lifecycle cleanup failed:', error.message));
-  }, 30_000);
 
   // Refresh token every 2 hours to prevent stale Helix calls
   setInterval(async () => {
@@ -1167,6 +1162,17 @@ console.log = (...args) => {
     const target = String(channel || '').replace(/^#/, '') || 'unknown';
     console.warn(`[Bot] Twitch NOTICE channel=${target} msg-id=${msgId || 'unknown'}: ${message || ''}`);
   });
+
+  // Settle Word Chain and publish tenant results even without Stella or an overlay.
+  const { createWordChainLifecycleRunner } = require('./scripts/lib/word-chain-lifecycle.cjs');
+  const tickGameLifecycle = createWordChainLifecycleRunner({
+    apiCall,
+    send: (channel, message) => sendChatWithSharedFallback(client, channel, message, { warnOnFallback: true }),
+  });
+  setInterval(() => {
+    if (isIrcConnected) void tickGameLifecycle()
+      .catch(error => console.warn('[Nebula] Lifecycle cleanup/results failed:', error.message));
+  }, 30_000);
 
   setInterval(() => {
     settleDanceParties().catch((error) => console.error('[DancingParade] Settlement failed:', error?.message || error));
