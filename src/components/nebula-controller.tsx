@@ -7,6 +7,9 @@ import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-h
 import { useSession } from '@/contexts/session-context';
 import { GameHubPlayPanel } from '@/components/game-hub-play-panel';
 import { Quackdex } from '@/components/quackdex';
+import { GameControllerShare } from '@/components/game-controller-share';
+import { StellaControllerGuide } from '@/components/stella-controller-guide';
+import { MosaicCoordinateBoard } from '@/components/mosaic-coordinate-board';
 import { BingoTranscriptControl } from '@/components/bingo-transcript-control';
 
 type MosaicSnapshot = {
@@ -21,11 +24,10 @@ type MosaicSnapshot = {
   premium?: {testingFree:boolean;capabilities:Record<string,boolean>};
 };
 
-const CLASSIC: Record<string,string> = {R:'#ef4444',B:'#3b82f6',G:'#22c55e',Y:'#eab308',P:'#a855f7',O:'#f97316',PK:'#ec4899',W:'#f8fafc',K:'#111827',C:'#06b6d4'};
-const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Comms Lounge'] as const;
-const bingoTabs = ['Live','Mic','Command','Guide','Comms Lounge'] as const;
-const basicTabs = ['Live','Command','Guide','Comms Lounge'] as const;
-const quackverseTabs = ['Live','Quackdex','Command','Guide','Comms Lounge'] as const;
+const mosaicTabs = ['Board','Command','Queue','Saves','Palette','Guide','Share','Comms Lounge'] as const;
+const bingoTabs = ['Live','Mic','Command','Guide','Share','Comms Lounge'] as const;
+const basicTabs = ['Live','Command','Guide','Share','Comms Lounge'] as const;
+const quackverseTabs = ['Live','Quackdex','Command','Guide','Share','Comms Lounge'] as const;
 type Tab = typeof quackverseTabs[number] | typeof mosaicTabs[number] | typeof bingoTabs[number] | typeof basicTabs[number];
 
 function channelOf(value: unknown) {
@@ -53,27 +55,13 @@ function MosaicBoard({ snapshot }: { snapshot: MosaicSnapshot }) {
     return () => { observer.disconnect(); window.removeEventListener('resize', fit); };
   }, [art?.id, art?.width, art?.height]);
   if (!art) return <div className="grid min-h-[460px] place-items-center rounded-3xl border border-cyan-300/10 bg-slate-950/85 p-8 text-center text-slate-400"><div><strong className="block text-xl text-white">No Mosaic loaded</strong><span className="mt-2 block text-sm">Queue a theme from the Command tab.</span></div></div>;
-  const palette = art.palette || CLASSIC;
-  const columns = art.width;
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><div className="text-xs font-black uppercase tracking-[.2em] text-cyan-300">{art.status} · board {art.activeBoard}</div><h2 className="mt-1 text-2xl font-black text-white">{art.theme}</h2><p className="text-xs text-slate-400">{art.progress}/{art.total} correct · {Math.round((art.progress/Math.max(1,art.total))*100)}%</p></div>
       {art.finalImageUrl ? <a href={art.finalImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-emerald-300 px-4 py-2 text-xs font-black text-slate-950 no-underline">Reveal final image</a> : null}
     </div>
     <div ref={frameRef} className="flex min-w-0 justify-center">
-    <div data-testid="mosaic-controller-grid" className="grid w-full min-w-0 rounded-2xl border border-white/10 bg-black p-1 shadow-[0_0_50px_rgba(34,211,238,.12)]" style={{
-      maxWidth: availableHeight === null ? undefined : availableHeight * columns / art.height,
-      aspectRatio: `${columns} / ${art.height}`,
-      gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`,
-      gridTemplateRows: `repeat(${art.height},minmax(0,1fr))`,
-    }}>
-      {art.target.map((target,index) => {
-        const painted = art.painted[index];
-        return <span key={index} className="min-h-0 min-w-0 border border-slate-900/30" style={{background: painted ? (palette[painted] || CLASSIC[painted]) : '#020617', color: palette[target] || CLASSIC[target]}} title={painted ? `${painted}` : `Needs ${target}`}>
-          {!painted && art.width <= 20 ? <span className="grid h-full place-items-center text-[clamp(5px,.8vw,10px)] font-black">{target}</span> : null}
-        </span>;
-      })}
-    </div>
+      <MosaicCoordinateBoard art={art} availableHeight={availableHeight} />
     </div>
   </div>;
 }
@@ -155,18 +143,21 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
     .filter((item, index, all) => all.findIndex((entry) => entry.trigger === item.trigger) === index)
     .slice(0, 12), [playerCommands, streamerCommands]);
   const premium = mosaic.premium;
+  const canManage = Boolean(user && (channel === channelOf(user.twitchUsername) || user.isAdmin || user.role === 'owner'));
   return <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white">
     <header className={`${tab === 'Quackdex' ? 'relative' : 'sticky top-0'} z-20 border-b border-cyan-300/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl`}>
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-        <div><div className="text-[10px] font-black uppercase tracking-[.26em] text-cyan-300">Nebula Controller</div><h1 className="text-xl font-black">{isQuackverse && tab === 'Quackdex' ? 'Quackdex' : game.name}</h1><p className="text-xs text-slate-400">{tab === 'Quackdex' ? 'Your cards, decks, and trades' : `Private control service · #${channel || 'no-channel'}`}</p></div>
+        <div><div className="text-[10px] font-black uppercase tracking-[.26em] text-cyan-300">Nebula Controller</div><h1 className="text-xl font-black">{isQuackverse && tab === 'Quackdex' ? 'Quackdex' : game.name}</h1><p className="text-xs text-slate-400">{tab === 'Quackdex' ? 'Your cards, decks, and trades' : `Controls for #${channel || 'no-channel'}`}</p></div>
         <div className="flex flex-wrap gap-2">
+          <button onClick={() => setTab('Guide')} className="rounded-full border border-violet-300/30 bg-violet-300/10 px-3 py-1.5 text-xs font-bold text-violet-100">✦ Stella help</button>
           {controllerTabs.map(item=><button key={item} onClick={()=>setTab(item)} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${tab===item?'border-cyan-300/50 bg-cyan-300/15 text-cyan-100':'border-white/10 bg-white/[.03] text-slate-400 hover:bg-white/[.06]'}`}>{item}</button>)}
         </div>
       </div>
     </header>
     <main className={`mx-auto grid max-w-7xl gap-4 p-4 ${tab === 'Quackdex' ? '' : 'lg:grid-cols-[minmax(0,1fr)_300px]'}`}>
       <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-2xl">
-        {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game surface</div><p className="mt-1 text-sm text-slate-400">This is the same game surface used elsewhere in Nebula, wrapped in private controller chrome.</p></div><GameHubPlayPanel game={game}/></div>) : null}
+        {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game</div><p className="mt-1 text-sm text-slate-400">Play along in Twitch chat. Open Share to put this game on your stream or in Discord.</p></div><GameHubPlayPanel game={game}/></div>) : null}
+        {tab==='Share' ? <GameControllerShare game={game} channel={channel} canManage={canManage}/> : null}
         {tab==='Quackdex' && isQuackverse ? <Quackdex /> : null}
         {tab==='Mic' && isBingo ? <BingoTranscriptControl channel={channel}/> : null}
         {tab==='Command' ? <div className="space-y-5">
@@ -192,7 +183,7 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{['classic','neon','pastel','mono','ocean'].map(name=><button key={name} onClick={()=>void run(`spmt mosaic palette ${name}`)} className={`rounded-2xl border p-4 text-left ${mosaic.artwork?.paletteId===name?'border-violet-300/60 bg-violet-300/10':'border-white/10 bg-white/[.025]'}`}><strong className="capitalize">{name}</strong><span className="mt-1 block text-xs text-slate-500">Apply to live + reveal</span></button>)}</div>
         </div> : null}
         {tab==='Guide' ? <div className="space-y-5">
-          <div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">{game.category} · {game.runtime}</div><h2 className="mt-1 text-2xl font-black">{game.name}</h2><p className="mt-2 text-sm leading-6 text-slate-300">{game.howToPlay}</p></div>
+          <div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Stella’s guide</div><h2 className="mt-1 text-2xl font-black">{game.name}</h2><p className="mt-2 text-sm leading-6 text-slate-300">{game.howToPlay}</p></div>
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><h3 className="font-black text-white">Player controls</h3><div className="mt-3 space-y-2">{playerCommands.map(item=><div key={item.trigger} className="rounded-xl border border-white/8 bg-black/20 p-3"><code className="text-cyan-100">{item.trigger}</code><p className="mt-1 text-xs text-slate-400">{item.description}</p></div>)}</div></section>
             <section className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><h3 className="font-black text-white">Streamer controls</h3><div className="mt-3 space-y-2">{streamerCommands.map(item=><div key={item.trigger} className="rounded-xl border border-white/8 bg-black/20 p-3"><code className="text-emerald-100">{item.trigger}</code><p className="mt-1 text-xs text-slate-400">{item.description}</p></div>)}</div></section>
@@ -209,9 +200,11 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
         </div> : null}
       </section>
       {tab !== 'Quackdex' ? <aside className="space-y-3">
+        <StellaControllerGuide game={game} channel={channel} canManage={canManage} onGuide={() => setTab('Guide')} onShare={() => setTab('Share')} />
         <div className="rounded-3xl border border-cyan-300/15 bg-cyan-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Controller status</div><dl className="mt-3 grid gap-2 text-sm"><div className="flex justify-between gap-2"><dt className="text-slate-500">Channel</dt><dd>#{channel||'—'}</dd></div>{isMosaic?<><div className="flex justify-between gap-2"><dt className="text-slate-500">Queue</dt><dd>{mosaic.queueLength}</dd></div><div className="flex justify-between gap-2"><dt className="text-slate-500">Palette</dt><dd className="capitalize">{mosaic.artwork?.paletteId||'classic'}</dd></div></>:null}</dl></div>
         {isMosaic ? <div className="rounded-3xl border border-violet-300/15 bg-violet-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-violet-200">Project features</div><p className="mt-2 text-xs text-slate-400">{premium?.testingFree!==false?'Unlocked during testing.':'Entitlements apply.'}</p><div className="mt-3 grid gap-1.5 text-xs text-slate-300"><span>✓ Solo projects</span><span>✓ Saved projects</span><span>✓ Friend sessions</span><span>✓ Palette remix</span></div></div> : null}
       </aside> : null}
     </main>
   </div>;
 }
+

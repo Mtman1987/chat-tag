@@ -20,11 +20,15 @@ export function PersonalOverlayHost() {
     if (hiddenRoute) return;
     try {
       const response = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
-      if (!response.ok) return setUrl('');
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) setUrl('');
+        return;
+      }
       const body = await response.json().catch(() => ({}));
+      if (body.partial) return;
       setUrl(typeof body?.personalOverlayUrl === 'string' ? body.personalOverlayUrl : '');
     } catch {
-      setUrl('');
+      // Keep the current overlay during a temporary network interruption.
     }
   }, [hiddenRoute]);
 
@@ -70,3 +74,4 @@ export function PersonalOverlayHost() {
     allow="autoplay"
   />;
 }
+
