@@ -31,7 +31,8 @@ function harness(now) {
         if (id === '@/lib/auth') return { isBotRequest: () => true, isStreamWeaverGameHubRequest: () => false };
         if (id === '@/lib/game-hub-state') return { ...engine,
           recordWordChainMessage: (state, input) => engine.recordWordChainMessage(state, { ...input, now }),
-          recordWordChainVote: (state, input) => engine.recordWordChainVote(state, { ...input, now }) };
+          recordWordChainVote: (state, input) => engine.recordWordChainVote(state, { ...input, now }),
+          recordWordChainAppealVote: (state, input) => engine.recordWordChainAppealVote(state, { ...input, now }) };
         if (id === '@/lib/game-hub-commands') return commands;
         if (id === '@/lib/game-hub-registry') return registry;
         if (id === '@/lib/volume-store') return { readAppState: async () => state, updateAppState: update, updateAppStateIfChanged: updateIfChanged };
@@ -47,7 +48,7 @@ function harness(now) {
     });
     return m.exports;
   }
-  return { load, read, actions, request: message => ({ json: async () => ({ ...identity, message }) }) };
+  return { load, read, actions, setNow: value => { now = value; }, request: message => ({ json: async () => ({ ...identity, message }) }) };
 }
 
 test('actual command transaction accepts down by word/number while Phrase Guess is displayed', async () => {
@@ -79,8 +80,9 @@ test('lifecycle settles and retains tenant results without overlay polling, then
   const { POST } = h.load('src/app/api/game-hub/lifecycle/route.ts');
   const request = body => ({ json: async () => body });
   const first = await POST(request({}));
-  assert.equal(first.body.wordChainResults.length, 2);
+  assert.equal(first.body.wordChainResults.length, 1);
   assert.match(first.body.wordChainResults[0].message, /Alice \(7 pts\)/);
+  assert.match(first.body.wordChainResults[0].message, /overall top 3/);
   const second = await POST(request({}));
   assert.deepEqual(second.body.wordChainResults, first.body.wordChainResults);
   assert.equal(engine.getGameHubStore(h.read()).players['twitch:1'].gamePointsBalance, 7);
@@ -88,16 +90,39 @@ test('lifecycle settles and retains tenant results without overlay polling, then
   assert.equal((await POST(request({}))).body.wordChainResults.length, 0);
 });
 
-test('short and namespaced guesses return spelling feedback instead of accepting joined words', async () => {
+test('short and namespaced guesses open only one immediate spelling appeal', async () => {
   const h = harness(0);
   const { POST } = h.load('src/app/api/game-hub/command/route.ts');
   const settings = engine.getChannelGameSettings(h.read(), 'tenant');
   settings.wordChainRound.currentWord = 'LEAF';
   const explicit = await POST(h.request('spmt wordchain frenchhorn'));
-  assert.match(explicit.body.reply, /not a recognized single word/);
+  assert.match(explicit.body.reply, /Vote spmt yes or spmt no for 90 seconds/);
   engine.setChannelGameRunning(h.read(), 'tenant', 'phraseguess', false);
   engine.setChannelGameRunning(h.read(), 'tenant', 'pixelbattle', false);
   const short = await POST(h.request('spmt frenchhorn'));
-  assert.match(short.body.reply, /not a recognized single word/);
+  assert.match(short.body.reply, /vote on “FRENCHHORN” is already open/);
   assert.equal(engine.getChannelGameSettings(h.read(), 'tenant').wordChainRound.currentWord, 'LEAF');
+});
+
+test('yes and no route to appeals while other games are active, and lifecycle closes votes durably', async () => {
+  const h = harness(0);
+  const settings = engine.getChannelGameSettings(h.read(), 'tenant');
+  settings.wordChainRound.currentWord = 'FROG';
+  const command = h.load('src/app/api/game-hub/command/route.ts').POST;
+  assert.match((await command(h.request('spmt wordchain gamers'))).body.reply, /Vote spmt yes or spmt no for 90 seconds/);
+  for (const text of ['spmt no', 'spmt chain no', 'spmt wordchain yes', 'spmt yes']) {
+    assert.match((await command(h.request(text))).body.reply, /vote (already )?recorded for GAMERS/);
+  }
+  assert.deepEqual(engine.getChannelGameSettings(h.read(), 'tenant').wordChainRound.wordAppeal.votes, { 'twitch:1': true });
+  h.setNow(90_000);
+  const lifecycle = h.load('src/app/api/game-hub/lifecycle/route.ts').POST;
+  const request = body => ({ json: async () => body });
+  const first = await lifecycle(request({}));
+  assert.equal(first.body.wordChainResults.length, 1);
+  assert.match(first.body.wordChainResults[0].message, /GAMERS — 1 yes \/ 0 no — allowed for this round only/);
+  assert.deepEqual((await lifecycle(request({}))).body.wordChainResults, first.body.wordChainResults);
+  await lifecycle(request({ acknowledgedResults: first.body.wordChainResults.map(event => event.id), ackOnly: true }));
+  assert.equal((await lifecycle(request({}))).body.wordChainResults.length, 0);
+  assert.match((await command(h.request('spmt wordchain gamers'))).body.reply, /extends the chain/);
+  assert.match((await command(h.request('spmt yes'))).body.reply, /no open Word Chain word appeal/);
 });

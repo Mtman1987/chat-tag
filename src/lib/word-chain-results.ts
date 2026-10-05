@@ -33,6 +33,16 @@ export function wordChainResultMessages(input: {
     if (!winners.length) messages.push('Word Chain GAME OVER — no scored words this game.');
     else appendScores(winners.length > 1 ? 'Word Chain GAME OVER — tied winners:' : 'Word Chain GAME OVER — winner:', winners);
   }
-  return messages.map((message, index) => ({ id: `wordchain:${input.channel}:${input.roundSlot}:${index}`,
+  // Round scores, standings and the winner form one announcement whenever they
+  // fit. Only a genuinely long participant list needs continuation messages.
+  const announcements: string[] = [];
+  for (const message of messages) {
+    const last = announcements.length - 1;
+    const continuation = message.replace(/^Word Chain /, '');
+    if (last >= 0 && announcements[last].length + continuation.length + 3 <= 420) {
+      announcements[last] += ` | ${continuation}`;
+    } else announcements.push(message);
+  }
+  return announcements.map((message, index) => ({ id: `wordchain:${input.channel}:${input.roundSlot}:${index}`,
     channel: input.channel, message, expiresAt: input.expiresAt }));
 }

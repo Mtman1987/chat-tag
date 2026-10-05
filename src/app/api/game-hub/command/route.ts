@@ -22,6 +22,7 @@ import {
   recordPhraseGuessAttempt,
   recordWordChainMessage,
   recordWordChainVote,
+  recordWordChainAppealVote,
   purchasePhraseGuessHint,
   rememberGameHubPlayerFocus,
   resolveGameHubPlayerFocus,
@@ -222,6 +223,21 @@ export async function POST(req: NextRequest) {
     : wordStages.length ? wordStages[nebulaRotationIndexAt(Date.now(), wordStages.length)] : '';
   // Votes belong to Word Chain even while another active game is on screen.
   const voteArgs = /^(?:chain|wordchain)$/.test(command) ? parts.slice(1) : parts;
+  if (/^(yes|no)$/i.test(voteArgs[0] || '')) {
+    if (!activeForDirectRouting.includes('wordchain')) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Word Chain is not ACTIVE in #${channel}.` });
+    }
+    if (voteArgs.length !== 1) return NextResponse.json({ handled: true, reply: `@${displayName} Vote spmt yes or spmt no on the current Word Chain word appeal.` });
+    const yes = voteArgs[0].toLowerCase() !== 'no';
+    const result = await updateAppStateIfChanged(draft => {
+      const outcome = recordWordChainAppealVote(draft, { channel, userId, username, yes });
+      return { changed: outcome.changed, result: outcome };
+    });
+    const reply = 'word' in result
+      ? `${yes ? 'yes' : 'no'} vote ${result.outcome === 'unchanged' ? 'already recorded' : 'recorded'} for ${result.word} · ${result.yes} yes / ${result.no} no · ${result.secondsLeft}s left.`
+      : result.outcome === 'invalid-voter' ? 'your Twitch identity could not be read.' : 'there is no open Word Chain word appeal.';
+    return NextResponse.json({ handled: true, reply: `@${displayName} ${reply}` });
+  }
   if (/^(up|down)$/i.test(voteArgs[0] || '')) {
     if (!activeForDirectRouting.includes('wordchain')) {
       return NextResponse.json({ handled: true, reply: `@${displayName} Word Chain is not ACTIVE in #${channel}.` });
@@ -391,6 +407,9 @@ export async function POST(req: NextRequest) {
       used: 'that word is already in this chain.',
       invalid: 'use one word of at least three letters.',
       spelling: 'that is not a recognized single word. Check the spelling; do not join separate words together.',
+      'appeal-open': `“${(result as any).word}” was rejected. Allow it this round? Vote spmt yes or spmt no for 90 seconds. Play continues; retry it if approved.`,
+      'appeal-pending': `a vote on “${(result as any).word}” is already open (${(result as any).secondsLeft}s left). Vote spmt yes or spmt no.`,
+      'appeal-rejected': 'chat did not approve that word for this round.',
       rejected: 'that word was voted down in a previous round. Try another.',
       'not-playing': 'join first with spmt chain.',
     } : {
@@ -1048,6 +1067,9 @@ export async function POST(req: NextRequest) {
         used: 'that word is already in this chain.',
         invalid: 'use one word of at least three letters.',
         spelling: 'that is not a recognized single word. Check the spelling; do not join separate words together.',
+        'appeal-open': `“${(result as any).word}” was rejected. Allow it this round? Vote spmt yes or spmt no for 90 seconds. Play continues; retry it if approved.`,
+        'appeal-pending': `a vote on “${(result as any).word}” is already open (${(result as any).secondsLeft}s left). Vote spmt yes or spmt no.`,
+        'appeal-rejected': 'chat did not approve that word for this round.',
         rejected: 'that word was voted down in a previous round.',
         'not-playing': 'join Word Chain first.',
       } : {
@@ -1405,4 +1427,3 @@ export async function POST(req: NextRequest) {
       : `@${displayName} joined ${game.name} · ${actionArgs.join(' ')} registered.`,
   });
 }
-

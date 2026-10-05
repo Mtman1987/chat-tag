@@ -38,6 +38,7 @@ export const PHRASE_GUESS_PHRASES = [
 export const WORD_CHAIN_ROUND_MS = 6 * 60_000;
 export const WORD_CHAIN_REVIEW_MS = 60_000;
 export const WORD_CHAIN_TALLY_MS = 30_000;
+export const WORD_CHAIN_APPEAL_MS = 90_000;
 export const WORD_CHAIN_CYCLE_MS = WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS + WORD_CHAIN_TALLY_MS;
 export const WORD_CHAIN_THEMES = {
   Animals: ['TIGER', 'ELEPHANT', 'MONKEY', 'ZEBRA', 'ANTELOPE', 'EAGLE', 'EMU', 'OTTER', 'RABBIT', 'TURTLE', 'ELK', 'KANGAROO', 'OWL', 'LEMUR', 'RHINO', 'OCTOPUS', 'SNAKE', 'ECHIDNA', 'ALLIGATOR', 'RACCOON', 'NEWT', 'TOUCAN'],
@@ -138,6 +139,8 @@ export type GameHubChannelSettings = {
     lastContributorPlayerId?: string;
     comboMultiplier: number;
     settled?: boolean;
+    wordAppeal?: { word: string; expiresAt: number; votes: Record<string, boolean> };
+    wordAppealDecisions?: Record<string, boolean>;
     entries?: Array<{
       word: string; playerId: string; displayName: string; sourceChannel: string;
       points: number; votes: Record<string, boolean>;
@@ -727,7 +730,10 @@ function settleWordChainRound(state: any, channel: string, settings: GameHubChan
     const bonus = valid ? Math.min(20, Math.max(0, up - down) * 2) : 0;
     const points = valid ? entry.points + bonus : 0;
     settings.wordChainVerdicts ||= {};
-    settings.wordChainVerdicts[`${previous.theme}:${entry.word}`] = valid;
+    // An appeal grants permission for this round only, never a learned verdict.
+    if (previous.wordAppealDecisions?.[entry.word] !== true) {
+      settings.wordChainVerdicts[`${previous.theme}:${entry.word}`] = valid;
+    }
     const player = getGameHubStore(state).players[entry.playerId];
     if (player) {
       const member = player.joinedGames.wordchain;
@@ -768,15 +774,47 @@ function settleWordChainRound(state: any, channel: string, settings: GameHubChan
   return true;
 }
 
+function queueWordChainAppealNotice(state: any, channel: string, settings: GameHubChannelSettings, word: string, kind: string, message: string, exceptChannel?: string) {
+  const round = settings.wordChainRound!;
+  const channels = getStreamGameBattle(state, channel, 'wordchain')?.channels || [channel];
+  const events = channels.filter(target => target !== exceptChannel).map(target => ({
+    id: `wordchain:${target}:${round.roundSlot}:appeal:${word}:${kind}`,
+    channel: target, message, expiresAt: (round.roundSlot + 1) * WORD_CHAIN_CYCLE_MS,
+  }));
+  settings.pendingWordChainResults = [...(settings.pendingWordChainResults || []), ...events].slice(-200);
+}
+
+function settleWordChainAppeal(state: any, channel: string, settings: GameHubChannelSettings, now: number) {
+  const round = settings.wordChainRound;
+  const appeal = round?.wordAppeal;
+  if (!round || !appeal || now < appeal.expiresAt) return false;
+  delete round.wordAppeal;
+  // Never carry an old vote or its permission into a later round.
+  if (now >= (round.roundSlot + 1) * WORD_CHAIN_CYCLE_MS) return true;
+  const votes = Object.values(appeal.votes);
+  const yes = votes.filter(Boolean).length;
+  const no = votes.length - yes;
+  const allowed = yes > no;
+  round.wordAppealDecisions ||= {};
+  round.wordAppealDecisions[appeal.word] = allowed;
+  const canPlay = now % WORD_CHAIN_CYCLE_MS < WORD_CHAIN_ROUND_MS;
+  const verdict = allowed
+    ? `allowed for this round only. ${canPlay ? 'Retry it when its first letter fits the chain.' : 'Play has ended; no points were added.'}`
+    : 'not allowed this round. A tie or no votes keeps it blocked.';
+  queueWordChainAppealNotice(state, channel, settings, appeal.word, 'closed', `Word Chain vote: ${appeal.word} — ${yes} yes / ${no} no — ${verdict}`);
+  return true;
+}
+
 export function advanceWordChainRound(state: any, channelValue: unknown, nowValue = Date.now()) {
   const channel = normalizeGameHubChannel(channelValue);
   const settings = getChannelGameSettings(state, streamGameStateChannel(state, channel, 'wordchain'));
   const now = Math.max(0, Math.floor(Number(nowValue)));
   const roundSlot = Math.floor(now / WORD_CHAIN_CYCLE_MS);
+  const appealChanged = settleWordChainAppeal(state, channel, settings, now);
   if (settings.wordChainRound?.roundSlot === roundSlot) {
     const due = now % WORD_CHAIN_CYCLE_MS >= WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS;
     const changed = due ? settleWordChainRound(state, channel, settings, now) : false;
-    return { changed, round: settings.wordChainRound };
+    return { changed: changed || appealChanged, round: settings.wordChainRound };
   }
   const changed = settleWordChainRound(state, channel, settings, now);
   const gameSlot = Math.floor(roundSlot / 5);
@@ -864,16 +902,42 @@ export function recordWordChainMessage(
   const player = getOrCreateGameHubPlayer(state, input);
   if (!player.joinedGames.wordchain?.active) return { changed: advanced.changed, outcome: 'not-playing' as const };
   const normalized = normalizedWordChainMessage(message);
-  if (!/^[A-Z]+$/.test(normalized) || normalized.length < 3) return { changed: advanced.changed, outcome: 'invalid' as const };
+  if (!/^[A-Z]{3,40}$/.test(normalized)) return { changed: advanced.changed, outcome: 'invalid' as const };
   if (round.currentWord && normalized[0] !== round.currentWord.at(-1)) return { changed: advanced.changed, outcome: 'wrong-letter' as const };
   if (round.usedWords.includes(normalized)) return { changed: advanced.changed, outcome: 'used' as const };
-  if (!validWordChainSpelling(normalized)) return { changed: advanced.changed, outcome: 'spelling' as const };
   const settings = getChannelGameSettings(state, streamGameStateChannel(state, channel, 'wordchain'));
-  if (settings.wordChainVerdicts?.[`${round.theme}:${normalized}`] === false) {
-    return { changed: advanced.changed, outcome: 'rejected' as const };
+  if (round.wordAppealDecisions?.[normalized] === false) return { changed: advanced.changed, outcome: 'appeal-rejected' as const };
+  if (round.wordAppealDecisions?.[normalized] !== true && (!validWordChainSpelling(normalized)
+    || settings.wordChainVerdicts?.[`${round.theme}:${normalized}`] === false)) {
+    if (round.wordAppeal) return { changed: advanced.changed, outcome: 'appeal-pending' as const,
+      word: round.wordAppeal.word, secondsLeft: Math.max(0, Math.ceil((round.wordAppeal.expiresAt - now) / 1000)) };
+    round.wordAppeal = { word: normalized, expiresAt: now + WORD_CHAIN_APPEAL_MS, votes: {} };
+    // The command reply prompts the submitting channel immediately. Linked
+    // channels receive the same prompt through the durable delivery queue.
+    queueWordChainAppealNotice(state, channel, settings, normalized, 'opened',
+      `Word Chain: allow ${normalized} for this round? Vote spmt yes or spmt no for 90 seconds. Play continues; retry it if approved.`, channel);
+    return { changed: true, outcome: 'appeal-open' as const, word: normalized, secondsLeft: 90 };
   }
   const applied = applyWordChainWord(state, channel, round, player, normalized, now);
   return { changed: true, outcome: 'accepted' as const, ...applied };
+}
+
+export function recordWordChainAppealVote(state: any, input: {
+  channel: unknown; userId?: unknown; username?: unknown; yes: boolean; now?: number;
+}) {
+  const channel = normalizeGameHubChannel(input.channel);
+  const now = Math.max(0, Math.floor(Number(input.now ?? Date.now())));
+  const advanced = advanceWordChainRound(state, channel, now);
+  const appeal = advanced.round.wordAppeal;
+  if (!appeal) return { changed: advanced.changed, outcome: 'no-appeal' as const };
+  const voterId = normalizeGameHubPlayerId(input.userId, input.username);
+  if (!voterId) return { changed: advanced.changed, outcome: 'invalid-voter' as const };
+  const unchanged = appeal.votes[voterId] === input.yes;
+  appeal.votes[voterId] = input.yes;
+  const votes = Object.values(appeal.votes);
+  return { changed: advanced.changed || !unchanged, outcome: unchanged ? 'unchanged' as const : 'voted' as const,
+    word: appeal.word, yes: votes.filter(Boolean).length, no: votes.filter(vote => !vote).length,
+    secondsLeft: Math.max(0, Math.ceil((appeal.expiresAt - now) / 1000)) };
 }
 
 function stablePhraseMask(phrase: string, roundSlot: number, revealPercent: number) {
@@ -918,6 +982,7 @@ export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowVa
   const expectedSlot = Math.floor(now / WORD_CHAIN_CYCLE_MS);
   const settlementDue = now % WORD_CHAIN_CYCLE_MS >= WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS;
   const displayState = settings.wordChainRound?.roundSlot !== expectedSlot
+    || Boolean(settings.wordChainRound?.wordAppeal && settings.wordChainRound.wordAppeal.expiresAt <= now)
     || (settlementDue && !settings.wordChainRound?.settled) ? structuredClone(state) : state;
   const round = advanceWordChainRound(displayState, channel, now).round;
   const elapsed = now % WORD_CHAIN_CYCLE_MS;
@@ -944,6 +1009,12 @@ export function wordChainPublicSnapshot(state: any, channelValue: unknown, nowVa
     requiredLetter: round.currentWord.at(-1) || '',
     chainLength: round.usedWords.length,
     phase: settlementDue ? 'tally' : review ? 'review' : 'play',
+    wordAppeal: round.wordAppeal ? {
+      word: round.wordAppeal.word,
+      secondsLeft: Math.max(0, Math.ceil((round.wordAppeal.expiresAt - now) / 1000)),
+      yes: Object.values(round.wordAppeal.votes).filter(Boolean).length,
+      no: Object.values(round.wordAppeal.votes).filter(vote => !vote).length,
+    } : null,
     secondsLeft: Math.max(0, Math.ceil(((settlementDue ? WORD_CHAIN_CYCLE_MS : review ? WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS : WORD_CHAIN_ROUND_MS) - elapsed) / 1000)),
     reviewWords: (review || settlementDue) ? entries.map((entry, index) => {
       const votes = Object.values(entry.votes || {});

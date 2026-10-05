@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import './word-chain-spelling.test';
+import './word-chain-appeals.test';
 import { advanceWordChainRound, getChannelGameSettings, getGameHubStore, joinGameHubGame,
   recordWordChainMessage, recordWordChainVote, setStreamGameBattle, submitWordChainTheme,
   wordChainPublicSnapshot, WORD_CHAIN_CYCLE_MS, WORD_CHAIN_ROUND_MS, WORD_CHAIN_REVIEW_MS, WORD_CHAIN_THEMES } from '../src/lib/game-hub-state';
@@ -59,6 +60,20 @@ test('linked tenants share requested themes and each get results; unrelated tena
   advanceWordChainRound(state, 'alpha', WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS);
   const events = getChannelGameSettings(state, 'alpha').pendingWordChainResults!;
   assert.deepEqual([...new Set(events.map(event => event.channel))], ['alpha', 'beta']);
+});
+
+test('round scores, standings and final winners share one announcement when they fit', () => {
+  const players = [{ displayName: 'Alice', points: 12 }, { displayName: 'Bob', points: 8 }, { displayName: 'Cara', points: 0 }];
+  for (const gameEnded of [false, true]) {
+    const messages = wordChainResultMessages({ channel: 'tenant', roundSlot: gameEnded ? 4 : 1, theme: 'Animals', roundParticipants: players,
+      gameParticipants: players, gameEnded, expiresAt: 99 });
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].message, /round [25]\/5 — Animals:/);
+    assert.match(messages[0].message, /overall top 3: #1 Alice \(12 pts\)/);
+    assert.match(messages[0].message, /Cara \(0 pts\)/);
+    if (gameEnded) assert.match(messages[0].message, /GAME OVER — winner: Alice \(12 pts\)/);
+    else assert.doesNotMatch(messages[0].message, /GAME OVER/);
+  }
 });
 
 test('round and final messages include every player, overall top three and tied winners within chat limits', () => {

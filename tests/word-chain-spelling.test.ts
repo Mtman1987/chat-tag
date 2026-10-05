@@ -19,11 +19,12 @@ test('bundled dictionary rejects misspellings and joined phrases, with real comp
   for (const word of ['nectar', 'NECTAR', 'football', 'footballers', 'sunflower', 'raccoons', 'running', 'studies', 'colour', 'color', 'colours', 'colors']) assert.equal(isSpelledWordChainWord(word), true, word);
 });
 
-test('a rejected spelling cannot advance the chain, award points, or become a used word', () => {
+test('a rejected spelling opens an appeal without advancing the chain or awarding points', () => {
   const { state, round } = setup('RAIN');
-  const before = structuredClone(state);
-  assert.equal(recordWordChainMessage(state, { ...identity, message: 'nectr' }).outcome, 'spelling');
-  assert.equal(JSON.stringify(state), JSON.stringify(before));
+  assert.equal(recordWordChainMessage(state, { ...identity, message: 'nectr' }).outcome, 'appeal-open');
+  assert.equal(round.currentWord, 'RAIN');
+  assert.deepEqual(round.usedWords, ['RAIN']);
+  assert.equal(getGameHubStore(state).players['twitch:1'].joinedGames.wordchain.score, 0);
   assert.equal(recordWordChainMessage(state, { ...identity, message: 'nectar' }).outcome, 'accepted');
   assert.equal(round.currentWord, 'NECTAR');
   assert.equal(getGameHubStore(state).players['twitch:1'].joinedGames.wordchain.score, 6);
@@ -31,7 +32,7 @@ test('a rejected spelling cannot advance the chain, award points, or become a us
 
 test('joined phrases fail but a legitimate single-word compound plays normally', () => {
   const { state, round } = setup('LEAF');
-  assert.equal(recordWordChainMessage(state, { ...identity, message: 'frenchhorn' }).outcome, 'spelling');
+  assert.equal(recordWordChainMessage(state, { ...identity, message: 'frenchhorn' }).outcome, 'appeal-open');
   assert.equal(recordWordChainMessage(state, { ...identity, message: 'french horn' }).outcome, 'invalid');
   assert.equal(round.currentWord, 'LEAF');
   assert.equal(recordWordChainMessage(state, { ...identity, message: 'football' }).outcome, 'accepted');
@@ -50,7 +51,7 @@ test('custom theme seeds cannot bypass spelling; old invalid seeds are filtered'
   const { state, round } = setup('RAIN');
   assert.throws(() => submitWordChainTheme(state, { ...identity, name: 'Instruments', words: 'frenchhorn, piano, guitar, flute' }), /Check these starter words: FRENCHHORN/);
   round.themeWords = ['NECTR'];
-  assert.equal(recordWordChainMessage(state, { ...identity, message: 'nectr' }).outcome, 'spelling');
+  assert.equal(recordWordChainMessage(state, { ...identity, message: 'nectr' }).outcome, 'appeal-open');
   const settings = getChannelGameSettings(state, 'legacy');
   settings.wordChainThemeInventory = [{ id: 'old', name: 'Old theme', normalized: 'old theme', words: ['NECTR'], submitterPlayerId: '1', submitterDisplayName: 'Alice', submittedAt: new Date(0).toISOString() }];
   settings.wordChainThemeQueue = ['old theme'];

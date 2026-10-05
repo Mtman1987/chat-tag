@@ -102,6 +102,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
   { gameId: 'wordchain', key: 'wordchain', aliases: ['chain'], joinDescription: 'Join Word Chain.', joinTrigger: 'spmt chain', commands: [
     { trigger: 'spmt <word>', description: 'Extend the chain with a correctly spelled single word. Human votes decide theme fit. Use spmt guess <word> for a command word.' },
     { trigger: 'spmt up <word> / spmt down <word>', description: 'During the 60-second round review, vote on any played word by spelling or board number.' },
+    { trigger: 'spmt yes / spmt no', description: 'Vote for 90 seconds on a rejected word. A yes majority permits it only this round; retry it while play is open. Ties and no votes keep it blocked.' },
     { trigger: 'spmt chain theme Dinosaurs', description: 'Queue a theme for the next round. Optionally add a colon and at least four starter words.' },
   ] },
   { gameId: 'wordstorm', key: 'wordstorm', aliases: ['storm'], joinDescription: 'Join Word Storm.', joinTrigger: 'spmt storm', commands: [] },
