@@ -496,6 +496,9 @@ export async function POST(req: NextRequest) {
 
   if (parseMosaicRevealCommand(body.message)) {
     if (!activeForDirectRouting.includes('pixelbattle')) return NextResponse.json({ handled: true, reply: 'Nebula Mosaic is not ACTIVE in this channel.' });
+    if (body.source !== 'nebula-controller' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
+      return NextResponse.json({ handled: true, reply: 'Mosaic is waiting in the activity rotation. Try reveal when it is displayed; no points were charged.' });
+    }
     try {
       const result = await updateAppState(draft => revealMosaic(draft, { channel, userId, username, displayName }));
       return NextResponse.json({ handled: true, reply: result.cost
@@ -1444,4 +1447,3 @@ export async function POST(req: NextRequest) {
       : `@${displayName} joined ${game.name} · ${actionArgs.join(' ')} registered.`,
   });
 }
-

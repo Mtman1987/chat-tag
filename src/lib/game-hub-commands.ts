@@ -90,7 +90,7 @@ const SPECS: CanonicalGameCommandSpec[] = [
     { trigger: 'spmt mosaic remove 2', description: 'Streamer/mod: remove a queued theme by number or name.' },
     { trigger: 'spmt D12Y', description: 'Paint a square; spaces, full color names and reversed order also work.' },
     { trigger: 'spmt show 1', description: 'Open work board 1, 2, 3 or 4; view works too.' },
-    { trigger: 'spmt show all', description: 'Briefly show the complete combined artwork; view works too.' },
+    { trigger: 'spmt show all', description: 'Free: show current progress across all four boards for 15 seconds; view works too.' },
   ] },
   { gameId: 'rhythmpulse', key: 'rhythm', aliases: ['rhythmpulse'], joinDescription: 'Join Rhythm Pulse.', joinTrigger: 'spmt rhythm', commands: [] },
   { gameId: 'treasurehunt', key: 'treasure', aliases: ['treasurehunt'], joinDescription: 'Join Treasure Hunt.', joinTrigger: 'spmt treasure', commands: [
@@ -259,4 +259,3 @@ export function canonicalCommandSummary(gameOrId: GameHubGame | string): string 
 }
 
 export const GAME_HUB_COMMAND_SPECS = SPECS;
-
