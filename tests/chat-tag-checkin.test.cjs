@@ -30,6 +30,11 @@ test('Chat Tag sends scoped rider candidates and delivers returned greeting/over
   assert.equal(result.reply, 'Riders: 2');
   assert.equal(result.overlayEvent.payload.checkin.frontSeat, 'alice');
 });
+test('duplicate check-in receipts produce no repeated chat or overlay announcement', async () => {
+  response = {ok:true,status:200,json:async()=>({reply:'Already handled',duplicate:true,payload:{frontSeat:'alice'}})};
+  const result = await runChatTagCheckin({tagPlayers:{}}, {channel:'host',username:'alice',userId:'1',displayName:'Alice'});
+  assert.equal(result.handled,true);assert.equal(result.reply,'');assert.equal(result.overlayEvent,undefined);
+});
 test('service errors produce a visible chat reply rather than fall through to Mosaic', async () => {
   response = {ok:false,status:503,json:async()=>({error:'Unavailable'})};
   const result = await runChatTagCheckin({tagPlayers:{}}, {channel:'host',username:'alice',userId:'1',displayName:'Alice'});

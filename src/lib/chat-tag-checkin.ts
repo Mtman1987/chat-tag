@@ -36,7 +36,8 @@ export async function runChatTagCheckin(state: AppState, input: { channel: strin
     if (!response.ok || typeof result.reply !== 'string') throw Error('Check-in service returned ' + response.status);
     return {
       handled: true,
-      reply: result.reply,
+      // Another bot process or retry already owns this Twitch message.
+      reply: result.duplicate ? '' : result.reply,
       ...(!result.duplicate && result.payload ? { overlayEvent: { type: 'bot-message', message: result.reply, payload: { checkin: result.payload } } } : {}),
     };
   } catch (error) {
