@@ -83,7 +83,8 @@ const SPECS: CanonicalGameCommandSpec[] = [
   ] },
   { gameId: 'pixelbattle', key: 'mosaic', aliases: ['pixel', 'pixelbattle'], joinDescription: 'Join Nebula Mosaic.', joinTrigger: 'spmt mosaic', commands: [
     { trigger: '!mosaic owl', description: 'Request the next artwork theme free during testing.' },
-    { trigger: 'spmt brush 1-5', description: 'Set brush length; off returns to one cell.' },
+    { trigger: 'spmt reveal', description: 'Preview the completed picture for 15 seconds for 100 Nebula points, without finishing it.' },
+    { trigger: 'spmt brush 1-5', description: 'Multi-cell brushes: 100 Nebula points once per artwork. One cell is free.' },
     { trigger: 'spmt brush left/right/up/down', description: 'Aim the brush; combine them, for example spmt brush 4 down.' },
     { trigger: 'spmt mosaic queue', description: 'See queued artwork themes.' },
     { trigger: 'spmt mosaic remove 2', description: 'Streamer/mod: remove a queued theme by number or name.' },
@@ -258,3 +259,4 @@ export function canonicalCommandSummary(gameOrId: GameHubGame | string): string 
 }
 
 export const GAME_HUB_COMMAND_SPECS = SPECS;
+

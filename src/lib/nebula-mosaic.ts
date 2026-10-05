@@ -1,5 +1,6 @@
 import {
   awardGameHubPoints,
+  spendGameHubPoints,
   getChannelGameSettings,
   setChannelGameRunning,
   getGameHubStore,
@@ -7,6 +8,8 @@ import {
   joinGameHubGame,
   normalizeGameHubChannel,
 } from '@/lib/game-hub-state';
+
+import { MOSAIC_BRUSH_COST, MOSAIC_CONTROLS_COST, MOSAIC_REVEAL_COST, MOSAIC_REVEAL_MS } from '@/lib/mosaic-prices';
 
 export const MOSAIC_GAME_ID = 'pixelbattle';
 export const MOSAIC_WIDTH = 40;
@@ -87,6 +90,8 @@ export type NebulaMosaicArtwork = {
   activeBoard: MosaicBoardNumber;
   viewMode: 'board' | 'all';
   viewUntil?: string;
+  revealUntil?: string;
+  brushUnlockedByPlayer?: Record<string, string>;
   awardedMilestones: string[];
   brushByPlayer?: Record<string, number>;
   brushDirectionByPlayer?: Record<string, MosaicBrushDirection>;
@@ -392,20 +397,26 @@ export function setMosaicBrush(
   const joined = joinGameHubGame(state, { ...input, gameId: MOSAIC_GAME_ID });
   artwork.brushByPlayer = artwork.brushByPlayer && typeof artwork.brushByPlayer === 'object' ? artwork.brushByPlayer : {};
   artwork.brushDirectionByPlayer = artwork.brushDirectionByPlayer && typeof artwork.brushDirectionByPlayer === 'object' ? artwork.brushDirectionByPlayer : {};
-  const currentSize = Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer[joined.player.id] || 1)))) as 1 | 2 | 3 | 4 | 5;
+  const currentSize = Math.min(5, Math.max(1, Math.floor(Number(artwork.brushUnlockedByPlayer?.[joined.player.id] ? artwork.brushByPlayer[joined.player.id] || 1 : 1)))) as 1 | 2 | 3 | 4 | 5;
   const currentDirection = artwork.brushDirectionByPlayer[joined.player.id] || 'right';
-  if (input.brush === 'status') return { brush: currentSize, direction: currentDirection, artwork: artwork.theme };
+  if (input.brush === 'status') return { brush: currentSize, direction: currentDirection, artwork: artwork.theme, cost: 0 };
   let size = currentSize, direction = currentDirection;
   if (typeof input.brush === 'number') size = input.brush;
   else if (typeof input.brush === 'string') direction = input.brush;
   else { size = input.brush.size; direction = input.brush.direction; }
+  const cost = size > 1 && !artwork.brushUnlockedByPlayer?.[joined.player.id] ? MOSAIC_BRUSH_COST : 0;
+  if (cost) {
+    spendGameHubPoints(state, joined.player, cost, 'Mosaic multi-cell brushes for artwork');
+    artwork.brushUnlockedByPlayer ||= {};
+    artwork.brushUnlockedByPlayer[joined.player.id] = nowIso(now);
+  }
   artwork.brushByPlayer[joined.player.id] = size;
   artwork.brushDirectionByPlayer[joined.player.id] = direction;
   artwork.lastInteractionAt = nowIso(now);
   artwork.updatedAt = nowIso(now);
   artwork.activeIdleMs = 0;
   artwork.lastHeartbeatAt = nowIso(now);
-  return { brush: size, direction, artwork: artwork.theme };
+  return { brush: size, direction, artwork: artwork.theme, cost };
 }
 
 export function parseMosaicViewCommand(messageValue: unknown): 'all' | MosaicBoardNumber | null {
@@ -459,6 +470,8 @@ export function resetMosaicForReplay(state: any, channelValue: unknown, now = Da
   delete current.viewUntil;
   current.awardedMilestones = [];
   current.brushByPlayer = {};
+  current.brushUnlockedByPlayer = {};
+  delete current.revealUntil;
   current.brushDirectionByPlayer = {};
   current.createdAt = nowIso(now);
   current.updatedAt = nowIso(now);
@@ -575,7 +588,7 @@ export function paintMosaicCell(
   if (!artwork || artwork.status === 'completed') throw new Error('No unfinished Nebula Mosaic is ready. Request the next theme with !mosaic owl.');
   const joined = joinGameHubGame(state, { ...input, gameId: MOSAIC_GAME_ID });
   const origin = boardOrigin(artwork.activeBoard);
-  const brush = Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer?.[joined.player.id] || 1))));
+  const brush = artwork.brushUnlockedByPlayer?.[joined.player.id] ? Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer?.[joined.player.id] || 1)))) : 1;
   const direction: MosaicBrushDirection = artwork.brushDirectionByPlayer?.[joined.player.id] || 'right';
   const x = origin.x + input.command.column;
   const y = origin.y + input.command.row;
@@ -667,7 +680,8 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
   const saves = mosaic.saves.slice(0,20).map((item) => ({ id:item.id,theme:item.theme,status:item.status,updatedAt:item.updatedAt,createdAt:item.createdAt,paletteId:item.paletteId || 'classic',requestedBy:item.requestedBy }));
   const premium = { testingFree:true, capabilities:{ soloProjects:true, savedProjects:true, friendSessions:true, paletteRemix:true } };
   if (!artwork) return { artwork: null, queueLength, queue, generation, saves, premium };
-  const viewMode = artwork.status === 'completed'
+  const revealing = artwork.status !== 'completed' && Date.parse(String(artwork.revealUntil || '')) > now;
+  const viewMode = artwork.status === 'completed' || revealing
     ? 'all'
     : artwork.viewMode === 'all' && Date.parse(String(artwork.viewUntil || 0)) > now ? 'all' : 'board';
   const progress = artwork.painted.reduce((count, color, index) => count + (color === artwork.target[index] ? 1 : 0), 0);
@@ -690,6 +704,8 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
       status: artwork.status,
       activeBoard: artwork.activeBoard,
       viewMode,
+      revealing,
+      revealUntil: revealing ? artwork.revealUntil : undefined,
       target: viewMode === 'all' ? artwork.target : boardTarget,
       painted: viewMode === 'all' ? artwork.painted : boardPainted,
       width: viewMode === 'all' ? MOSAIC_WIDTH : MOSAIC_BOARD_WIDTH,
@@ -707,4 +723,30 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     saves,
     premium,
   };
+}
+
+
+export function unlockMosaicControls(state: any, input: { userId?: unknown; username?: unknown; displayName?: unknown; now?: number }) {
+  const player = getOrCreateGameHubPlayer(state, input);
+  if (player.mosaicControlsUnlockedAt) return { cost: 0, balance: player.gamePointsBalance };
+  spendGameHubPoints(state, player, MOSAIC_CONTROLS_COST, 'Permanent Mosaic click and touch controls');
+  player.mosaicControlsUnlockedAt = nowIso(input.now ?? Date.now());
+  return { cost: MOSAIC_CONTROLS_COST, balance: player.gamePointsBalance };
+}
+
+export function parseMosaicRevealCommand(value: unknown) {
+  return /^!?@?spmt\s+(?:mosaic\s+)?reveal$/i.test(String(value || '').trim());
+}
+
+export function revealMosaic(state: any, input: { channel: unknown; userId?: unknown; username?: unknown; displayName?: unknown; now?: number }) {
+  const now = input.now ?? Date.now();
+  const channel = normalizeGameHubChannel(input.channel);
+  const artwork = getMosaicChannelState(state, channel).current;
+  if (!artwork || artwork.status !== 'active') throw new Error('An active, unfinished Mosaic is needed for a reveal.');
+  if (Date.parse(String(artwork.revealUntil || '')) > now) return { cost: 0, until: artwork.revealUntil! };
+  const player = getOrCreateGameHubPlayer(state, input);
+  spendGameHubPoints(state, player, MOSAIC_REVEAL_COST, 'Mosaic 15-second reveal');
+  artwork.revealUntil = nowIso(now + MOSAIC_REVEAL_MS);
+  // Display-only state: never fill cells, finish the puzzle, or award milestones.
+  return { cost: MOSAIC_REVEAL_COST, until: artwork.revealUntil };
 }

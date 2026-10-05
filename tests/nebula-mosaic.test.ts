@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { getOrCreateGameHubPlayer, awardGameHubPoints } from '../src/lib/game-hub-state';
 import {
   claimNextMosaicRequest,
   clearMosaicQueue,
@@ -76,6 +77,7 @@ function readyMosaic() {
     channel: 'SpaceMountainLive', userId: '42', username: 'viewer', displayName: 'Viewer', theme: 'owl', xpCost: 500, now: 1,
   });
   installMosaicTemplate(draft, 'spacemountainlive', queued.request.id, Array.from({ length: 2_000 }, () => 'Y'), {}, 2);
+  awardGameHubPoints(draft, getOrCreateGameHubPlayer(draft, { userId: '7', username: 'artist' }), 100, 'test fixture');
   return draft;
 }
 
@@ -88,7 +90,7 @@ test('Mosaic accepts compact, spaced, named and reversed paint commands', () => 
   assert.deepEqual(parseMosaicPaintCommand('SPMT D 12 YELLOW'), expected);
 });
 
-test('Mosaic brushes are free per-artwork horizontal tools with simple commands', () => {
+test('Mosaic brushes cost 100 points per artwork and paint horizontally with simple commands', () => {
   assert.equal(parseMosaicBrushCommand('spmt brush'), 'status');
   assert.equal(parseMosaicBrushCommand('spmt brush 5'), 5);
   assert.equal(parseMosaicBrushCommand('spmt mosaic brush 3'), 3);
@@ -100,6 +102,7 @@ test('Mosaic brushes are free per-artwork horizontal tools with simple commands'
     channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 4, now: 50,
   });
   assert.equal(equipped.brush, 4);
+  assert.equal(equipped.cost, 100);
   const painted = paintMosaicCell(draft, {
     channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist',
     command: parseMosaicPaintCommand('spmt d12y')!, now: 51,
@@ -251,3 +254,4 @@ test('Mosaic inactivity saves and suspends without losing cells', () => {
   assert.equal(snapshot.artwork?.status, 'suspended');
   assert.equal(snapshot.artwork?.painted[11 * 20 + 3], 'Y');
 });
+

@@ -1946,10 +1946,10 @@ console.log = (...args) => {
     console.log(`[EventSub] Subscriptions complete (${eventSubSubscriptions.size} active)`);
   }
 
-  // EventSub disabled — requires per-broadcaster user tokens we don't have.
-  // TMI.js handlers (subscription, resub, submysterygift, cheer, raided) are the primary event source.
-  // To enable EventSub later, call connectEventSub() here after implementing per-user OAuth.
-  console.log('[Bot] EventSub disabled (needs per-broadcaster auth). Using TMI.js events.');
+  // Chat uses the authorized bot account through TMI.js. Optional EventSub is not started here.
+  // EventSub authorization depends on the event: follows can use a moderator's token,
+  // while subscription/cheer events need the broadcaster's corresponding permission.
+  console.log('[Bot] Twitch chat uses the authorized bot account via TMI.js. Optional EventSub integration is off; this is not a bot authentication error.');
 
   client.on('message', async (channel, tags, message, self) => {
     if (self) return;
@@ -3342,3 +3342,4 @@ console.log = (...args) => {
     }
   });
 })();
+

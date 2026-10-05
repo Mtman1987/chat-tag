@@ -5,6 +5,8 @@ import { POST as runGameHubCommand } from '@/app/api/game-hub/command/route';
 import { POST as runGameHubChat } from '@/app/api/game-hub/chat/route';
 import { normalizeGameHubChannel } from '@/lib/game-hub-state';
 
+import { normalizeControllerCommand, isPlayerMosaicCommand } from '@/lib/mosaic-controller-command';
+
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
@@ -15,10 +17,12 @@ export async function POST(req: NextRequest) {
   const channel = normalizeGameHubChannel(body.channel || signedInChannel);
   if (!channel) return NextResponse.json({ error: 'A channel is required.' }, { status: 400 });
   const isAdmin = req.headers.get('x-spmt-is-admin') === '1';
-  if (!isAdmin && channel !== signedInChannel) {
+  const rawMessage = String(body.message || '').trim().slice(0, 400);
+  const message = body.commandMode === true && rawMessage ? normalizeControllerCommand(rawMessage, body.gameId) : rawMessage;
+  const playerCommand = body.commandMode === true && body.gameId === 'pixelbattle' && isPlayerMosaicCommand(message);
+  if (!isAdmin && channel !== signedInChannel && !playerCommand) {
     return NextResponse.json({ error: 'This controller can only operate your own channel.' }, { status: 403 });
   }
-  const message = String(body.message || '').trim().slice(0, 400);
   if (!message) return NextResponse.json({ error: 'Type a command first.' }, { status: 400 });
 
   const identity = {
@@ -46,6 +50,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...commandPayload, privateController: true, privateChannel: true, mode: 'command' }, { status: commandResult.status });
   }
 
+  if (playerCommand) return NextResponse.json({ handled: true, reply: 'That Mosaic command was not recognized.', privateController: true }, { status: 400 });
+
   const chatResult = await runGameHubChat(new NextRequest(new URL('/api/game-hub/chat', req.url), {
     method: 'POST',
     headers,
@@ -66,3 +72,4 @@ export async function POST(req: NextRequest) {
     mode: 'chat',
   }, { status: chatResult.status });
 }
+
