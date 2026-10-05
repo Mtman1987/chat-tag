@@ -19,6 +19,7 @@ COPY scripts/patch-quackverse-pack-bot.mjs ./scripts/patch-quackverse-pack-bot.m
 COPY src/lib/chat-tag-command-text.js ./src/lib/chat-tag-command-text.js
 COPY src/lib/chat-tag-player-lookup.js ./src/lib/chat-tag-player-lookup.js
 COPY src/lib/chat-tag-crowns.js ./src/lib/chat-tag-crowns.js
+COPY src/lib/chat-tag-checkin-shoutout.js ./src/lib/chat-tag-checkin-shoutout.js
 RUN node scripts/patch-game-hub-bot.mjs
 RUN node scripts/patch-live-chat-pressure.mjs
 RUN node scripts/patch-quackverse-pack-bot.mjs
