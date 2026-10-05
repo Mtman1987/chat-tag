@@ -140,3 +140,13 @@ test('game cards use public puzzle snapshots and disable Discord mentions', () =
   assert.match(JSON.stringify(result), /•••/);
   assert.equal(result.allowed_mentions.parse.length, 0);
 });
+
+test('healthy theme responses preserve signed Personal URL and clean canonical outputs', async () => {
+  const h = themeHarness(async url => response(200, url.endsWith('workspace-profile') ? { profile: { id: 'theme', revision: 4 } } : url.endsWith('personal-overlay-launch') ? { tenant: 'alice', url: 'https://spmt.test/signed-launch', canonicalUrl: 'https://spmt.test/tenant/alice/personal' } : { surfaces: [{ id: 'worktray', path: '/workspace' }] }));
+  const { body } = await h.get();
+  assert.equal(body.personalOverlayUrl, 'https://spmt.test/signed-launch');
+  assert.equal(body.tenantOutputs.personal, 'https://spmt.test/tenant/alice/personal');
+  assert.match(body.tenantOutputs.public, /\/tenant\/alice\/public$/);
+  assert.match(body.surfaceUrls.worktray, /app=chat-tag/);
+  assert.match(body.surfaceUrls.worktray, /mode=panel/);
+});

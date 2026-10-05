@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     for (let column = 0; column < 20; column++) {
       const index = art.width > 20 ? (Math.floor((art.activeBoard - 1) / 2) * 25 + row) * art.width + ((art.activeBoard - 1) % 2) * 20 + column : row * art.width + column;
       const target = art.target[index], painted = art.painted[index];
-      const paletteColor = art.palette[painted || target];
+      const paletteColor = (art.palette as Record<string, string>)[painted || target];
       const color = /^#[0-9a-f]{6}$/i.test(paletteColor || '') ? paletteColor : '#94a3b8';
       const x = x0 + column * cell, y = y0 + row * cell;
       parts.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${painted ? color : '#020617'}" stroke="#334155" stroke-width="0.6"/>`);
