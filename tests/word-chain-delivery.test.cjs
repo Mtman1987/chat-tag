@@ -42,3 +42,21 @@ test('overlapping polls cannot send a result twice', async () => {
   assert.equal(requests, 2);
   assert.equal(sends, 1);
 });
+
+test('a failed tenant does not block result delivery to another tenant', async () => {
+  const sent = [], acknowledgements = [];
+  const tick = createWordChainLifecycleRunner({
+    apiCall: async (url, options) => {
+      const body = JSON.parse(options.body);
+      acknowledgements.push(...body.acknowledgedResults);
+      return { wordChainResults: body.ackOnly ? [] : [
+        { id: 'a1', channel: 'alpha', message: 'scores' }, { id: 'a2', channel: 'alpha', message: 'winner' },
+        { id: 'b1', channel: 'beta', message: 'scores' },
+      ] };
+    },
+    send: async channel => { if (channel === 'alpha') throw new Error('disconnected'); sent.push(channel); }, warn: () => {},
+  });
+  await tick();
+  assert.deepEqual(sent, ['beta']);
+  assert.deepEqual(acknowledgements, ['b1']);
+});

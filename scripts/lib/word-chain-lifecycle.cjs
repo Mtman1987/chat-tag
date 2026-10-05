@@ -17,15 +17,16 @@ function createWordChainLifecycleRunner({ apiCall, send, warn = console.warn }) 
       const acknowledgedResults = [...delivered];
       const result = await request({ acknowledgedResults });
       acknowledgedResults.forEach(id => delivered.delete(id));
+      const failedChannels = new Set();
       for (const event of result.wordChainResults || []) {
-        if (delivered.has(event.id)) continue;
+        if (delivered.has(event.id) || failedChannels.has(event.channel)) continue;
         try {
           await send(event.channel, event.message);
           delivered.add(event.id);
         } catch (error) {
           warn(`[WordChain] Result delivery failed for #${event.channel}: ${error?.message || error}`);
-          // Preserve message order for this batch; retry the failed result next tick.
-          break;
+          // Preserve this tenant's order without blocking other tenants' results.
+          failedChannels.add(event.channel);
         }
       }
       if (delivered.size) {

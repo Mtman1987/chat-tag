@@ -780,7 +780,7 @@ export function advanceWordChainRound(state: any, channelValue: unknown, nowValu
   const pool = unused.length ? unused : catalog.filter(entry => entry.name !== settings.wordChainRound?.theme);
   const selected = catalog.find(entry => entry.name.toLowerCase() === requested)
     || pool[roundSlot % pool.length] || catalog[0];
-  settings.wordChainThemeHistory = [...(unused.length ? history : []), selected.name.toLowerCase()].slice(-catalog.length);
+  settings.wordChainThemeHistory = [...new Set([...(unused.length ? history : []), selected.name.toLowerCase()])].slice(-catalog.length);
   const seed = selected.words[Math.floor(roundSlot / catalog.length) % selected.words.length] || '';
   settings.wordChainRound = {
     roundSlot, theme: selected.name, themeWords: selected.words,
