@@ -5,7 +5,6 @@ const WebSocket = require('ws');
 const { getPlayerHelpText, getRulesText, getModHelpText } = require('./src/lib/chat-tag-command-text');
 const { normalizeChatHandle, getPlayerDisplayName, resolvePlayerTarget } = require('./src/lib/chat-tag-player-lookup');
 const { decorateCrownsDeep, getWinners } = require('./src/lib/chat-tag-crowns');
-const { createLoungeCheckinShoutout, formatCheckinShoutoutReply } = require('./src/lib/chat-tag-checkin-shoutout');
 
 // Load environment variables
 const env = process.env;
@@ -1117,14 +1116,6 @@ console.log = (...args) => {
     return data.data?.[0] || null;
   }
 
-  const checkinShoutout = createLoungeCheckinShoutout({
-    getToken: getValidToken, getClientId: getTwitchClientId, lookupUser: helixGetUser,
-  });
-  // Read-only permission check; never send a shoutout merely on startup.
-  void checkinShoutout.refreshCapability().then(status => {
-    console.log('[CheckinShoutout] capability=' + status.reason);
-  });
-
   async function settleDanceParties() {
     const result = await apiCall('/api/game-hub/parade', {
       method: 'POST',
@@ -2094,15 +2085,6 @@ console.log = (...args) => {
     
     // Muted channel check - still process commands but don't respond
     const isMuted = mutedData?.muted?.includes(channelName);
-
-    // Anyone's check-in shouts out the observed source channel in the Lounge.
-    // Keep the existing check-in independent of native Twitch availability.
-    if (cmd === 'checkin') {
-      void checkinShoutout.send(channelName).then(async result => {
-        console.log(`[CheckinShoutout] channel=${result.channel} destination=${result.destination} status=${result.status}`);
-        if (!isMuted) await reply('@' + user + ' ' + formatCheckinShoutoutReply(result));
-      }).catch(() => console.error('[CheckinShoutout] Could not deliver the result notice'));
-    }
 
     // Chat Tag predates Games Hub and is a persistent ecosystem-wide game.
     // Keep every command already implemented by the legacy parser local so a
@@ -3141,7 +3123,7 @@ console.log = (...args) => {
         botUser: username,
         connected: isIrcConnected,
         joinedChannels: client.getChannels().length,
-        nativeCheckinShoutout: checkinShoutout.getStatus(),
+        nativeCheckinShoutout: { sender: 'stellabot87', destination: 'spacemountainlive', handledBy: 'streamweaver' },
         uptimeSec: Math.floor(process.uptime())
       };
       res.writeHead(isIrcConnected ? 200 : 503, { 'Content-Type': 'application/json' });
