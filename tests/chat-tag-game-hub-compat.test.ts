@@ -77,7 +77,20 @@ test('deployed bot build keeps proven Chat Tag commands and sender routing intac
     assert.match(patchedBot, /Chat Tag is always active globally; no channel start is required/);
     assert.match(patchedBot, /CHAT_TAG_API_TIMEOUT_MS/);
 
-    const legacyGuard = patchedBot.indexOf('if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd) || args.length === 1)');
+    const guardSource = "if (!['pack', 'quackpack', 'refillpacks'].includes(cmd) && (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd) || args.length === 1))";
+    const legacyGuard = patchedBot.indexOf(guardSource);
+    const shouldRoute = new Function('cmd', 'args', 'legacyChatTagCommands', 'sharedNebulaCommands', `return ${guardSource.slice(4, -1)}`);
+    const legacy = new Set(['pack', 'quackpack', 'refillpacks', 'score', 'live', 'join', 'leave']);
+    const shared = new Set(['join', 'leave']);
+    for (const command of ['pack', 'quackpack', 'refillpacks']) {
+      assert.equal(shouldRoute(command, [command], legacy, shared), false, `${command} must bypass the Games Hub request`);
+    }
+    for (const command of ['score', 'live']) {
+      assert.equal(shouldRoute(command, [command, 'player'], legacy, shared), false);
+    }
+    for (const command of ['join', 'leave', 'chain', 'checkin']) {
+      assert.equal(shouldRoute(command, [command], legacy, shared), true);
+    }
     const hubCall = patchedBot.indexOf("apiCall('/api/game-hub/command'");
     const scoreHandler = patchedBot.indexOf("cmd === 'score'");
     const liveHandler = patchedBot.indexOf("cmd === 'live'");
@@ -156,3 +169,4 @@ test('legacy Tag players remain scoreable without a Games Hub membership migrati
   assert.match(snapshot.summary, /1 tagged/);
   assert.match(snapshot.summary, /2 passes/);
 });
+
