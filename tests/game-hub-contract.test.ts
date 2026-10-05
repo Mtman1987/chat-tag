@@ -197,7 +197,7 @@ test('direct commands preserve Chat Tag and route colors only to Chat Wars', () 
   const route = read('src/app/api/game-hub/command/route.ts');
   const normalizeControl = route.indexOf('parts = normalizeDirectGameControlCommand(parts)');
   const freeformRouting = route.indexOf('const freeformCandidates');
-  const mosaicThemeRouting = route.indexOf("if (command === 'mosaic' && parts.length > 1)");
+  const mosaicThemeRouting = route.indexOf("if (command === 'mosaic' && parts.length > 1 && !specializedGameCommand)");
   assert.ok(normalizeControl >= 0 && normalizeControl < freeformRouting && normalizeControl < mosaicThemeRouting,
     'start/stop choices must normalize before free-form or Mosaic gameplay routing');
 });
@@ -929,4 +929,5 @@ test('word games only spend or advance on explicit guesses, with collision choic
   assert.ok(command.includes('message: guessText, explicit: true'));
   assert.ok(command.includes('!specializedGameCommand'), 'Mosaic paint and view commands must bypass word guessing');
 });
+
 
