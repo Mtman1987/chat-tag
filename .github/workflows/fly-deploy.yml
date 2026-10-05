@@ -75,7 +75,7 @@ jobs:
       - name: Run auth routing regression tests
         run: npm run test:auth-routing
       - name: Verify Twitch reply delivery
-        run: node --test tests/chat-reply-delivery.test.cjs
+        run: node --test tests/chat-reply-delivery.test.cjs tests/twitch-transport.test.cjs tests/log-error-routes.test.cjs
       - name: Run durable player history tests
         run: node --import tsx --test tests/player-history.test.ts tests/chat-tag-runtime-resilience.test.ts
       - name: Run Nebula gameplay GIF rotation tests
@@ -176,3 +176,4 @@ jobs:
           flyctl status --app chat-tag-bot-new
           curl --fail --show-error --retry 6 --retry-delay 5 --retry-all-errors \
             https://chat-tag-bot-new.fly.dev/health
+

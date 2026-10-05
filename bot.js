@@ -29,6 +29,8 @@ const IGNORED_SENDER_NAMES = new Set([
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean),
 ]);
+const { twitchChannels, createTwitchSendQueue, splitChatMessage } = require('./scripts/lib/twitch-transport.cjs');
+const chatSendQueue = createTwitchSendQueue();
 const joinFailSilenced = new Set();
 const PAGINATION_STATE_TTL_MS = Number.parseInt(process.env.PAGINATION_STATE_TTL_MS || '3600000', 10);
 const PAGINATION_STATE_MAX_USERS = Number.parseInt(process.env.PAGINATION_STATE_MAX_USERS || '500', 10);
@@ -672,14 +674,14 @@ async function joinChannelWithRetry(client, channelName) {
   let lastError = null;
   for (let attempt = 0; attempt <= TWITCH_JOIN_RETRY_DELAYS_MS.length; attempt++) {
     try {
-      await client.join(`#${normalized}`);
+      await twitchChannels(client).join(normalized);
       joinFailSilenced.delete(normalized);
       return;
     } catch (error) {
       lastError = error;
       const noResponse = errorMessage(error).toLowerCase().includes('no response');
       if (!noResponse || attempt === TWITCH_JOIN_RETRY_DELAYS_MS.length) throw error;
-      console.warn(`[Bot] Join timed out for ${normalized}; retrying once`);
+      if (!joinFailSilenced.has(normalized)) console.warn(`[Bot] Join timed out for ${normalized}; retrying once`);
       await sleep(TWITCH_JOIN_RETRY_DELAYS_MS[attempt]);
     }
   }
@@ -794,7 +796,11 @@ let liveMembersCache = {
   map: new Map(),
 };
 
-async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = false, attempt = 0) {
+async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = false) {
+  return chatSendQueue.send(targetChannel, rawMessage, () => sendMessageViaAPIUnqueued(targetChannel, rawMessage, forSourceOnly));
+}
+
+async function sendMessageViaAPIUnqueued(targetChannel, rawMessage, forSourceOnly = false, attempt = 0) {
   console.log(`[Bot] sendMessageViaAPI called: channel=${targetChannel}, forSourceOnly=${forSourceOnly}`);
   const message = await withCrowns(rawMessage);
   const clientId = getTwitchClientId();
@@ -802,6 +808,7 @@ async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = fals
   // Get app access token — required for for_source_only support
   if (!appToken) appToken = await getAppAccessToken();
   const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${targetChannel}`, {
+    signal: AbortSignal.timeout(5_000),
     headers: {
       'Client-ID': clientId,
       'Authorization': `Bearer ${appToken}`
@@ -817,6 +824,7 @@ async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = fals
   
   // Get bot user ID
   const botRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
+    signal: AbortSignal.timeout(5_000),
     headers: {
       'Client-ID': clientId,
       'Authorization': `Bearer ${appToken}`
@@ -841,6 +849,7 @@ async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = fals
   if (forSourceOnly) body.for_source_only = true;
   const res = await fetch('https://api.twitch.tv/helix/chat/messages', {
     method: 'POST',
+    signal: AbortSignal.timeout(5_000),
     headers: {
       'Client-ID': clientId,
       'Authorization': `Bearer ${tokenToUse}`,
@@ -853,11 +862,18 @@ async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = fals
   if (res.ok) {
     const result = await res.json().catch(() => null);
     if (result?.data?.[0]?.is_sent === true) return { success: true };
-    // Twitch can accept the HTTP request while dropping the chat message.
-    // Report failure so the existing IRC fallback can deliver the reply.
+    const dropCode = String(result?.data?.[0]?.drop_reason?.code || '');
+    // A moderation/rate-limit decision applies across transports. Never resend
+    // a held or rejected message through IRC. Only transport/auth errors fall back.
+    if (dropCode) {
+      const reason = /automod|held/.test(dropCode) ? 'automod-held' : /rate/.test(dropCode) ? 'rate-limit' : dropCode;
+      console.warn(`[Bot] Twitch chat delivery deferred: ${dropCode} channel=${targetChannel}`);
+      return { success: false, reason, allowFallback: false, status: res.status };
+    }
     return { success: false, reason: 'message-not-sent', status: res.status };
   }
 
+  if (res.status === 429) return { success: false, reason: 'rate-limit', allowFallback: false, status: 429 };
   const errorText = await res.text();
   console.log(`[Bot] API error: ${errorText}`);
 
@@ -884,7 +900,7 @@ async function sendMessageViaAPI(targetChannel, rawMessage, forSourceOnly = fals
       } catch (e) {
         console.error('[Bot] Token refresh failed:', e.message);
       }
-      return sendMessageViaAPI(targetChannel, message, forSourceOnly, attempt + 1);
+      return sendMessageViaAPIUnqueued(targetChannel, message, forSourceOnly, attempt + 1);
     }
   }
 
@@ -935,7 +951,7 @@ async function sendChatWithSharedFallback(client, targetChannel, rawMessage, opt
 
   if (inSharedChat) {
     const sendResult = await sendMessageViaAPI(normalized, message, true);
-    if (sendResult?.success) return;
+    if (sendResult?.success || sendResult?.allowFallback === false) return;
 
     await client.say(`#${normalized}`, message);
 
@@ -1071,7 +1087,6 @@ console.log = (...args) => {
 (async () => {
   let token = await getValidToken();
   console.log('[Bot] Username:', username);
-  console.log('[Bot] Token:', token.substring(0, 10) + '...');
   scheduleNebulaGameplayEmbedRotation();
 
   // Refresh token every 2 hours to prevent stale Helix calls
@@ -1116,20 +1131,26 @@ console.log = (...args) => {
     return data.data?.[0] || null;
   }
 
+  let danceSettlementPending = false;
   async function settleDanceParties() {
-    const result = await apiCall('/api/game-hub/parade', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'finish-due' }),
-    }).catch(() => null);
-    for (const ended of Array.isArray(result?.ended) ? result.ended : []) {
-      const names = Array.isArray(ended?.participantNames) ? ended.participantNames.filter(Boolean) : [];
-      const shown = names.slice(0, 20);
-      const more = Math.max(0, names.length - shown.length);
-      const roster = shown.length ? shown.join(', ') + (more ? ` +${more} more` : '') : 'No registered dancers';
-      const message = `🌌 Cosmic Conga Line complete! ${roster}. Everyone who participated earned +100 SPMT XP! 🎉`.slice(0, 480);
-      await sendChatWithSharedFallback(client, ended.channel, message, { warnOnFallback: true }).catch(() => {});
-    }
+    if (danceSettlementPending) return;
+    danceSettlementPending = true;
+    try {
+      const result = await apiCall('/api/game-hub/parade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'finish-due' }),
+        signal: AbortSignal.timeout(60_000),
+      }).catch(() => null);
+      for (const ended of Array.isArray(result?.ended) ? result.ended : []) {
+        const names = Array.isArray(ended?.participantNames) ? ended.participantNames.filter(Boolean) : [];
+        const shown = names.slice(0, 20);
+        const more = Math.max(0, names.length - shown.length);
+        const roster = shown.length ? shown.join(', ') + (more ? ` +${more} more` : '') : 'No registered dancers';
+        const message = `🌌 Cosmic Conga Line complete! ${roster}. Everyone who participated earned +100 SPMT XP! 🎉`.slice(0, 480);
+        await sendChatWithSharedFallback(client, ended.channel, message, { warnOnFallback: true }).catch(() => {});
+      }
+    } finally { danceSettlementPending = false; }
   }
 
   const client = new tmi.Client({
@@ -1145,6 +1166,20 @@ console.log = (...args) => {
     channels: [username]
   });
 
+  twitchChannels(client);
+  const rawSay = client.say.bind(client);
+  client.say = async (channel, message) => {
+    let result;
+    // Split before queueing: tmi's own long-message splitter otherwise bypasses
+    // our per-message rate limit and sends the following chunk immediately.
+    for (const chunk of splitChatMessage(message)) {
+      result = await chatSendQueue.send(channel, chunk, () => rawSay(channel, chunk));
+    }
+    return result;
+  };
+  client.on('roomstate', (channel, state) => chatSendQueue.roomstate(channel, state));
+  client.on('automod', (channel, code) => chatSendQueue.notice(channel, code));
+
   client.on('disconnected', (reason) => {
     console.log(`[Bot] Disconnected: ${reason}`);
     isIrcConnected = false;
@@ -1159,6 +1194,7 @@ console.log = (...args) => {
   });
 
   client.on('notice', (channel, msgId, message) => {
+    chatSendQueue.notice(channel, msgId || '');
     const target = String(channel || '').replace(/^#/, '') || 'unknown';
     console.warn(`[Bot] Twitch NOTICE channel=${target} msg-id=${msgId || 'unknown'}: ${message || ''}`);
   });
@@ -1224,7 +1260,7 @@ console.log = (...args) => {
       console.log(`[Bot] Found ${allLiveChannels.length} live channels out of ${allChannelNames.length} total`);
       
       const joinedChannels = [];
-      const alreadyJoined = new Set(client.getChannels().map((ch) => ch.replace('#', '').toLowerCase()));
+      const alreadyJoined = new Set(twitchChannels(client).channels().map((ch) => ch.replace('#', '').toLowerCase()));
 
       // Join channels one at a time with delay
       for (const ch of Array.from(new Set(allLiveChannels))) {
@@ -1243,7 +1279,7 @@ console.log = (...args) => {
       console.log(`[Bot] Joined ${joinedChannels.length} channels`);
       
       // Save actually joined channels
-      const actualJoined = client.getChannels().map((ch) => ch.replace('#', '').toLowerCase());
+      const actualJoined = twitchChannels(client).channels().map((ch) => ch.replace('#', '').toLowerCase());
       await apiCall('/api/bot/auto-join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1471,7 +1507,7 @@ console.log = (...args) => {
         console.log(`[Bot] Periodic check: ${currentlyLive.length} live channels`);
 
         // Get currently joined channels from TMI client
-        const currentlyJoined = client.getChannels().map(ch => ch.replace('#', '').toLowerCase());
+        const currentlyJoined = twitchChannels(client).channels().map(ch => ch.replace('#', '').toLowerCase());
 
         // Join new live channels
         const toJoin = Array.from(new Set(currentlyLive.filter(ch => !currentlyJoined.includes(ch))));
@@ -1512,7 +1548,7 @@ console.log = (...args) => {
         }
 
         // Persist actual joined list every cycle to avoid stale UI state drift.
-        const actualJoined = client.getChannels().map((ch) => ch.replace('#', '').toLowerCase());
+        const actualJoined = twitchChannels(client).channels().map((ch) => ch.replace('#', '').toLowerCase());
         await apiCall('/api/bot/auto-join', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1899,7 +1935,7 @@ console.log = (...args) => {
 
   async function subscribeEventSubForJoinedChannels() {
     if (!eventSubSessionId) return;
-    const channels = client.getChannels().map(ch => ch.replace('#', '').toLowerCase());
+    const channels = twitchChannels(client).channels().map(ch => ch.replace('#', '').toLowerCase());
     console.log(`[EventSub] Subscribing to events for ${channels.length} channels...`);
     for (const ch of channels) {
       const broadcaster = await lookupBroadcasterId(ch);
@@ -2109,7 +2145,7 @@ console.log = (...args) => {
     // commands. This ordering is deliberate: legacy Tag never waits on the
     // Games Hub router before reaching its original handler.
     const sharedNebulaCommands = new Set(['join', 'leave']);
-    if (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd) || args.length === 1) {
+    if (!['pack', 'quackpack', 'refillpacks'].includes(cmd) && (!legacyChatTagCommands.has(cmd) || sharedNebulaCommands.has(cmd) || args.length === 1)) {
       const gamesHubCommand = await apiCall('/api/game-hub/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2956,8 +2992,8 @@ console.log = (...args) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'open', userId, twitchUsername: senderLogin, streamweaverTenantId })
       });
-      if (res?.error) {
-        reply(`@${user} ${res.error} ${Number(res.packsRemaining || 0)}/3 packs left today.`);
+      if (!res?.__ok || !Array.isArray(res?.pack)) {
+        await reply(res?.error ? `@${user} ${res.error} ${Number(res.packsRemaining || 0)}/3 packs left today.` : `@${user} Your pack result could not be confirmed. Please check your Quackdex before opening another pack.`);
         return;
       }
       const packCards = Array.isArray(res?.pack) ? res.pack : [];
@@ -3122,7 +3158,7 @@ console.log = (...args) => {
         ok: isIrcConnected,
         botUser: username,
         connected: isIrcConnected,
-        joinedChannels: client.getChannels().length,
+        joinedChannels: twitchChannels(client).channels().length,
         nativeCheckinShoutout: { sender: 'stellabot87', destination: 'spacemountainlive', handledBy: 'streamweaver' },
         uptimeSec: Math.floor(process.uptime())
       };
