@@ -681,7 +681,7 @@ test('Bingo uses a shared anti-cheat board, transcript triggers, Stella defense,
   assert.match(mic, /Start listening/);
   assert.match(mic, /Manual transcript test/);
   assert.match(mic, /Raw microphone audio is not stored/);
-  assert.match(controller, /bingoTabs = \['Live','Mic','Command','Guide','Comms Lounge'\]/);
+  assert.match(controller, /bingoTabs = \['Live','Mic','Command','Guide','Share','Comms Lounge'\]/);
   assert.match(controller, /BingoTranscriptControl channel=\{channel\}/);
   assert.match(model, /BINGO_CLAIM_WINDOW_MS = 15_000/);
   assert.match(model, /BINGO_PHRASE_CHANGE_COST = 100/);
@@ -803,10 +803,10 @@ test('Nebula Controllers replace instruction-only popouts with private real-comm
   const privateRoute = read('src/app/api/game-hub/controller-command/route.ts');
   const mosaicFinal = read('src/app/api/game-hub/mosaic/final/route.ts');
   assert.match(command, /\/games\/\$\{encodeURIComponent\(gameId\)\}\/controller/);
-  assert.match(controller, /const basicTabs = \['Live','Command','Guide','Comms Lounge'\]/);
+  assert.match(controller, /const basicTabs = \['Live','Command','Guide','Share','Comms Lounge'\]/);
   assert.match(controller, /canonicalPlayerCommands/);
   assert.match(controller, /canonicalStreamerCommands/);
-  assert.match(controller, /Live game surface/);
+  assert.match(controller, /Live game/);
   assert.match(controller, /Private command console/);
   assert.match(controller, /Player controls/);
   assert.match(controller, /Streamer controls/);
@@ -929,3 +929,4 @@ test('word games only spend or advance on explicit guesses, with collision choic
   assert.ok(command.includes('message: guessText, explicit: true'));
   assert.ok(command.includes('!specializedGameCommand'), 'Mosaic paint and view commands must bypass word guessing');
 });
+

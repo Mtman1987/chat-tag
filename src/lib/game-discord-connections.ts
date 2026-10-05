@@ -34,7 +34,7 @@ function publicConnection(record?: Connection) {
   if (!record) return { configured: false };
   return { configured: true, discordChannelId: record.discordChannelId, webhookName: record.webhookName,
     status: record.status, error: record.error || '', lastSyncedAt: record.lastSyncedAt || null,
-    messageUrl: record.messageId ? `https://discord.com/channels/@me/${record.discordChannelId}/${record.messageId}` : null };
+    messageId: record.messageId || null };
 }
 export async function getGameDiscordConnection(channel: string, gameId: string) {
   return publicConnection((await readAppState()).discordWebhooks[keyFor(channel, gameId)] as Connection | undefined);
@@ -89,8 +89,9 @@ async function syncOne(key: string) {
     if (record.messageId && hash === record.lastHash) { patch.status = 'connected'; patch.error = ''; }
     else {
       const url = unseal(record.sealed);
+      const { username, ...editCard } = card;
       const response = await request(record.messageId ? `${url}/messages/${record.messageId}` : `${url}?wait=true`, {
-        method: record.messageId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(card),
+        method: record.messageId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record.messageId ? editCard : card),
       });
       const body = await response.json().catch(() => null);
       if (response.ok && /^\d+$/.test(String(body?.id || ''))) {
