@@ -39,6 +39,7 @@ export const WORD_CHAIN_ROUND_MS = 6 * 60_000;
 export const WORD_CHAIN_REVIEW_MS = 60_000;
 export const WORD_CHAIN_TALLY_MS = 30_000;
 export const WORD_CHAIN_APPEAL_MS = 90_000;
+export const WORD_CHAIN_PLAYER_COOLDOWN_MS = 30_000;
 export const WORD_CHAIN_CYCLE_MS = WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS + WORD_CHAIN_TALLY_MS;
 export const WORD_CHAIN_THEMES = {
   Animals: ['TIGER', 'ELEPHANT', 'MONKEY', 'ZEBRA', 'ANTELOPE', 'EAGLE', 'EMU', 'OTTER', 'RABBIT', 'TURTLE', 'ELK', 'KANGAROO', 'OWL', 'LEMUR', 'RHINO', 'OCTOPUS', 'SNAKE', 'ECHIDNA', 'ALLIGATOR', 'RACCOON', 'NEWT', 'TOUCAN'],
@@ -137,6 +138,7 @@ export type GameHubChannelSettings = {
     currentWord: string;
     usedWords: string[];
     lastContributorPlayerId?: string;
+    lastContributionAt?: number;
     comboMultiplier: number;
     settled?: boolean;
     wordAppeal?: { word: string; expiresAt: number; votes: Record<string, boolean> };
@@ -779,7 +781,8 @@ function queueWordChainAppealNotice(state: any, channel: string, settings: GameH
   const channels = getStreamGameBattle(state, channel, 'wordchain')?.channels || [channel];
   const events = channels.filter(target => target !== exceptChannel).map(target => ({
     id: `wordchain:${target}:${round.roundSlot}:appeal:${word}:${kind}`,
-    channel: target, message, expiresAt: (round.roundSlot + 1) * WORD_CHAIN_CYCLE_MS,
+    channel: target, message, expiresAt: kind === 'opened' && round.wordAppeal
+      ? round.wordAppeal.expiresAt : (round.roundSlot + 1) * WORD_CHAIN_CYCLE_MS,
   }));
   settings.pendingWordChainResults = [...(settings.pendingWordChainResults || []), ...events].slice(-200);
 }
@@ -854,6 +857,7 @@ function applyWordChainWord(
   round.currentWord = word;
   round.usedWords = [...round.usedWords, word].slice(-100);
   round.lastContributorPlayerId = player.id;
+  round.lastContributionAt = now;
   round.comboMultiplier = combo;
   round.entries ||= [];
   round.entries.push({
@@ -905,6 +909,10 @@ export function recordWordChainMessage(
   if (!/^[A-Z]{3,40}$/.test(normalized)) return { changed: advanced.changed, outcome: 'invalid' as const };
   if (round.currentWord && normalized[0] !== round.currentWord.at(-1)) return { changed: advanced.changed, outcome: 'wrong-letter' as const };
   if (round.usedWords.includes(normalized)) return { changed: advanced.changed, outcome: 'used' as const };
+  if (round.lastContributorPlayerId === player.id && typeof round.lastContributionAt === 'number') {
+    const remaining = round.lastContributionAt + WORD_CHAIN_PLAYER_COOLDOWN_MS - now;
+    if (remaining > 0) return { changed: advanced.changed, outcome: 'cooldown' as const, secondsLeft: Math.ceil(remaining / 1000) };
+  }
   const settings = getChannelGameSettings(state, streamGameStateChannel(state, channel, 'wordchain'));
   if (round.wordAppealDecisions?.[normalized] === false) return { changed: advanced.changed, outcome: 'appeal-rejected' as const };
   if (round.wordAppealDecisions?.[normalized] !== true && (!validWordChainSpelling(normalized)

@@ -402,6 +402,7 @@ export async function POST(req: NextRequest) {
     const label = stageGameId === 'wordchain' ? 'Word Chain' : 'Phrase Guess';
     const details: Record<string, string> = stageGameId === 'wordchain' ? {
       accepted: `“${guessText.toUpperCase()}” extends the chain · ${(result as any).points || 0} provisional points. Votes settle at round end.`,
+      cooldown: `wait ${(result as any).secondsLeft}s before another word, unless another player gets a word accepted first.`,
       review: 'the round is in review. Vote with spmt up <word> or spmt down <word>; the next chain begins shortly.',
       'wrong-letter': 'that word starts with the wrong letter. Check the highlighted last letter on the board.',
       used: 'that word is already in this chain.',
@@ -1062,6 +1063,7 @@ export async function POST(req: NextRequest) {
       });
       const details: Record<string, string> = game.id === 'wordchain' ? {
         accepted: `“${guess.toUpperCase()}” extends the chain · ${(result as any).points || 0} provisional points. Votes settle at round end.`,
+        cooldown: `wait ${(result as any).secondsLeft}s before another word, unless another player gets a word accepted first.`,
         review: 'the round is in review. Vote with spmt up <word> or spmt down <word>.',
         'wrong-letter': 'that word starts with the wrong letter.',
         used: 'that word is already in this chain.',
