@@ -83,8 +83,8 @@ const SPECS: CanonicalGameCommandSpec[] = [
   ] },
   { gameId: 'pixelbattle', key: 'mosaic', aliases: ['pixel', 'pixelbattle'], joinDescription: 'Join Nebula Mosaic.', joinTrigger: 'spmt mosaic', commands: [
     { trigger: '!mosaic owl', description: 'Request the next artwork theme free during testing.' },
-    { trigger: 'spmt reveal', description: 'Preview the completed picture for 15 seconds for 100 Nebula points, without finishing it.' },
-    { trigger: 'spmt brush 1-5', description: 'Multi-cell brushes: 100 Nebula points once per artwork. One cell is free.' },
+    { trigger: 'spmt reveal', description: 'Preview the completed picture for 15 seconds without finishing it. Free during testing Oct 5–11; normally 100 Nebula points.' },
+    { trigger: 'spmt brush 1-5', description: 'Multi-cell brushes are free during testing Oct 5–11; normally 100 Nebula points once per artwork. One cell is always free.' },
     { trigger: 'spmt brush left/right/up/down', description: 'Aim the brush; combine them, for example spmt brush 4 down.' },
     { trigger: 'spmt mosaic queue', description: 'See queued artwork themes.' },
     { trigger: 'spmt mosaic remove 2', description: 'Streamer/mod: remove a queued theme by number or name.' },

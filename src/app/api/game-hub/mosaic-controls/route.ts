@@ -4,7 +4,7 @@ import { normalizeGameHubChannel, normalizeGameHubPlayerId, resolveChannelGameId
 import { recordGameHubRuntimeAction } from '@/lib/game-hub-runtime';
 import { readAppState, updateAppState } from '@/lib/volume-store';
 import { paintMosaicCell, parseMosaicPaintCommand, unlockMosaicControls } from '@/lib/nebula-mosaic';
-import { MOSAIC_CONTROLS_COST, MOSAIC_BRUSH_COST, MOSAIC_REVEAL_COST } from '@/lib/mosaic-prices';
+import { mosaicPricing } from '@/lib/mosaic-prices';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +12,12 @@ function personalStatus(state: any, playerId: string, channel: string) {
   const store = state?.gameSettings?.default?.gameHub;
   const player = store?.players?.[playerId];
   const art = store?.channels?.[channel]?.mosaic?.current;
+  const pricing = mosaicPricing();
   return {
-    unlocked: Boolean(player?.mosaicControlsUnlockedAt), balance: Number(player?.gamePointsBalance || 0),
-    brush: art?.brushUnlockedByPlayer?.[playerId] ? Number(art?.brushByPlayer?.[playerId] || 1) : 1,
-    direction: art?.brushDirectionByPlayer?.[playerId] || 'right', brushUnlocked: Boolean(art?.brushUnlockedByPlayer?.[playerId]),
-    controlsCost: MOSAIC_CONTROLS_COST, brushCost: MOSAIC_BRUSH_COST, revealCost: MOSAIC_REVEAL_COST,
+    ...pricing, permanentlyUnlocked: Boolean(player?.mosaicControlsUnlockedAt),
+    unlocked: pricing.testingFree || Boolean(player?.mosaicControlsUnlockedAt), balance: Number(player?.gamePointsBalance || 0),
+    brush: (pricing.testingFree || art?.brushUnlockedByPlayer?.[playerId]) ? Number(art?.brushByPlayer?.[playerId] || 1) : 1,
+    direction: art?.brushDirectionByPlayer?.[playerId] || 'right', brushUnlocked: pricing.testingFree || Boolean(art?.brushUnlockedByPlayer?.[playerId]),
   };
 }
 
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
     const result = await updateAppState(state => {
       if (body.action === 'unlock') {
         const purchase = unlockMosaicControls(state, identity);
-        return { ...personalStatus(state, playerId, channel), reply: purchase.cost ? 'Click and touch controls unlocked permanently · 5,000 Nebula points spent.' : 'Your click and touch controls are already unlocked.' };
+        const status = personalStatus(state, playerId, channel);
+        return { ...status, reply: status.testingFree ? 'Click and touch is free through October 11. No points needed.' : purchase.cost ? 'Click and touch controls unlocked permanently · 5,000 Nebula points spent.' : 'Your click and touch controls are already unlocked.' };
       }
       if (body.action !== 'paint') throw new Error('Unknown control.');
       if (!personalStatus(state, playerId, channel).unlocked) throw Object.assign(new Error('Unlock click and touch controls first.'), { status: 403 });

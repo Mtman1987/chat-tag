@@ -9,7 +9,7 @@ import {
   normalizeGameHubChannel,
 } from '@/lib/game-hub-state';
 
-import { MOSAIC_BRUSH_COST, MOSAIC_CONTROLS_COST, MOSAIC_REVEAL_COST, MOSAIC_REVEAL_MS } from '@/lib/mosaic-prices';
+import { MOSAIC_BRUSH_COST, MOSAIC_CONTROLS_COST, MOSAIC_REVEAL_COST, MOSAIC_REVEAL_MS, mosaicPricing } from '@/lib/mosaic-prices';
 
 export const MOSAIC_GAME_ID = 'pixelbattle';
 export const MOSAIC_WIDTH = 40;
@@ -397,14 +397,15 @@ export function setMosaicBrush(
   const joined = joinGameHubGame(state, { ...input, gameId: MOSAIC_GAME_ID });
   artwork.brushByPlayer = artwork.brushByPlayer && typeof artwork.brushByPlayer === 'object' ? artwork.brushByPlayer : {};
   artwork.brushDirectionByPlayer = artwork.brushDirectionByPlayer && typeof artwork.brushDirectionByPlayer === 'object' ? artwork.brushDirectionByPlayer : {};
-  const currentSize = Math.min(5, Math.max(1, Math.floor(Number(artwork.brushUnlockedByPlayer?.[joined.player.id] ? artwork.brushByPlayer[joined.player.id] || 1 : 1)))) as 1 | 2 | 3 | 4 | 5;
+  const pricing = mosaicPricing(now);
+  const currentSize = Math.min(5, Math.max(1, Math.floor(Number((pricing.testingFree || artwork.brushUnlockedByPlayer?.[joined.player.id]) ? artwork.brushByPlayer[joined.player.id] || 1 : 1)))) as 1 | 2 | 3 | 4 | 5;
   const currentDirection = artwork.brushDirectionByPlayer[joined.player.id] || 'right';
-  if (input.brush === 'status') return { brush: currentSize, direction: currentDirection, artwork: artwork.theme, cost: 0 };
+  if (input.brush === 'status') return { brush: currentSize, direction: currentDirection, artwork: artwork.theme, cost: 0, testingFree: pricing.testingFree };
   let size = currentSize, direction = currentDirection;
   if (typeof input.brush === 'number') size = input.brush;
   else if (typeof input.brush === 'string') direction = input.brush;
   else { size = input.brush.size; direction = input.brush.direction; }
-  const cost = size > 1 && !artwork.brushUnlockedByPlayer?.[joined.player.id] ? MOSAIC_BRUSH_COST : 0;
+  const cost = size > 1 && !artwork.brushUnlockedByPlayer?.[joined.player.id] ? pricing.brushCost : 0;
   if (cost) {
     spendGameHubPoints(state, joined.player, cost, 'Mosaic multi-cell brushes for artwork');
     artwork.brushUnlockedByPlayer ||= {};
@@ -416,7 +417,7 @@ export function setMosaicBrush(
   artwork.updatedAt = nowIso(now);
   artwork.activeIdleMs = 0;
   artwork.lastHeartbeatAt = nowIso(now);
-  return { brush: size, direction, artwork: artwork.theme, cost };
+  return { brush: size, direction, artwork: artwork.theme, cost, testingFree: pricing.testingFree };
 }
 
 export function parseMosaicViewCommand(messageValue: unknown): 'all' | MosaicBoardNumber | null {
@@ -588,7 +589,7 @@ export function paintMosaicCell(
   if (!artwork || artwork.status === 'completed') throw new Error('No unfinished Nebula Mosaic is ready. Request the next theme with !mosaic owl.');
   const joined = joinGameHubGame(state, { ...input, gameId: MOSAIC_GAME_ID });
   const origin = boardOrigin(artwork.activeBoard);
-  const brush = artwork.brushUnlockedByPlayer?.[joined.player.id] ? Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer?.[joined.player.id] || 1)))) : 1;
+  const brush = (mosaicPricing(now).testingFree || artwork.brushUnlockedByPlayer?.[joined.player.id]) ? Math.min(5, Math.max(1, Math.floor(Number(artwork.brushByPlayer?.[joined.player.id] || 1)))) : 1;
   const direction: MosaicBrushDirection = artwork.brushDirectionByPlayer?.[joined.player.id] || 'right';
   const x = origin.x + input.command.column;
   const y = origin.y + input.command.row;
@@ -678,8 +679,9 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     retryAt: latestRequest.retryAt || '',
   } : null;
   const saves = mosaic.saves.slice(0,20).map((item) => ({ id:item.id,theme:item.theme,status:item.status,updatedAt:item.updatedAt,createdAt:item.createdAt,paletteId:item.paletteId || 'classic',requestedBy:item.requestedBy }));
+  const pricing = mosaicPricing(now);
   const premium = { testingFree:true, capabilities:{ soloProjects:true, savedProjects:true, friendSessions:true, paletteRemix:true } };
-  if (!artwork) return { artwork: null, queueLength, queue, generation, saves, premium };
+  if (!artwork) return { artwork: null, queueLength, queue, generation, saves, premium, pricing };
   const revealing = artwork.status !== 'completed' && Date.parse(String(artwork.revealUntil || '')) > now;
   const viewMode = artwork.status === 'completed' || revealing
     ? 'all'
@@ -722,12 +724,15 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
     generation,
     saves,
     premium,
+    pricing,
   };
 }
 
 
 export function unlockMosaicControls(state: any, input: { userId?: unknown; username?: unknown; displayName?: unknown; now?: number }) {
   const player = getOrCreateGameHubPlayer(state, input);
+  // Trial access is temporary; it never grants a permanent paid entitlement.
+  if (mosaicPricing(input.now ?? Date.now()).testingFree) return { cost: 0, balance: player.gamePointsBalance };
   if (player.mosaicControlsUnlockedAt) return { cost: 0, balance: player.gamePointsBalance };
   spendGameHubPoints(state, player, MOSAIC_CONTROLS_COST, 'Permanent Mosaic click and touch controls');
   player.mosaicControlsUnlockedAt = nowIso(input.now ?? Date.now());
@@ -745,8 +750,9 @@ export function revealMosaic(state: any, input: { channel: unknown; userId?: unk
   if (!artwork || artwork.status !== 'active') throw new Error('An active, unfinished Mosaic is needed for a reveal.');
   if (Date.parse(String(artwork.revealUntil || '')) > now) return { cost: 0, until: artwork.revealUntil! };
   const player = getOrCreateGameHubPlayer(state, input);
-  spendGameHubPoints(state, player, MOSAIC_REVEAL_COST, 'Mosaic 15-second reveal');
+  const cost = mosaicPricing(now).revealCost;
+  if (cost) spendGameHubPoints(state, player, cost, 'Mosaic 15-second reveal');
   artwork.revealUntil = nowIso(now + MOSAIC_REVEAL_MS);
   // Display-only state: never fill cells, finish the puzzle, or award milestones.
-  return { cost: MOSAIC_REVEAL_COST, until: artwork.revealUntil };
+  return { cost, until: artwork.revealUntil, started: true };
 }

@@ -11,6 +11,7 @@ import { GameControllerShare } from '@/components/game-controller-share';
 import { StellaControllerGuide } from '@/components/stella-controller-guide';
 import { MosaicCoordinateBoard } from '@/components/mosaic-coordinate-board';
 import { useMosaicReveal } from '@/components/use-mosaic-reveal';
+import type { mosaicPricing } from '@/lib/mosaic-prices';
 import { MosaicTouchControls } from '@/components/mosaic-touch-controls';
 import { BingoTranscriptControl } from '@/components/bingo-transcript-control';
 
@@ -20,6 +21,7 @@ type MosaicSnapshot = {
     target: string[]; painted: string[]; width: number; height: number; progress: number; total: number;
     paletteId?: string; palette?: Record<string,string>; finalImageUrl?: string; revealUntil?: string;
   };
+  pricing?: ReturnType<typeof mosaicPricing>;
   queueLength: number;
   queue?: Array<{position:number;id:string;theme:string;displayName:string;status:string;attempts:number}>;
   saves?: Array<{id:string;theme:string;status:string;updatedAt:string;createdAt:string;paletteId:string;requestedBy:string}>;
@@ -36,10 +38,10 @@ function channelOf(value: unknown) {
   return String(value || '').trim().toLowerCase().replace(/^#/,'');
 }
 
-function MosaicBoard({ snapshot, onCell, disabled }: { snapshot: MosaicSnapshot; onCell?: (coordinate: string, board: number) => void; disabled?: boolean }) {
+function MosaicBoard({ snapshot, onCell, disabled, expanded = false }: { snapshot: MosaicSnapshot; expanded?: boolean; onCell?: (coordinate: string, board: number) => void; disabled?: boolean }) {
   const art = snapshot.artwork;
   const revealSeconds = useMosaicReveal(art?.revealUntil);
-  const [cellSize, setCellSize] = useState<number | null>(32);
+  const [cellSize, setCellSize] = useState<number | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [availableHeight, setAvailableHeight] = useState<number | null>(null);
   useEffect(() => {
@@ -48,7 +50,7 @@ function MosaicBoard({ snapshot, onCell, disabled }: { snapshot: MosaicSnapshot;
     const fit = () => {
       // Fit the complete board below the controller headers, including inside
       // short popouts. Width remains bounded by the controller's content area.
-      const height = Math.max(200, Math.min(window.innerHeight - 24, window.innerHeight - frame.getBoundingClientRect().top - 24));
+      const height = Math.max(200, Math.min(window.innerHeight - 24, window.innerHeight - frame.getBoundingClientRect().top - 28));
       setAvailableHeight(current => current !== null && Math.abs(current - height) < 1 ? current : height);
     };
     fit();
@@ -57,14 +59,14 @@ function MosaicBoard({ snapshot, onCell, disabled }: { snapshot: MosaicSnapshot;
     if (frame.parentElement) observer.observe(frame.parentElement);
     window.addEventListener('resize', fit);
     return () => { observer.disconnect(); window.removeEventListener('resize', fit); };
-  }, [art?.id, art?.width, art?.height]);
+  }, [art?.id, art?.width, art?.height, expanded]);
   if (!art) return <div className="grid min-h-[460px] place-items-center rounded-3xl border border-cyan-300/10 bg-slate-950/85 p-8 text-center text-slate-400"><div><strong className="block text-xl text-white">No Mosaic loaded</strong><span className="mt-2 block text-sm">Queue a theme from the Command tab.</span></div></div>;
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><div className="text-xs font-black uppercase tracking-[.2em] text-cyan-300">{art.status} · board {art.activeBoard}</div><h2 className="mt-1 text-2xl font-black text-white">{art.theme}</h2><p className="text-xs text-slate-400">{art.progress}/{art.total} correct · {Math.round((art.progress/Math.max(1,art.total))*100)}%</p></div>
       {art.finalImageUrl ? <a href={art.finalImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-emerald-300 px-4 py-2 text-xs font-black text-slate-950 no-underline">Reveal final image</a> : null}
     </div>
-    <div className="flex flex-wrap items-center gap-2 text-sm"><button onClick={() => setCellSize(32)} className="rounded-lg border border-white/20 px-3 py-2">Readable</button><button aria-label="Smaller squares" onClick={() => setCellSize(Math.max(24, (cellSize || 32) - 4))} className="rounded-lg border border-white/20 px-3 py-2">−</button><button aria-label="Larger squares" onClick={() => setCellSize(Math.min(48, (cellSize || 32) + 4))} className="rounded-lg border border-white/20 px-3 py-2">+</button><button onClick={() => setCellSize(null)} className="rounded-lg border border-white/20 px-3 py-2">Fit screen</button><span className="text-xs text-slate-400">{cellSize ? 'Scroll the board; letters and numbers stay pinned.' : 'Whole-board view'}</span></div>
+    <div className="flex flex-wrap items-center gap-2 text-sm"><button onClick={() => setCellSize(32)} className="rounded-lg border border-white/20 px-3 py-2">Readable</button><button aria-label="Smaller squares" onClick={() => setCellSize(Math.max(24, (cellSize || 32) - 4))} className="rounded-lg border border-white/20 px-3 py-2">−</button><button aria-label="Larger squares" onClick={() => setCellSize(Math.min(48, (cellSize || 32) + 4))} className="rounded-lg border border-white/20 px-3 py-2">+</button><button onClick={() => setCellSize(null)} className="rounded-lg border border-white/20 px-3 py-2">Fit screen</button><span className="text-xs text-slate-400">{cellSize ? 'Scroll the board; letters and numbers stay pinned.' : 'Whole board · expand the game for a larger view'}</span></div>
     {revealSeconds > 0 ? <p role="status" className="text-sm font-bold text-violet-200">Completed-picture preview · {revealSeconds}s left · progress unchanged</p> : null}
     <div ref={frameRef} className="flex min-w-0 justify-center">
       {revealSeconds > 0 ? <div aria-label="Temporary completed Mosaic preview" className="grid w-full" style={{ maxWidth: (availableHeight || 700) * art.width / art.height, aspectRatio: `${art.width}/${art.height}`, gridTemplateColumns: `repeat(${art.width}, minmax(0,1fr))` }}>{art.target.map((color, index) => <span key={index} style={{ background: art.palette?.[color] }} />)}</div> : <MosaicCoordinateBoard art={art} availableHeight={availableHeight} cellSize={cellSize} onCell={onCell} disabled={disabled || art.status !== 'active'} />}
@@ -77,6 +79,15 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
   const { user } = useSession();
   const channel = channelOf(params.get('channel') || user?.twitchUsername || '');
   const [tab,setTab] = useState<Tab>(initialTab || (game.id === 'quackverse' && params.get('tab')?.toLowerCase() === 'quackdex' ? 'Quackdex' : game.id === 'pixelbattle' ? 'Board' : 'Live'));
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setExpanded(false); };
+    window.addEventListener('keydown', close);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', close); };
+  }, [expanded]);
   const [command,setCommand] = useState('');
   const [reply,setReply] = useState('');
   const [busy,setBusy] = useState(false);
@@ -149,12 +160,14 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
     .filter((item, index, all) => all.findIndex((entry) => entry.trigger === item.trigger) === index)
     .slice(0, 12), [playerCommands, streamerCommands]);
   const premium = mosaic.premium;
+  const testingFree = mosaic.pricing?.testingFree === true;
   const canManage = Boolean(user && (channel === channelOf(user.twitchUsername) || user.isAdmin || user.role === 'owner'));
-  return <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white">
+  return <div className={`${expanded ? 'fixed inset-0 z-[1000] overflow-y-auto' : 'min-h-screen'} bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white`}>
     <header className={`${tab === 'Quackdex' ? 'relative' : 'sticky top-0'} z-20 border-b border-cyan-300/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl`}>
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
         <div><div className="text-[10px] font-black uppercase tracking-[.26em] text-cyan-300">Nebula Controller</div><h1 className="text-xl font-black">{isQuackverse && tab === 'Quackdex' ? 'Quackdex' : game.name}</h1><p className="text-xs text-slate-400">{tab === 'Quackdex' ? 'Your cards, decks, and trades' : `Controls for #${channel || 'no-channel'}`}</p></div>
         <div className="flex flex-wrap gap-2">
+          {isMosaic ? <button type="button" onClick={() => setExpanded(value => !value)} className="rounded-full border border-cyan-300/40 bg-cyan-300/15 px-3 py-1.5 text-xs font-bold text-cyan-100">{expanded ? 'Exit expanded view' : 'Expand game'}</button> : null}
           <button onClick={() => setTab('Guide')} className="rounded-full border border-violet-300/30 bg-violet-300/10 px-3 py-1.5 text-xs font-bold text-violet-100">✦ Stella help</button>
           {controllerTabs.map(item=><button key={item} onClick={()=>setTab(item)} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${tab===item?'border-cyan-300/50 bg-cyan-300/15 text-cyan-100':'border-white/10 bg-white/[.03] text-slate-400 hover:bg-white/[.06]'}`}>{item}</button>)}
         </div>
@@ -162,8 +175,8 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
     </header>
     <main className={`mx-auto grid max-w-[1600px] gap-4 p-4 ${tab === 'Quackdex' ? '' : 'lg:grid-cols-[minmax(0,1fr)_300px]'}`}>
       <section className="min-w-0 rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-2xl">
-        {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game</div><p className="mt-1 text-sm text-slate-400">Play along in Twitch chat. Open Share to put this game on your stream or in Discord.</p></div><GameHubPlayPanel game={game}/></div>) : null}
-        {tab==='Click & touch' && isMosaic ? <MosaicTouchControls channel={channel} signedIn={Boolean(user)} artworkId={mosaic.artwork?.id} run={run} refresh={refreshMosaic} renderBoard={(onCell, disabled) => <MosaicBoard snapshot={mosaic} onCell={onCell} disabled={disabled} />} /> : null}
+        {(tab==='Board' || tab==='Live') ? (isMosaic ? <MosaicBoard snapshot={mosaic} expanded={expanded}/> : <div className="space-y-4"><div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Live game</div><p className="mt-1 text-sm text-slate-400">Play along in Twitch chat. Open Share to put this game on your stream or in Discord.</p></div><GameHubPlayPanel game={game}/></div>) : null}
+        {tab==='Click & touch' && isMosaic ? <MosaicTouchControls testingFree={testingFree} channel={channel} signedIn={Boolean(user)} artworkId={mosaic.artwork?.id} run={run} refresh={refreshMosaic} renderBoard={(onCell, disabled) => <MosaicBoard snapshot={mosaic} expanded={expanded} onCell={onCell} disabled={disabled} />} /> : null}
         {tab==='Share' ? <GameControllerShare game={game} channel={channel} canManage={canManage}/> : null}
         {tab==='Quackdex' && isQuackverse ? <Quackdex /> : null}
         {tab==='Mic' && isBingo ? <BingoTranscriptControl channel={channel}/> : null}
@@ -173,7 +186,7 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
           {reply ? <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[.06] p-4 text-sm text-cyan-50">{reply}</div> : null}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {(isMosaic
-              ? ['spmt show 1','spmt show 2','spmt show 3','spmt show 4','spmt show all','spmt brush 1','spmt brush 3 right','spmt brush 3 left','spmt brush 3 down','spmt brush 3 up','spmt mosaic queue','spmt reveal'].map((trigger)=>({trigger,description: trigger === 'spmt reveal' ? '100 Nebula points · completed preview for 15 seconds' : trigger.startsWith('spmt brush 3') ? '100 Nebula points once per artwork' : 'Mosaic quick control'}))
+              ? ['spmt show 1','spmt show 2','spmt show 3','spmt show 4','spmt show all','spmt brush 1','spmt brush 3 right','spmt brush 3 left','spmt brush 3 down','spmt brush 3 up','spmt mosaic queue','spmt reveal'].map((trigger)=>({trigger,description: trigger === 'spmt reveal' ? `${testingFree ? 'Free this week' : '100 Nebula points'} · completed preview for 15 seconds` : trigger.startsWith('spmt brush 3') ? (testingFree ? 'Free this week' : '100 Nebula points once per artwork') : 'Mosaic quick control'}))
               : quickCommands
             ).map(item=><button key={item.trigger} onClick={()=>void run(item.trigger)} className="rounded-xl border border-white/10 bg-white/[.035] px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-white/[.07]"><code>{item.trigger}</code><span className="mt-1 block font-normal text-slate-500">{item.description}</span></button>)}
           </div>
@@ -208,9 +221,9 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
       </section>
       {tab !== 'Quackdex' ? <aside className="space-y-3">
         <StellaControllerGuide game={game} channel={channel} canManage={canManage} onGuide={() => setTab('Guide')} onShare={() => setTab('Share')}>
-          <form onSubmit={submit} className="mt-4 space-y-2"><label htmlFor="stella-command" className="block text-sm font-bold text-cyan-100">Type a game command</label><input id="stella-command" value={command} onChange={event => setCommand(event.target.value)} placeholder={isMosaic ? 'D12Y, show 2, brush 3, reveal…' : 'Type a command…'} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950 p-3 text-base text-white"/><p className="text-xs text-slate-300">With or without <code>spmt</code>. {isMosaic ? 'Single-cell paint and show all are free. Brushes: 100 points per artwork. Reveal: 100 points / 15 seconds.' : ''}</p><button disabled={busy || !command.trim() || !user} className="w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">{!user ? 'Sign in to play' : busy ? 'Running…' : 'Run command'}</button></form>
+          <form onSubmit={submit} className="mt-4 space-y-2"><label htmlFor="stella-command" className="block text-sm font-bold text-cyan-100">Type a game command</label><input id="stella-command" value={command} onChange={event => setCommand(event.target.value)} placeholder={isMosaic ? 'D12Y, show 2, brush 3, reveal…' : 'Type a command…'} className="w-full rounded-xl border border-cyan-300/30 bg-slate-950 p-3 text-base text-white"/><p className="text-xs text-slate-300">With or without <code>spmt</code>. {isMosaic ? (testingFree ? 'Everything in Mosaic is free through October 11: click/touch, all brushes, and 15-second reveal. No points needed.' : 'Single-cell paint and show all are free. Brushes: 100 points per artwork. Reveal: 100 points / 15 seconds.') : ''}</p><button disabled={busy || !command.trim() || !user} className="w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">{!user ? 'Sign in to play' : busy ? 'Running…' : 'Run command'}</button></form>
           {reply ? <p role="status" className="mt-3 rounded-xl bg-black/25 p-3 text-sm text-cyan-50">{reply}</p> : null}
-          {isMosaic ? <a href={`/games/pixelbattle/controller/controls?channel=${encodeURIComponent(channel)}`} className="mt-3 block text-sm font-bold text-violet-200 underline">Click &amp; touch studio · 5,000-point unlock</a> : null}
+          {isMosaic ? <a href={`/games/pixelbattle/controller/controls?channel=${encodeURIComponent(channel)}`} className="mt-3 block text-sm font-bold text-violet-200 underline">Click &amp; touch studio · {testingFree ? 'free this week' : '5,000-point unlock'}</a> : null}
         </StellaControllerGuide>
         <div className="rounded-3xl border border-cyan-300/15 bg-cyan-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">Controller status</div><dl className="mt-3 grid gap-2 text-sm"><div className="flex justify-between gap-2"><dt className="text-slate-500">Channel</dt><dd>#{channel||'—'}</dd></div>{isMosaic?<><div className="flex justify-between gap-2"><dt className="text-slate-500">Queue</dt><dd>{mosaic.queueLength}</dd></div><div className="flex justify-between gap-2"><dt className="text-slate-500">Palette</dt><dd className="capitalize">{mosaic.artwork?.paletteId||'classic'}</dd></div></>:null}</dl></div>
         {isMosaic ? <div className="rounded-3xl border border-violet-300/15 bg-violet-300/[.05] p-4"><div className="text-xs font-black uppercase tracking-[.18em] text-violet-200">Project features</div><p className="mt-2 text-xs text-slate-400">{premium?.testingFree!==false?'Unlocked during testing.':'Entitlements apply.'}</p><div className="mt-3 grid gap-1.5 text-xs text-slate-300"><span>✓ Solo projects</span><span>✓ Saved projects</span><span>✓ Friend sessions</span><span>✓ Palette remix</span></div></div> : null}
