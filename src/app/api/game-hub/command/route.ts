@@ -390,6 +390,7 @@ export async function POST(req: NextRequest) {
       'wrong-letter': 'that word starts with the wrong letter. Check the highlighted last letter on the board.',
       used: 'that word is already in this chain.',
       invalid: 'use one word of at least three letters.',
+      spelling: 'that is not a recognized single word. Check the spelling; do not join separate words together.',
       rejected: 'that word was voted down in a previous round. Try another.',
       'not-playing': 'join first with spmt chain.',
     } : {
@@ -1046,6 +1047,7 @@ export async function POST(req: NextRequest) {
         'wrong-letter': 'that word starts with the wrong letter.',
         used: 'that word is already in this chain.',
         invalid: 'use one word of at least three letters.',
+        spelling: 'that is not a recognized single word. Check the spelling; do not join separate words together.',
         rejected: 'that word was voted down in a previous round.',
         'not-playing': 'join Word Chain first.',
       } : {
@@ -1341,7 +1343,7 @@ export async function POST(req: NextRequest) {
     const rawTheme = rawActionArgs.slice(1).join(' ');
     const separator = rawTheme.indexOf(':');
     if (!rawTheme || separator === 0) {
-      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} use: spmt chain theme Dinosaurs (or Dinosaurs: raptor, triceratops, stegosaurus, trex)`) });
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} use: spmt chain theme Dinosaurs (or Dinosaurs: raptor, triceratops, stegosaurus, tyrannosaurus)`) });
     }
     const name = (separator < 0 ? rawTheme : rawTheme.slice(0, separator)).trim();
     const words = separator < 0 ? '' : rawTheme.slice(separator + 1).trim();
@@ -1403,5 +1405,4 @@ export async function POST(req: NextRequest) {
       : `@${displayName} joined ${game.name} · ${actionArgs.join(' ')} registered.`,
   });
 }
-
 

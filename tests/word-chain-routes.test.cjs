@@ -30,6 +30,7 @@ function harness(now) {
         if (id === 'next/server') return { NextResponse: { json: (body, init) => ({ body, status: init?.status || 200 }) } };
         if (id === '@/lib/auth') return { isBotRequest: () => true, isStreamWeaverGameHubRequest: () => false };
         if (id === '@/lib/game-hub-state') return { ...engine,
+          recordWordChainMessage: (state, input) => engine.recordWordChainMessage(state, { ...input, now }),
           recordWordChainVote: (state, input) => engine.recordWordChainVote(state, { ...input, now }) };
         if (id === '@/lib/game-hub-commands') return commands;
         if (id === '@/lib/game-hub-registry') return registry;
@@ -39,7 +40,7 @@ function harness(now) {
         if (id === '@/lib/game-hub-chat-summary') return { fitCompactReplyWithLink: text => text };
         if (id === '@/lib/nebula-mosaic') return { mosaicPublicSnapshot: () => ({}), parseMosaicPaintCommand: () => null, parseMosaicBrushCommand: () => null, parseMosaicViewCommand: () => null };
         if (id === '@/lib/game-hub-event-bus') return { getNebulaChatEvents: () => [] };
-        if (id === '@/lib/nebula-rotation') return { nebulaRotationIndexAt: () => 1 };
+        if (id === '@/lib/nebula-rotation') return { nebulaRotationIndexAt: (now, count) => 1 % count };
         if (id === '@/lib/dancing-parade') return { getDancingParadeSnapshot: () => ({ active: false }) };
         return {};
       },
@@ -85,4 +86,18 @@ test('lifecycle settles and retains tenant results without overlay polling, then
   assert.equal(engine.getGameHubStore(h.read()).players['twitch:1'].gamePointsBalance, 7);
   await POST(request({ acknowledgedResults: first.body.wordChainResults.map(event => event.id), ackOnly: true }));
   assert.equal((await POST(request({}))).body.wordChainResults.length, 0);
+});
+
+test('short and namespaced guesses return spelling feedback instead of accepting joined words', async () => {
+  const h = harness(0);
+  const { POST } = h.load('src/app/api/game-hub/command/route.ts');
+  const settings = engine.getChannelGameSettings(h.read(), 'tenant');
+  settings.wordChainRound.currentWord = 'LEAF';
+  const explicit = await POST(h.request('spmt wordchain frenchhorn'));
+  assert.match(explicit.body.reply, /not a recognized single word/);
+  engine.setChannelGameRunning(h.read(), 'tenant', 'phraseguess', false);
+  engine.setChannelGameRunning(h.read(), 'tenant', 'pixelbattle', false);
+  const short = await POST(h.request('spmt frenchhorn'));
+  assert.match(short.body.reply, /not a recognized single word/);
+  assert.equal(engine.getChannelGameSettings(h.read(), 'tenant').wordChainRound.currentWord, 'LEAF');
 });

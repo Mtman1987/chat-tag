@@ -355,7 +355,8 @@ test('Word Chain gives voting a full minute and holds five-round final standings
     'twitch:11': { displayName: 'Alpha', points: 20 },
     'twitch:12': { displayName: 'Beta', points: 15 },
   };
-  const word = `${current.currentWord.at(-1)}AAA`;
+  assert.equal(current.currentWord.at(-1), 'T');
+  const word = 'TACO';
   assert.equal(recordWordChainMessage(state, { ...alpha, channel: 'space', message: word, now: fifthRoundAt }).outcome, 'accepted');
 
   const finalAt = fifthRoundAt + WORD_CHAIN_ROUND_MS + WORD_CHAIN_REVIEW_MS;
@@ -928,4 +929,3 @@ test('word games only spend or advance on explicit guesses, with collision choic
   assert.ok(command.includes('message: guessText, explicit: true'));
   assert.ok(command.includes('!specializedGameCommand'), 'Mosaic paint and view commands must bypass word guessing');
 });
-
