@@ -1,7 +1,11 @@
 /** Normalize only the explicit controller command form, never ordinary chat. */
 export function normalizeControllerCommand(value: unknown, gameId: unknown) {
   let command = String(value || '').trim().slice(0, 400).replace(/^!?@?spmt(?:\s+|$)/i, '').replace(/^!/, '').trim();
-  if (gameId === 'pixelbattle' && !/^mosaic(?:\s|$)/i.test(command)) {
+  const mosaicControl = /^(?:brush|show|view|reveal|queue|finish|complete|palette|replay|again|reset|remove|drop|reject|clearqueue|paint|play)(?:\s|$)/i.test(command)
+    || /^(?:start|stop)$/i.test(command)
+    || /^[a-t]\s*(?:2[0-5]|1\d|[1-9])(?:\s|[a-z])/i.test(command)
+    || /^(?:red|blue|green|yellow|purple|orange|pink|white|black|cyan)\s+[a-t]\s*\d/i.test(command);
+  if (gameId === 'pixelbattle' && mosaicControl) {
     command = `mosaic ${command}`;
   }
   return command ? `spmt ${command}` : '';

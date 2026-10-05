@@ -68,6 +68,8 @@ test('show all remains free progress-only, and finished or suspended art cannot 
   assert.equal(f.player().gamePointsBalance,100);
 });
 test('controller accepts optional spmt and grants visitors only Mosaic play commands', () => {
+  assert.equal(normalizeControllerCommand('spmt points','pixelbattle'),'spmt points');
+  assert.equal(normalizeControllerCommand('stop mosaic','pixelbattle'),'spmt stop mosaic');
   for (const input of ['D12Y','spmt D12Y','spmt mosaic D12Y']) assert.equal(normalizeControllerCommand(input,'pixelbattle'),'spmt mosaic D12Y');
   for(const command of ['reveal','spmt reveal','spmt mosaic reveal','brush 3 down','show all','D12Y']) assert.ok(isPlayerMosaicCommand(normalizeControllerCommand(command,'pixelbattle')));
   for(const command of ['stop','finish','replay','palette neon','clearqueue','remove 1','checkin','say hi','start','D12Y stop']) assert.equal(isPlayerMosaicCommand(normalizeControllerCommand(command,'pixelbattle')),false);
