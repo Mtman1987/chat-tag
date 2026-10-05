@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
@@ -34,6 +34,24 @@ function channelOf(value: unknown) {
 
 function MosaicBoard({ snapshot }: { snapshot: MosaicSnapshot }) {
   const art = snapshot.artwork;
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [availableHeight, setAvailableHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const fit = () => {
+      // Fit the complete board below the controller headers, including inside
+      // short popouts. Width remains bounded by the controller's content area.
+      const height = Math.max(200, Math.min(window.innerHeight - 24, window.innerHeight - frame.getBoundingClientRect().top - 24));
+      setAvailableHeight(current => current !== null && Math.abs(current - height) < 1 ? current : height);
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(frame);
+    if (frame.parentElement) observer.observe(frame.parentElement);
+    window.addEventListener('resize', fit);
+    return () => { observer.disconnect(); window.removeEventListener('resize', fit); };
+  }, [art?.id, art?.width, art?.height]);
   if (!art) return <div className="grid min-h-[460px] place-items-center rounded-3xl border border-cyan-300/10 bg-slate-950/85 p-8 text-center text-slate-400"><div><strong className="block text-xl text-white">No Mosaic loaded</strong><span className="mt-2 block text-sm">Queue a theme from the Command tab.</span></div></div>;
   const palette = art.palette || CLASSIC;
   const columns = art.width;
@@ -42,13 +60,20 @@ function MosaicBoard({ snapshot }: { snapshot: MosaicSnapshot }) {
       <div><div className="text-xs font-black uppercase tracking-[.2em] text-cyan-300">{art.status} · board {art.activeBoard}</div><h2 className="mt-1 text-2xl font-black text-white">{art.theme}</h2><p className="text-xs text-slate-400">{art.progress}/{art.total} correct · {Math.round((art.progress/Math.max(1,art.total))*100)}%</p></div>
       {art.finalImageUrl ? <a href={art.finalImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-emerald-300 px-4 py-2 text-xs font-black text-slate-950 no-underline">Reveal final image</a> : null}
     </div>
-    <div className="grid aspect-[4/5] w-full overflow-hidden rounded-2xl border border-white/10 bg-black p-1 shadow-[0_0_50px_rgba(34,211,238,.12)]" style={{gridTemplateColumns:`repeat(${columns},minmax(0,1fr))`}}>
+    <div ref={frameRef} className="flex min-w-0 justify-center">
+    <div data-testid="mosaic-controller-grid" className="grid w-full min-w-0 rounded-2xl border border-white/10 bg-black p-1 shadow-[0_0_50px_rgba(34,211,238,.12)]" style={{
+      maxWidth: availableHeight === null ? undefined : availableHeight * columns / art.height,
+      aspectRatio: `${columns} / ${art.height}`,
+      gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`,
+      gridTemplateRows: `repeat(${art.height},minmax(0,1fr))`,
+    }}>
       {art.target.map((target,index) => {
         const painted = art.painted[index];
         return <span key={index} className="min-h-0 min-w-0 border border-slate-900/30" style={{background: painted ? (palette[painted] || CLASSIC[painted]) : '#020617', color: palette[target] || CLASSIC[target]}} title={painted ? `${painted}` : `Needs ${target}`}>
           {!painted && art.width <= 20 ? <span className="grid h-full place-items-center text-[clamp(5px,.8vw,10px)] font-black">{target}</span> : null}
         </span>;
       })}
+    </div>
     </div>
   </div>;
 }
@@ -190,4 +215,3 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
     </main>
   </div>;
 }
-

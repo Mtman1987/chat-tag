@@ -81,7 +81,7 @@ jobs:
       - name: Run Nebula gameplay GIF rotation tests
         run: node --import tsx --test tests/nebula-gameplay-rotation.test.ts tests/chat-tag-discord-dashboard.test.ts
       - name: Run Games Hub command contract
-        run: node --import tsx --test tests/game-hub-contract.test.ts tests/quackdex-trades.test.ts tests/game-hub-command-routing.test.cjs tests/chat-tag-checkin.test.cjs
+        run: node --import tsx --test tests/game-hub-contract.test.ts tests/quackdex-trades.test.ts tests/game-hub-command-routing.test.cjs tests/chat-tag-checkin.test.cjs tests/checkin-nebula-bonus.test.cjs
       - name: Verify tenant Word Chain voting, themes and result delivery
         run: node --import tsx --test tests/word-chain-tenants.test.ts tests/word-chain-routes.test.cjs tests/word-chain-delivery.test.cjs
       - name: Run canonical Personal overlay regression
