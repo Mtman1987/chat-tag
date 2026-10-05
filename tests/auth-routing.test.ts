@@ -135,3 +135,17 @@ test('StreamWeaver service secret reaches Nebula commands and overlay writes onl
     assert.equal(isStreamWeaverGameHubRequest(req), false);
   }
 });
+
+
+test('legacy sign-in cannot supply forged SPMT owner or admin headers', async () => {
+  const { createHmac } = await import('node:crypto');
+  const payload = Buffer.from(JSON.stringify({ id: 'alice-id', twitchUsername: 'alice', exp: Date.now() + 60_000 })).toString('base64url');
+  const signature = createHmac('sha256', process.env.NEXTAUTH_SECRET || process.env.BOT_SECRET_KEY!).update(payload).digest('base64url');
+  const response = await middleware(request('/api/game-hub/discord?channel=bob&gameId=wordchain', {
+    headers: { cookie: `session=${payload}.${signature}`, 'x-spmt-user-id': 'bob-id', 'x-spmt-display-name': 'bob', 'x-spmt-is-admin': '1' },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-middleware-request-x-spmt-user-id'), null);
+  assert.equal(response.headers.get('x-middleware-request-x-spmt-is-admin'), null);
+  assert.ok(!response.headers.get('x-middleware-override-headers')?.includes('x-spmt-is-admin'));
+});

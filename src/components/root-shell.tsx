@@ -77,6 +77,7 @@ export function RootShell({ children }: RootShellProps) {
     if (settings.followWorkspaceTheme) {
       try {
         const workspace = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
+        if (!workspace.ok && workspace.status !== 401 && workspace.status !== 403 && document.documentElement.dataset.workspaceTheme) return;
         const body = await workspace.json().catch(() => ({}));
         if (workspace.ok && body?.tokens) {
           const revision = Number(body.revision || 0);
@@ -139,3 +140,4 @@ export function RootShell({ children }: RootShellProps) {
     </div>
   );
 }
+

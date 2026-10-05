@@ -289,6 +289,8 @@ export async function middleware(request: NextRequest) {
     request.cookies.set(SPMT_REFRESH_COOKIE, refreshed.tokens.refresh_token);
   }
   const headers = new Headers(request.headers);
+  // Identity headers are server assertions, never trusted browser input.
+  for (const key of [...headers.keys()]) if (key.startsWith('x-spmt-')) headers.delete(key);
   if (identity) {
     const appUserId = resolveChatTagAppUserId(identity, legacySession) || String(identity.id);
     headers.set('x-spmt-user-id', appUserId);
@@ -305,4 +307,5 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image).*)'],
 };
+
 

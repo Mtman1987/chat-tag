@@ -33,7 +33,7 @@ test('Worktray controls Personal visibility without controlling footer visibilit
 test('SPMT bridge returns signed Personal launch URL and clean canonical copy URLs', () => {
   const route = read('src/app/api/spmt/workspace-theme/route.ts');
   assert.match(route, /api\/personal-overlay-launch/);
-  assert.match(route, /personalOverlayUrl: personalResponse\.ok/);
+  assert.match(route, /personalOverlayUrl: personal\.ok/);
   assert.match(route, /tenantOutputs: tenant \? \{/);
   assert.match(route, /public: `\$\{SPMT_BASE_URL\}\/tenant\/\$\{encodeURIComponent\(tenant\)\}\/public`/);
   assert.match(route, /personal: personalCanonical/);
@@ -54,3 +54,4 @@ test('Chat Tag header Workspace toggle owns footer visibility instead of redirec
   const layout = read('src/app/layout.tsx');
   assert.match(layout, /workspace-controller\.js/);
 });
+

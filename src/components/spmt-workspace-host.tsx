@@ -57,6 +57,8 @@ export function SpmtWorkspaceHost() {
     try {
       const response = await fetch('/api/spmt/workspace-theme', { cache: 'no-store', credentials: 'include' });
       if (!response.ok) {
+        // Preserve the last good workspace through temporary upstream failures.
+        if (response.status !== 401 && response.status !== 403) { setLoaded(true); return; }
         setConnected(false); setTokens(null); setTenantOutputs(null); setSurfaceUrls({}); setLoaded(true); return;
       }
       const body = await response.json().catch(() => ({}));
@@ -64,11 +66,11 @@ export function SpmtWorkspaceHost() {
         setConnected(false); setTokens(null); setTenantOutputs(null); setSurfaceUrls({}); setLoaded(true); return;
       }
       setTokens(body.tokens as WorkspaceThemeTokensV1);
-      setTenantOutputs(body?.tenantOutputs && typeof body.tenantOutputs === 'object' ? body.tenantOutputs as TenantOutputs : null);
-      setSurfaceUrls(body?.surfaceUrls && typeof body.surfaceUrls === 'object' ? body.surfaceUrls as SurfaceUrls : {});
+      if (!body.partial) setTenantOutputs(body?.tenantOutputs && typeof body.tenantOutputs === 'object' ? body.tenantOutputs as TenantOutputs : null);
+      if (!body.partial) setSurfaceUrls(body?.surfaceUrls && typeof body.surfaceUrls === 'object' ? body.surfaceUrls as SurfaceUrls : {});
       setConnected(true); setLoaded(true);
     } catch {
-      setConnected(false); setTokens(null); setTenantOutputs(null); setSurfaceUrls({}); setLoaded(true);
+      setLoaded(true);
     }
   }, [hiddenRoute]);
 
@@ -199,3 +201,4 @@ export function SpmtWorkspaceHost() {
     </aside>
   </>;
 }
+

@@ -23,7 +23,10 @@ jobs:
         run: npm ci
       - name: Run layout regression tests
         run: node --import tsx --test tests/layout-cleanup.test.ts tests/quackverse-npc.test.ts tests/admin-shell-parity.test.ts tests/game-hub-contract.test.ts tests/chat-tag-game-hub-compat.test.ts tests/chat-tag-runtime-resilience.test.ts tests/overlay-bay-handoff.test.ts tests/game-membership-runtime.test.ts tests/game-runtime-foundation.test.ts tests/overlay-transparency.test.ts
+      - name: Controller sharing and theme resilience
+        run: node --import tsx --test tests/controller-sharing.test.cjs tests/auth-routing.test.ts tests/word-chain-routes.test.cjs
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
         run: npm run build
+

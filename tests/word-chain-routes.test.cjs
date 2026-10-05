@@ -27,7 +27,7 @@ function harness(now) {
       module: m, exports: m.exports, URLSearchParams, console, process, Buffer, setTimeout,
       Date: class extends Date { static now() { return now; } },
       require: id => {
-        if (id === 'next/server') return { NextResponse: { json: (body, init) => ({ body, status: init?.status || 200 }) } };
+        if (id === 'next/server') return { after: () => {}, NextResponse: { json: (body, init) => ({ body, status: init?.status || 200 }) } };
         if (id === '@/lib/auth') return { isBotRequest: () => true, isStreamWeaverGameHubRequest: () => false };
         if (id === '@/lib/game-hub-state') return { ...engine,
           recordWordChainMessage: (state, input) => engine.recordWordChainMessage(state, { ...input, now }),
@@ -138,3 +138,4 @@ test('short and namespaced commands report the remaining same-player cooldown', 
   h.setNow(30_000);
   assert.match((await POST(h.request('spmt newt'))).body.reply, /extends the chain/);
 });
+
