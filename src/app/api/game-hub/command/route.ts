@@ -122,7 +122,7 @@ function knownAction(gameId: string, args: string[]): boolean {
     return (first === 'hint' && args.length === 1)
       || (first === 'submit' && args.length >= 3);
   }
-  if (gameId === 'wordchain') return first === 'theme' && args.length >= 3;
+  if (gameId === 'wordchain') return first === 'theme' && args.length >= 2;
   if (gameId === 'pixelbattle') return /^(red|blue|green|yellow|purple|orange|pink|white|black|cyan)$/.test(first) && /^\d{1,2}$/.test(args[1] || '') && /^\d{1,2}$/.test(args[2] || '') && args.length === 3;
   if (gameId === 'treasurehunt') return (/^[a-t](?:2[0-5]|1\d|[1-9])$/i.test(first) && args.length === 1)
     || (/^(?:answer|solve)$/.test(first) && args.length >= 2)
@@ -220,17 +220,26 @@ export async function POST(req: NextRequest) {
   let stageGameId = wordStages.includes(selectedGameId)
     ? selectedGameId
     : wordStages.length ? wordStages[nebulaRotationIndexAt(Date.now(), wordStages.length)] : '';
-  if (stageGameId === 'wordchain' && /^(up|down)$/.test(command) && parts.length === 2) {
+  // Votes belong to Word Chain even while another active game is on screen.
+  const voteArgs = /^(?:chain|wordchain)$/.test(command) ? parts.slice(1) : parts;
+  if (/^(up|down)$/i.test(voteArgs[0] || '')) {
+    if (!activeForDirectRouting.includes('wordchain')) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Word Chain is not ACTIVE in #${channel}.` });
+    }
+    if (voteArgs.length !== 2) {
+      return NextResponse.json({ handled: true, reply: `@${displayName} Use spmt up <number or word> or spmt down <number or word>.` });
+    }
+    const vote = voteArgs[0].toLowerCase();
     const result = await updateAppStateIfChanged((draft) => {
       const outcome = recordWordChainVote(draft, {
-        channel, userId, username, word: parts[1], up: command === 'up',
+        channel, userId, username, word: voteArgs[1], up: vote === 'up',
       });
-      if (outcome.changed) recordGameHubRuntimeAction(draft, { channel, gameId: stageGameId, actorId: userId, username, displayName, action: 'guess', args: [guessText] });
+      if (outcome.changed) recordGameHubRuntimeAction(draft, { channel, gameId: 'wordchain', actorId: userId, username, displayName, action: vote, args: [voteArgs[1]] });
       return { changed: outcome.changed, result: outcome };
     });
     const responses: Record<string, string> = {
-      voted: `${command} vote recorded for “${(result as any).word}”.`,
-      unchanged: `your ${command} vote for “${(result as any).word}” is already recorded.`,
+      voted: `${vote} vote recorded for “${(result as any).word}”.`,
+      unchanged: `your ${vote} vote for “${(result as any).word}” is already recorded.`,
       'not-review': 'votes open after the play timer ends. Keep the chain moving for now.',
       'vote-closed': 'voting has closed and the round tally is on screen.',
       'unknown-word': 'that word is not on the round review board. Use its number or spelling.',
@@ -1331,11 +1340,11 @@ export async function POST(req: NextRequest) {
   if (game.id === 'wordchain' && action === 'theme') {
     const rawTheme = rawActionArgs.slice(1).join(' ');
     const separator = rawTheme.indexOf(':');
-    if (separator < 1) {
-      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} use: spmt chain theme Space: rocket, planet, comet, telescope`) });
+    if (!rawTheme || separator === 0) {
+      return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} use: spmt chain theme Dinosaurs (or Dinosaurs: raptor, triceratops, stegosaurus, trex)`) });
     }
-    const name = rawTheme.slice(0, separator).trim();
-    const words = rawTheme.slice(separator + 1).trim();
+    const name = (separator < 0 ? rawTheme : rawTheme.slice(0, separator)).trim();
+    const words = separator < 0 ? '' : rawTheme.slice(separator + 1).trim();
     try {
       const submission = await updateAppState((draft) => {
         joinGameHubGame(draft, { userId, username, displayName, gameId: game.id });
@@ -1348,7 +1357,7 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({
         handled: true,
-        reply: `@${displayName} added Word Chain theme “${submission.entry.name}” with ${submission.entry.words.length} starter words · ${submission.inventorySize} community theme${submission.inventorySize === 1 ? '' : 's'} available.`,
+        reply: `@${displayName} queued Word Chain theme “${submission.entry.name}” for ${submission.queuePosition === 1 ? 'the next round' : `upcoming round #${submission.queuePosition}`} · ${submission.entry.words.length ? `${submission.entry.words.length} starter words` : 'the first player can start with any word on that theme'}.`,
       });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, game.id, `@${displayName} ${error?.message || 'That theme could not be submitted.'}`) });
@@ -1394,4 +1403,5 @@ export async function POST(req: NextRequest) {
       : `@${displayName} joined ${game.name} · ${actionArgs.join(' ')} registered.`,
   });
 }
+
 
