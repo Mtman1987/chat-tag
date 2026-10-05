@@ -1,9 +1,10 @@
 const ts=require('typescript'),fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),test=require('node:test');
 const engine=require('../src/lib/game-hub-state.ts'),mosaic=require('../src/lib/nebula-mosaic.ts'),normalizer=require('../src/lib/mosaic-controller-command.ts'),prices=require('../src/lib/mosaic-prices.ts'),commands=require('../src/lib/game-hub-commands.ts'),registry=require('../src/lib/game-hub-registry.ts');
-function harness(){
+function harness(otherActivity=false){
  let state={gameSettings:{default:{}}}, user={id:'7',twitchUsername:'artist'};
  const player=engine.getOrCreateGameHubPlayer(state,{userId:'7',username:'artist'});engine.awardGameHubPoints(state,player,5500,'fixture');engine.setChannelGameRunning(state,'tenant','pixelbattle',true);
  const queued=mosaic.queueMosaicTheme(state,{channel:'tenant',userId:'7',username:'artist',theme:'owl'});mosaic.installMosaicTemplate(state,'tenant',queued.request.id,Array(2000).fill('Y'));
+ if(otherActivity)engine.setChannelGameRunning(state,'tenant','chatwars',true);
  const response=(body,init)=>({body,status:init?.status||200,json:async()=>body});
  class Request {constructor(url,options={}){this.url=url;this.nextUrl=new URL(url);this.headers=new Headers(options.headers);this.body=options.body;} async json(){return JSON.parse(this.body||'{}');}}
  const update=async fn=>{const draft=structuredClone(state);const result=await fn(draft);state=draft;return result;};
@@ -22,7 +23,7 @@ function harness(){
   if(id==='@/app/api/game-hub/command/route')return{POST:commandPost};
   if(id==='@/app/api/game-hub/chat/route')return{POST:()=>{throw Error('Visitor command must not fall through into chat');}};
   if(id==='@/lib/game-hub-runtime')return{recordGameHubRuntimeAction:()=>{}};
-  if(id==='@/lib/game-hub-event-bus')return{getNebulaChatEvents:()=>[]};
+  if(id==='@/lib/game-hub-event-bus')return{getNebulaChatEvents:()=>otherActivity?[{at:new Date().toISOString(),gameIds:['chatwars']}]:[]};
   if(id==='@/lib/nebula-rotation')return{nebulaRotationIndexAt:()=>0};
   if(id==='@/lib/game-hub-chat-summary')return{fitCompactReplyWithLink:text=>text};
   if(id==='@/lib/public-origin')return{getPublicAppOrigin:()=> 'https://test.local'};
@@ -32,6 +33,16 @@ function harness(){
  commandPost=load('src/app/api/game-hub/command/route.ts').POST;
  return{load,read:()=>state,user:value=>user=value,request:body=>new Request('https://test.local/api/game-hub/controller-command',{method:'POST',body:JSON.stringify({channel:'tenant',...body})})};
 }
+test('chat reveal cannot charge while another activity is displayed; the Mosaic controller can preview its visible game',async()=>{
+ const h=harness(true),post=h.load('src/app/api/game-hub/command/route.ts').POST;
+ const result=await post(h.request({message:'spmt reveal',userId:'7',username:'artist'}));
+ assert.match(result.body.reply,/no points were charged/);
+ assert.equal(engine.getGameHubStore(h.read()).players['twitch:7'].lifetimeSpent,0);
+ const controller=h.load('src/app/api/game-hub/controller-command/route.ts').POST;
+ const accepted=await controller(h.request({message:'reveal',gameId:'pixelbattle',commandMode:true}));
+ assert.match(accepted.body.reply,/100 Nebula points spent/);
+ assert.equal(engine.getGameHubStore(h.read()).players['twitch:7'].lifetimeSpent,100);
+});
 test('authenticated visitors can type prefixed or bare paint/brush/reveal but cannot manage channels',async()=>{
  const h=harness(),post=h.load('src/app/api/game-hub/controller-command/route.ts').POST;
  for(const message of ['D12Y','spmt E12Y','spmt mosaic brush 3','show all','reveal']){const r=await post(h.request({message,gameId:'pixelbattle',commandMode:true}));assert.equal(r.status,200);assert.equal(r.body.handled,true);assert.doesNotMatch(r.body.reply,/request #|not recognized/);}
