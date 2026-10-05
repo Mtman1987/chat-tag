@@ -1,5 +1,6 @@
 const ts=require('typescript'),fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),test=require('node:test');
 const engine=require('../src/lib/game-hub-state.ts'),mosaic=require('../src/lib/nebula-mosaic.ts'),normalizer=require('../src/lib/mosaic-controller-command.ts'),prices=require('../src/lib/mosaic-prices.ts'),commands=require('../src/lib/game-hub-commands.ts'),registry=require('../src/lib/game-hub-registry.ts');
+test.beforeEach(t => { t.mock.method(Date, 'now', () => Date.parse('2026-10-12T05:00:00Z')); });
 function harness(otherActivity=false){
  let state={gameSettings:{default:{}}}, user={id:'7',twitchUsername:'artist'};
  const player=engine.getOrCreateGameHubPlayer(state,{userId:'7',username:'artist'});engine.awardGameHubPoints(state,player,5500,'fixture');engine.setChannelGameRunning(state,'tenant','pixelbattle',true);
@@ -23,7 +24,7 @@ function harness(otherActivity=false){
   if(id==='@/app/api/game-hub/command/route')return{POST:commandPost};
   if(id==='@/app/api/game-hub/chat/route')return{POST:()=>{throw Error('Visitor command must not fall through into chat');}};
   if(id==='@/lib/game-hub-runtime')return{recordGameHubRuntimeAction:()=>{}};
-  if(id==='@/lib/game-hub-event-bus')return{getNebulaChatEvents:()=>otherActivity?[{at:new Date().toISOString(),gameIds:['chatwars']}]:[]};
+  if(id==='@/lib/game-hub-event-bus')return{getNebulaChatEvents:()=>otherActivity?[{at:new Date(Date.now()).toISOString(),gameIds:['chatwars']}]:[]};
   if(id==='@/lib/nebula-rotation')return{nebulaRotationIndexAt:()=>0};
   if(id==='@/lib/game-hub-chat-summary')return{fitCompactReplyWithLink:text=>text};
   if(id==='@/lib/public-origin')return{getPublicAppOrigin:()=> 'https://test.local'};
@@ -65,4 +66,23 @@ test('tap endpoint charges authenticated player, rejects locked/stale/stopped bo
  engine.setChannelGameRunning(h.read(),'tenant','pixelbattle',false);
  r=await post(h.request({...paint(),coordinate:'B1'}));assert.equal(r.status,400);assert.equal(art().progress,1);
  h.user(null);assert.equal((await post(h.request({action:'unlock'}))).status,401);
+});
+
+test('testing-week API opens tap controls at zero points, keeps identity checks, and reports free reveal', async t => {
+ t.mock.method(Date,'now',()=>Date.parse('2026-10-05T19:00:00Z'));
+ const h=harness(),route=h.load('src/app/api/game-hub/mosaic-controls/route.ts');
+ engine.getGameHubStore(h.read()).players['twitch:7'].gamePointsBalance=0;
+ const status=await route.GET(h.request({}));
+ assert.equal(status.body.unlocked,true);assert.equal(status.body.controlsCost,0);assert.equal(status.body.permanentlyUnlocked,false);
+ const art=mosaic.mosaicPublicSnapshot(h.read(),'tenant').artwork;
+ const tap=await route.POST(h.request({action:'paint',coordinate:'A1',color:'Y',board:1,artworkId:art.id,userId:'victim'}));
+ assert.equal(tap.status,200);assert.equal(tap.body.unlocked,true);
+ const controller=h.load('src/app/api/game-hub/controller-command/route.ts').POST;
+ const reveal=await controller(h.request({message:'reveal',gameId:'pixelbattle',commandMode:true}));
+ assert.match(reveal.body.reply,/free during testing/);assert.doesNotMatch(reveal.body.reply,/already showing/);
+ const duplicate=await controller(h.request({message:'reveal',gameId:'pixelbattle',commandMode:true}));
+ assert.match(duplicate.body.reply,/already showing/);
+ const player=engine.getGameHubStore(h.read()).players['twitch:7'];
+ assert.equal(player.lifetimeSpent,0);assert.equal(player.mosaicControlsUnlockedAt,undefined);
+ h.user(null);assert.equal((await route.POST(h.request({action:'unlock'}))).status,401);
 });

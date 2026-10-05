@@ -5,7 +5,7 @@ export type CoordinateArtwork = {
   activeBoard: number; viewMode: 'board' | 'all'; palette?: Record<string, string>;
 };
 const COLORS: Record<string, string> = { R:'#ef4444',B:'#3b82f6',G:'#22c55e',Y:'#eab308',P:'#a855f7',O:'#f97316',PK:'#ec4899',W:'#f8fafc',K:'#111827',C:'#06b6d4' };
-export function MosaicCoordinateBoard({ art, availableHeight, cellSize = 32, onCell, disabled = false }: {
+export function MosaicCoordinateBoard({ art, availableHeight, cellSize = null, onCell, disabled = false }: {
   art: CoordinateArtwork; availableHeight: number | null; cellSize?: number | null;
   onCell?: (coordinate: string, board: number) => void; disabled?: boolean;
 }) {
@@ -16,7 +16,7 @@ export function MosaicCoordinateBoard({ art, availableHeight, cellSize = 32, onC
   const fittedHeight = availableHeight === null ? 700 : Math.max(200, overview ? (availableHeight - 44) / 2 : availableHeight);
   const fittedWidth = labelWidth + (fittedHeight - labelHeight) * columns / rows;
   const palette = art.palette || COLORS;
-  return <div tabIndex={0} aria-label="Scrollable Mosaic board" className="w-full min-w-0 overflow-auto rounded-lg border border-cyan-200/20" style={{ maxHeight: availableHeight || 700, scrollbarGutter: 'stable' }}>
+  return <div tabIndex={0} aria-label="Scrollable Mosaic board" className="mx-auto w-full min-w-0 overflow-auto rounded-lg border border-cyan-200/20" style={{ maxWidth: (labelWidth + columns * (cellSize || (fittedHeight - labelHeight) / rows)) * (overview ? 2 : 1) + (overview ? 12 : 0), maxHeight: cellSize ? availableHeight || 700 : undefined, scrollbarGutter: cellSize ? 'stable' : undefined }}>
     <div className={`grid gap-3 ${overview ? 'grid-cols-2' : 'grid-cols-1'}`} style={{ width: cellSize ? (labelWidth + columns * cellSize) * (overview ? 2 : 1) + (overview ? 12 : 0) : '100%', maxWidth: cellSize ? undefined : fittedWidth * (overview ? 2 : 1) + (overview ? 12 : 0) }}>
       {boards.map(board => <div key={board} className="min-w-0">
         {overview ? <div className="mb-1 text-center text-sm font-bold text-cyan-100">Board {board}</div> : null}
@@ -24,7 +24,7 @@ export function MosaicCoordinateBoard({ art, availableHeight, cellSize = 32, onC
           aspectRatio: cellSize ? undefined : `${fittedWidth} / ${fittedHeight}`,
           gridTemplateColumns: `${labelWidth}px repeat(${columns}, ${cellSize ? `${cellSize}px` : 'minmax(0, 1fr)'})`,
           gridTemplateRows: `${labelHeight}px repeat(${rows}, ${cellSize ? `${cellSize}px` : 'minmax(0, 1fr)'})`,
-          fontSize: cellSize ? Math.max(13, Math.round(cellSize * .46)) : 'clamp(7px,1vw,13px)',
+          fontSize: cellSize ? Math.max(13, Math.round(cellSize * .46)) : 'clamp(11px,1.1vw,16px)',
         }}>
           <span aria-hidden="true" className="sticky left-0 top-0 z-20 bg-slate-800" />
           {Array.from({length: columns}, (_, column) => <span key={`column-${column}`} role="columnheader" className="sticky top-0 z-10 grid min-w-0 place-items-center border-b border-cyan-300/30 bg-slate-800 font-black text-cyan-100">{String.fromCharCode(65 + column)}</span>)}

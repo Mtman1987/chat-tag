@@ -3,7 +3,7 @@ import test from 'node:test';
 import { getOrCreateGameHubPlayer, awardGameHubPoints } from '../src/lib/game-hub-state';
 import { installMosaicTemplate, queueMosaicTheme, unlockMosaicControls, revealMosaic, mosaicPublicSnapshot, setMosaicBrush, setMosaicView, resetMosaicForReplay, parseMosaicPaintCommand, paintMosaicCell } from '../src/lib/nebula-mosaic';
 import { normalizeControllerCommand, isPlayerMosaicCommand } from '../src/lib/mosaic-controller-command';
-const identity = { userId:'7', username:'artist', channel:'tenant' };
+const identity = { userId:'7', username:'artist', channel:'tenant', now:1 };
 function fixture(balance = 6000) {
   const state: any = { gameSettings:{default:{}} };
   const player = getOrCreateGameHubPlayer(state, identity);
@@ -73,4 +73,29 @@ test('controller accepts optional spmt and grants visitors only Mosaic play comm
   for (const input of ['D12Y','spmt D12Y','spmt mosaic D12Y']) assert.equal(normalizeControllerCommand(input,'pixelbattle'),'spmt mosaic D12Y');
   for(const command of ['reveal','spmt reveal','spmt mosaic reveal','brush 3 down','show all','D12Y']) assert.ok(isPlayerMosaicCommand(normalizeControllerCommand(command,'pixelbattle')));
   for(const command of ['stop','finish','replay','palette neon','clearqueue','remove 1','checkin','say hi','start','D12Y stop']) assert.equal(isPlayerMosaicCommand(normalizeControllerCommand(command,'pixelbattle')),false);
+});
+
+test('testing week is free at zero balance and expires without granting paid entitlements', async () => {
+  const { mosaicPricing, MOSAIC_TESTING_START, MOSAIC_TESTING_END } = await import('../src/lib/mosaic-prices');
+  const start = Date.parse(MOSAIC_TESTING_START), end = Date.parse(MOSAIC_TESTING_END);
+  assert.equal(mosaicPricing(start - 1).testingFree, false);
+  assert.equal(mosaicPricing(start).testingFree, true);
+  assert.equal(mosaicPricing(end - 1).controlsCost, 0);
+  assert.equal(mosaicPricing(end).controlsCost, 5000);
+  const f = fixture(0), now = start + 1000;
+  assert.equal(unlockMosaicControls(f.state, {...identity, now}).cost, 0);
+  assert.equal(f.player().mosaicControlsUnlockedAt, undefined);
+  assert.equal(setMosaicBrush(f.state, {...identity, brush:5, now}).cost, 0);
+  assert.equal(f.art.brushUnlockedByPlayer?.['twitch:7'], undefined);
+  assert.equal(paintMosaicCell(f.state, {...identity, now, command:parseMosaicPaintCommand('A1Y')!}).paintedCount, 5);
+  const before = f.player().gamePointsBalance;
+  assert.equal(revealMosaic(f.state, {...identity, now}).cost, 0);
+  assert.equal(Date.parse(f.art.revealUntil!), now + 15000);
+  assert.equal(f.player().gamePointsBalance, before);
+  assert.equal(f.player().lifetimeSpent, 0);
+  assert.equal(mosaicPublicSnapshot(f.state, 'tenant', now).pricing.revealCost, 0);
+  assert.equal(setMosaicBrush(f.state, {...identity, brush:'status', now:end}).brush, 1);
+  assert.throws(() => unlockMosaicControls(f.state, {...identity, now:end}), /Not enough/);
+  assert.throws(() => setMosaicBrush(f.state, {...identity, brush:5, now:end}), /Not enough/);
+  assert.throws(() => revealMosaic(f.state, {...identity, now:end}), /Not enough/);
 });

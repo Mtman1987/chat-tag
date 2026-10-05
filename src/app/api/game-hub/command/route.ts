@@ -501,8 +501,8 @@ export async function POST(req: NextRequest) {
     }
     try {
       const result = await updateAppState(draft => revealMosaic(draft, { channel, userId, username, displayName }));
-      return NextResponse.json({ handled: true, reply: result.cost
-        ? `@${displayName} completed-picture reveal for 15 seconds · ${result.cost} Nebula points spent · puzzle progress unchanged.`
+      return NextResponse.json({ handled: true, reply: result.started
+        ? `@${displayName} completed-picture reveal for 15 seconds · ${result.cost ? `${result.cost} Nebula points spent` : 'free during testing'} · puzzle progress unchanged.`
         : `@${displayName} a reveal is already showing. No extra points charged or time added.` });
     } catch (error: any) {
       return NextResponse.json({ handled: true, reply: `@${displayName} ${error?.message || 'Reveal unavailable.'}` });
@@ -605,7 +605,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         handled: true,
         reply: mosaicBrush === 'status'
-          ? `@${displayName} your brush for “${equipped.artwork}” paints ${equipped.brush} cell${equipped.brush === 1 ? '' : 's'} ${equipped.direction}. Use spmt brush 1-5 or left/right/up/down. Multi-cell brushes cost 100 Nebula points once per artwork.`
+          ? `@${displayName} your brush for “${equipped.artwork}” paints ${equipped.brush} cell${equipped.brush === 1 ? '' : 's'} ${equipped.direction}. Use spmt brush 1-5 or left/right/up/down. ${equipped.testingFree ? 'All brushes are free during testing this week.' : 'Multi-cell brushes cost 100 Nebula points once per artwork.'}`
           : `@${displayName} ${equipped.brush === 1 ? 'single-cell brush' : `${equipped.brush}-cell brush`} now paints ${equipped.direction} for “${equipped.artwork}”${equipped.cost ? ` · ${equipped.cost} Nebula points spent; all brush sizes unlocked for this artwork` : ''}.`,
       });
     } catch (error: any) {
