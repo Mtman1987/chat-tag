@@ -1,0 +1,4 @@
+export const MOSAIC_CONTROLS_COST = 5_000;
+export const MOSAIC_BRUSH_COST = 100;
+export const MOSAIC_REVEAL_COST = MOSAIC_BRUSH_COST;
+export const MOSAIC_REVEAL_MS = 15_000;

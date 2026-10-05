@@ -39,7 +39,7 @@ function harness(now) {
         if (id === '@/lib/game-hub-runtime') return { recordGameHubRuntimeAction: (state, input) => actions.push(input) };
         if (id === '@/lib/public-origin') return { getPublicAppOrigin: () => 'https://example.test' };
         if (id === '@/lib/game-hub-chat-summary') return { fitCompactReplyWithLink: text => text };
-        if (id === '@/lib/nebula-mosaic') return { mosaicPublicSnapshot: () => ({}), parseMosaicPaintCommand: () => null, parseMosaicBrushCommand: () => null, parseMosaicViewCommand: () => null };
+        if (id === '@/lib/nebula-mosaic') return { mosaicPublicSnapshot: () => ({}), parseMosaicPaintCommand: () => null, parseMosaicBrushCommand: () => null, parseMosaicViewCommand: () => null, parseMosaicRevealCommand: () => false };
         if (id === '@/lib/game-hub-event-bus') return { getNebulaChatEvents: () => [] };
         if (id === '@/lib/nebula-rotation') return { nebulaRotationIndexAt: (now, count) => 1 % count };
         if (id === '@/lib/dancing-parade') return { getDancingParadeSnapshot: () => ({ active: false }) };
@@ -138,4 +138,5 @@ test('short and namespaced commands report the remaining same-player cooldown', 
   h.setNow(30_000);
   assert.match((await POST(h.request('spmt newt'))).body.reply, /extends the chain/);
 });
+
 

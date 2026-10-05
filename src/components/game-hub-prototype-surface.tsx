@@ -1,5 +1,6 @@
 'use client';
 
+import { useMosaicReveal } from '@/components/use-mosaic-reveal';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
 
@@ -154,6 +155,8 @@ type MosaicSnapshot = {
     status: string;
     activeBoard: number;
     viewMode: 'board' | 'all';
+    revealUntil?: string;
+    palette?: Record<string, string>;
     target: string[];
     painted: string[];
     width: number;
@@ -206,6 +209,7 @@ function PixelBoard({ channel, gridOnly = false }: { channel: string; gridOnly?:
   }, [channel]);
 
   const artwork = snapshot.artwork;
+  const revealSeconds = useMosaicReveal(artwork?.revealUntil);
   const artworkId = artwork?.id;
   const artworkStatus = artwork?.status;
   useEffect(() => {
@@ -233,8 +237,8 @@ function PixelBoard({ channel, gridOnly = false }: { channel: string; gridOnly?:
 
   if (artwork.viewMode === 'all') {
     return <div aria-label={`Nebula Mosaic ${artwork.theme} combined progress`} className="grid h-full w-full gap-px overflow-hidden bg-slate-700 p-px" style={{ gridTemplateColumns: `repeat(${artwork.width}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${artwork.height}, minmax(0, 1fr))` }}>{artwork.target.map((target, index) => {
-      const painted = artwork.painted[index];
-      return <span key={index} className="min-h-0 min-w-0 bg-slate-950" style={painted ? { background: MOSAIC_HEX[painted] } : undefined} />;
+      const painted = revealSeconds > 0 ? target : artwork.painted[index];
+      return <span key={index} className="min-h-0 min-w-0 bg-slate-950" style={painted ? { background: artwork.palette?.[painted] || MOSAIC_HEX[painted] } : undefined} />;
     })}</div>;
   }
 
@@ -429,3 +433,4 @@ export function GameHubPrototypeSurface({ game, events, channel, broadcastOnly =
 
   return <section className={`h-full min-h-0 overflow-hidden text-white ${broadcastOnly ? 'grid w-full p-0' : 'p-4'}`}>{content}</section>;
 }
+

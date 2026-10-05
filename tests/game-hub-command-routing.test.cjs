@@ -14,7 +14,7 @@ const post=mod('src/app/api/game-hub/command/route.ts',id=>{
  if(id==='@/lib/public-origin')return {getPublicAppOrigin:()=> 'https://chat-tag-new.fly.dev'};
  if(id==='@/lib/game-hub-state')return {normalizeGameHubChannel:v=>String(v||'').trim().toLowerCase().replace(/^#/,''),resolveChannelGameIds:()=>active,normalizeGameHubPlayerId:()=> 'user_1',getGameHubStore:()=>({players:{}}),getChannelGameSettings:()=>({}),setChannelGameRunning:(s,c,id,on)=>{writes.push({id,on});active=on?[id]:[];},resolveGameHubPlayerFocus:()=> 'pixelbattle',rememberGameHubPlayerFocus:()=>{}};
  if(id==='@/lib/volume-store')return {readAppState:async()=>state,updateAppState:async fn=>fn(state)};
- if(id==='@/lib/nebula-mosaic')return {mosaicPublicSnapshot:()=>({artwork:{status:'active'}}),parseMosaicPaintCommand:()=>null,parseMosaicBrushCommand:()=>null,parseMosaicViewCommand:()=>null,validateMosaicTheme:v=>v,MOSAIC_XP_COST:0,resumeMosaicIfNeeded:()=>{},queueMosaicTheme:()=>{queued++;return {position:1}}};
+ if(id==='@/lib/nebula-mosaic')return {mosaicPublicSnapshot:()=>({artwork:{status:'active'}}),parseMosaicPaintCommand:()=>null,parseMosaicBrushCommand:()=>null,parseMosaicViewCommand:()=>null,parseMosaicRevealCommand:()=>false,validateMosaicTheme:v=>v,MOSAIC_XP_COST:0,resumeMosaicIfNeeded:()=>{},queueMosaicTheme:()=>{queued++;return {position:1}}};
  if(id==='@/lib/game-hub-event-bus')return {getNebulaChatEvents:()=>[]};
  if(id==='@/lib/nebula-rotation')return {nebulaRotationIndexAt:()=>0};
  if(id==='@/lib/dancing-parade')return {getDancingParadeSnapshot:()=>({active:false})};
@@ -32,4 +32,5 @@ require('node:test')('system commands bypass focused Mosaic themes and stop the 
  const checkin=await post(req('spmt checkin'));assert.equal(checkin.body.handled,true);assert.match(checkin.body.reply,/Space Mountain check-in in #spacemountainlive/);assert.equal(queued,0);
  const owl=await post(req('spmt owl'));assert.equal(queued,1);assert.equal(owl.body.mosaicGenerationQueued,true);
 });
+
 

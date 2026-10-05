@@ -89,6 +89,7 @@ export type GameHubPlayer = {
   gamePointsBalance: number;
   lifetimeEarned: number;
   lifetimeSpent: number;
+  mosaicControlsUnlockedAt?: string;
   lastPointsAwardAt?: string;
   joinedGames: Record<string, GameHubMembership>;
 };
@@ -407,6 +408,7 @@ export function getOrCreateGameHubPlayer(
     gamePointsBalance: Math.max(0, Number(existing.gamePointsBalance || 0)),
     lifetimeEarned: Math.max(0, Number(existing.lifetimeEarned || 0)),
     lifetimeSpent: Math.max(0, Number(existing.lifetimeSpent || 0)),
+    mosaicControlsUnlockedAt: existing.mosaicControlsUnlockedAt ? String(existing.mosaicControlsUnlockedAt) : undefined,
     lastPointsAwardAt: existing.lastPointsAwardAt ? String(existing.lastPointsAwardAt) : undefined,
     joinedGames,
   };
@@ -1248,3 +1250,4 @@ export function setChatWarsBattle(state:any,input:{channels:unknown[];createdBy?
  return {battleId,channels,createdAt,active:input.active!==false};
 }
 export function getChatWarsBattle(state:any,channelValue:unknown){ return getChannelGameSettings(state,channelValue).chatWarsBattle||null; }
+
