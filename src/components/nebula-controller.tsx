@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
 import { canonicalPlayerCommands, canonicalStreamerCommands } from '@/lib/game-hub-commands';
 import { useSession } from '@/contexts/session-context';
@@ -162,7 +163,7 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
   const premium = mosaic.premium;
   const testingFree = mosaic.pricing?.testingFree === true;
   const canManage = Boolean(user && (channel === channelOf(user.twitchUsername) || user.isAdmin || user.role === 'owner'));
-  return <div className={`${expanded ? 'fixed inset-0 z-[1000] overflow-y-auto' : 'min-h-screen'} bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white`}>
+  const controller = <div className={`${expanded ? 'fixed inset-0 z-[2147483647] overflow-y-auto' : 'min-h-screen'} bg-[radial-gradient(circle_at_top,#12335b_0%,#071225_40%,#020617_100%)] text-white`}>
     <header className={`${tab === 'Quackdex' ? 'relative' : 'sticky top-0'} z-20 border-b border-cyan-300/10 bg-slate-950/90 px-4 py-3 backdrop-blur-xl`}>
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
         <div><div className="text-[10px] font-black uppercase tracking-[.26em] text-cyan-300">Nebula Controller</div><h1 className="text-xl font-black">{isQuackverse && tab === 'Quackdex' ? 'Quackdex' : game.name}</h1><p className="text-xs text-slate-400">{tab === 'Quackdex' ? 'Your cards, decks, and trades' : `Controls for #${channel || 'no-channel'}`}</p></div>
@@ -230,6 +231,8 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
       </aside> : null}
     </main>
   </div>;
+  // Escape the workspace shell's stacking contexts so its rails cannot cover the game.
+  return expanded ? createPortal(controller, document.body) : controller;
 }
 
 
