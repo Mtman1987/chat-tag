@@ -1,4 +1,5 @@
 import { wordChainResultMessages, type WordChainResultMessage } from '@/lib/word-chain-results';
+import { isSpelledWordChainWord } from '@/lib/word-chain-spelling';
 import type { JsonObject } from '@/lib/volume-store';
 import { GAME_HUB_CATALOG, getGameHubGame, normalizeGameHubGameIds } from '@/lib/game-hub-registry';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
@@ -60,6 +61,13 @@ export const WORD_CHAIN_THEMES = {
   'Winter Fun': ['SNOWMAN', 'SLED', 'SKIING', 'SKATING', 'MITTENS', 'FIREPLACE', 'SNOWBALL', 'COCOA'],
   'School Days': ['PENCIL', 'NOTEBOOK', 'CLASSROOM', 'TEACHER', 'RECESS', 'BACKPACK', 'LIBRARY', 'HOMEWORK'],
 } as const;
+// Preserve established names/acronyms in the shipped starter vocabulary, even
+// when a general English dictionary omits them (for example Yoshi and NPC).
+// Viewer-submitted starter words never become spelling exceptions.
+const WORD_CHAIN_STARTER_WORDS = new Set<string>(Object.values(WORD_CHAIN_THEMES).flat());
+function validWordChainSpelling(word: string): boolean {
+  return WORD_CHAIN_STARTER_WORDS.has(word.toUpperCase()) || isSpelledWordChainWord(word);
+}
 const LEDGER_LIMIT = 500;
 
 export type GameHubMembership = {
@@ -666,6 +674,8 @@ export function submitWordChainTheme(
     .filter((word) => /^[A-Z]{3,20}$/.test(word)))].slice(0, 40);
   if (name.length < 2) throw new Error('Give the theme a short name.');
   if (String(input.words || '').trim() && words.length < 4) throw new Error('Add at least four starter words separated by commas, or use just the theme name.');
+  const misspelled = words.filter(word => !validWordChainSpelling(word));
+  if (misspelled.length) throw new Error(`Check these starter words: ${misspelled.slice(0, 4).join(', ')}. Use correctly spelled single words, or submit just the theme name.`);
   const settings = getChannelGameSettings(state, streamGameStateChannel(state, channel, 'wordchain'));
   settings.wordChainThemeInventory ||= [];
   const existing = wordChainThemeCatalog(settings).find((entry) => entry.name.toLowerCase() === normalized);
@@ -781,9 +791,10 @@ export function advanceWordChainRound(state: any, channelValue: unknown, nowValu
   const selected = catalog.find(entry => entry.name.toLowerCase() === requested)
     || pool[roundSlot % pool.length] || catalog[0];
   settings.wordChainThemeHistory = [...new Set([...(unused.length ? history : []), selected.name.toLowerCase()])].slice(-catalog.length);
-  const seed = selected.words[Math.floor(roundSlot / catalog.length) % selected.words.length] || '';
+  const starterWords = selected.words.filter(validWordChainSpelling);
+  const seed = starterWords[Math.floor(roundSlot / catalog.length) % starterWords.length] || '';
   settings.wordChainRound = {
-    roundSlot, theme: selected.name, themeWords: selected.words,
+    roundSlot, theme: selected.name, themeWords: starterWords,
     currentWord: seed, usedWords: seed ? [seed] : [], comboMultiplier: 1, entries: [],
   };
   return { changed: true, round: settings.wordChainRound, settled: changed ? settings.lastWordChainTally : null };
@@ -856,6 +867,7 @@ export function recordWordChainMessage(
   if (!/^[A-Z]+$/.test(normalized) || normalized.length < 3) return { changed: advanced.changed, outcome: 'invalid' as const };
   if (round.currentWord && normalized[0] !== round.currentWord.at(-1)) return { changed: advanced.changed, outcome: 'wrong-letter' as const };
   if (round.usedWords.includes(normalized)) return { changed: advanced.changed, outcome: 'used' as const };
+  if (!validWordChainSpelling(normalized)) return { changed: advanced.changed, outcome: 'spelling' as const };
   const settings = getChannelGameSettings(state, streamGameStateChannel(state, channel, 'wordchain'));
   if (settings.wordChainVerdicts?.[`${round.theme}:${normalized}`] === false) {
     return { changed: advanced.changed, outcome: 'rejected' as const };

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import './word-chain-spelling.test';
 import { advanceWordChainRound, getChannelGameSettings, getGameHubStore, joinGameHubGame,
   recordWordChainMessage, recordWordChainVote, setStreamGameBattle, submitWordChainTheme,
   wordChainPublicSnapshot, WORD_CHAIN_CYCLE_MS, WORD_CHAIN_ROUND_MS, WORD_CHAIN_REVIEW_MS, WORD_CHAIN_THEMES } from '../src/lib/game-hub-state';
@@ -50,7 +51,7 @@ test('automatic themes do not repeat until the full catalog is used, including a
 test('linked tenants share requested themes and each get results; unrelated tenants stay isolated', () => {
   const state = fresh();
   setStreamGameBattle(state, { gameId: 'wordchain', channels: ['alpha', 'beta'], createdBy: 'alpha' });
-  submitWordChainTheme(state, { ...player, channel: 'beta', name: 'Dinosaurs', words: 'raptor, trex, triceratops, stegosaurus', now: 0 });
+  submitWordChainTheme(state, { ...player, channel: 'beta', name: 'Dinosaurs', words: 'raptor, tyrannosaurus, triceratops, stegosaurus', now: 0 });
   assert.equal(advanceWordChainRound(state, 'alpha', 0).round.theme, 'Dinosaurs');
   assert.equal(wordChainPublicSnapshot(state, 'beta', 0).theme, 'Dinosaurs');
   assert.equal(wordChainPublicSnapshot(state, 'gamma', 0).theme, 'Animals');
