@@ -66,7 +66,7 @@ test('permission cache fails closed after its short validity window', async () =
 
 function replyHarness({ shared = false, muted = false } = {}) {
   const source = fs.readFileSync(require.resolve('../bot.js'), 'utf8');
-  const fragment = source.slice(source.indexOf('const liveMembersRead ='), source.indexOf('async function resolveChannelFromRoomId'));
+  const fragment = source.slice(source.indexOf('async function getLiveMembersCached('), source.indexOf('async function resolveChannelFromRoomId'));
   const calls = [];
   const context = { createReadCache, Map, Set, Date,
     liveMembersCache: { map: new Map() },

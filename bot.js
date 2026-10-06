@@ -913,6 +913,10 @@ async function sendMessageViaAPIUnqueued(targetChannel, rawMessage, forSourceOnl
   return { success: false, reason: 'api-error', status: res.status };
 }
 
+async function getLiveMembersCached(force = false) {
+  return (await liveMembersRead.read(force)) || [];
+}
+
 const liveMembersRead = createReadCache({
   load: async () => {
     const data = await apiCall('/api/discord/live-members');
@@ -926,9 +930,6 @@ const liveMembersRead = createReadCache({
     return members;
   },
 });
-async function getLiveMembersCached(force = false) {
-  return (await liveMembersRead.read(force)) || [];
-}
 
 async function sendChatWithSharedFallback(client, targetChannel, rawMessage, options = {}) {
   const normalized = String(targetChannel || '').toLowerCase().replace(/^#/, '');
@@ -3010,28 +3011,49 @@ console.log = (...args) => {
         : 'pack opened';
       reply(`🦆 @${user} opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`);
 
-      if (packCards.length > 0 && res?.packId) {
-        // PACK_PRESENT_CANONICAL_WEB_ROUTE: the web app owns the one Discord
-        // message, GIF render/edit, failure state and ten-minute cleanup.
-        // This does not reopen the pack; it only presents the cards just drawn.
-        void apiCall('/api/quackverse/pack/present', {
+      const rarityCounts = packCards.reduce((acc, card) => {
+        const rarity = card?.rarity || 'Unknown';
+        acc[rarity] = (acc[rarity] || 0) + 1;
+        return acc;
+      }, {});
+      const packCardLines = packCards.map((card) => `${card?.name || 'Unknown'} (${card?.rarity || 'Unknown'})`).join('\n') || 'pack opened';
+      const collectionCards = Array.isArray(res?.cards) ? res.cards : [];
+      const collectionTotal = collectionCards.length;
+      const collectionUnique = new Set(collectionCards).size;
+      const rarityText = Object.entries(rarityCounts)
+        .map(([rarity, count]) => `${rarity}: ${count}`)
+        .join(' | ') || 'Unknown';
+
+      if (packCards.length > 0) {
+        const cardEmbeds = packCards.slice(0, 5).map((card) => ({
+          title: `#${card?.id || '?'} ${card?.name || 'Unknown Card'}`,
+          description: `${card?.rarity || 'Unknown'} · ${card?.type || 'Quackverse'}`,
+          color: 0x00d9ff,
+          image: { url: card?.cardImageUrl },
+        })).filter((embed) => embed.image.url);
+        const announceRes = await apiCall('/api/discord/announce', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            packId: res.packId,
-            username: user,
-            pack: packCards,
-            packsRemaining: Number(res?.packsRemaining || 0),
-            cards: Array.isArray(res?.cards) ? res.cards : [],
-            streamweaverTenantId: channelName,
+            embeds: [
+              {
+                title: '🦆 Quackverse Pack Opened',
+                description: `**@${user}** opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`,
+                color: 0x00d9ff,
+                fields: [
+                  { name: 'Pack', value: packCardLines, inline: false },
+                  { name: 'Collection', value: `${collectionTotal} total cards | ${collectionUnique} unique`, inline: true },
+                  { name: 'Rarity Breakdown', value: rarityText, inline: false },
+                ],
+                footer: { text: 'SPMT Chat Tag' },
+              },
+              ...cardEmbeds,
+            ],
           }),
-        }).then((presented) => {
-          if (presented?.__ok === false || presented?.success === false) {
-            console.error(`[Bot] Quackverse pack presentation failed: ${presented?.error || presented?.render?.error || presented?.__status || 'unknown error'}`);
-          }
-        }).catch((error) => {
-          console.error('[Bot] Quackverse pack presentation request failed:', error?.message || error);
         });
+        if (announceRes?.__ok === false || announceRes?.success === false) {
+          console.error(`[Bot] Quackverse Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
+        }
       }
     }
 
@@ -3329,5 +3351,4 @@ console.log = (...args) => {
     }
   });
 })();
-
 
