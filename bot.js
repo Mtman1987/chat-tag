@@ -29,7 +29,7 @@ const IGNORED_SENDER_NAMES = new Set([
     .map((name) => name.trim().toLowerCase())
     .filter(Boolean),
 ]);
-const { twitchChannels, createTwitchSendQueue, splitChatMessage } = require('./scripts/lib/twitch-transport.cjs');
+const { twitchChannels, createTwitchSendQueue, splitChatMessage, createMessageDeduper, createReadCache } = require('./scripts/lib/twitch-transport.cjs');
 const chatSendQueue = createTwitchSendQueue();
 const joinFailSilenced = new Set();
 const PAGINATION_STATE_TTL_MS = Number.parseInt(process.env.PAGINATION_STATE_TTL_MS || '3600000', 10);
@@ -141,10 +141,15 @@ function updateWinnersCache(data) {
   cachedWinnersAt = Date.now();
 }
 
+let winnersReadPending = null;
 async function ensureWinnersCache() {
-  if (cachedWinnersAt && Date.now() - cachedWinnersAt < WINNERS_CACHE_MS) return cachedWinners;
-  cachedWinnersAt = Date.now();
-  updateWinnersCache(await apiCall('/api/tag/winners'));
+  if (!cachedWinnersAt || Date.now() - cachedWinnersAt >= WINNERS_CACHE_MS) {
+    if (!winnersReadPending) {
+      cachedWinnersAt = Date.now();
+      winnersReadPending = apiCall('/api/tag/winners').then(updateWinnersCache)
+        .finally(() => { winnersReadPending = null; });
+    }
+  }
   return cachedWinners;
 }
 
@@ -439,18 +444,19 @@ async function triggerFfaFallback(client, data, itUsername, reason) {
 let mutedChannelsCache = { fetchedAt: 0, channels: new Set() };
 const MUTED_CHANNELS_CACHE_MS = 5000;
 
+const mutedChannelsRead = createReadCache({
+  ttlMs: MUTED_CHANNELS_CACHE_MS,
+  maxStaleMs: MUTED_CHANNELS_CACHE_MS,
+  load: async () => {
+    const data = await apiCall('/api/bot/muted');
+    if (!data?.__ok || !Array.isArray(data.muted)) return null;
+    const channels = new Set(data.muted.map(channel => String(channel || '').toLowerCase().replace(/^#/, '')));
+    mutedChannelsCache = { fetchedAt: Date.now(), channels };
+    return channels;
+  },
+});
 async function getMutedChannelsCached(force = false) {
-  const now = Date.now();
-  if (!force && now - mutedChannelsCache.fetchedAt < MUTED_CHANNELS_CACHE_MS) {
-    return mutedChannelsCache.channels;
-  }
-
-  const data = await apiCall('/api/bot/muted');
-  const channels = new Set((data?.muted || []).map((channel) =>
-    String(channel || '').toLowerCase().replace(/^#/, '')
-  ));
-  mutedChannelsCache = { fetchedAt: now, channels };
-  return channels;
+  return mutedChannelsRead.read(force);
 }
 
 async function sendOverlayMessage(targetChannel, message, options = {}) {
@@ -907,30 +913,21 @@ async function sendMessageViaAPIUnqueued(targetChannel, rawMessage, forSourceOnl
   return { success: false, reason: 'api-error', status: res.status };
 }
 
+const liveMembersRead = createReadCache({
+  load: async () => {
+    const data = await apiCall('/api/discord/live-members');
+    if (!data?.__ok || !Array.isArray(data.liveMembers)) return null;
+    const members = data.liveMembers;
+    const now = Date.now();
+    recordRecentlyLiveChannels(members, now);
+    liveMembersCache = { fetchedAt: now, members, map: new Map(members
+      .filter(member => member?.twitchUsername)
+      .map(member => [member.twitchUsername.toLowerCase(), member])) };
+    return members;
+  },
+});
 async function getLiveMembersCached(force = false) {
-  const now = Date.now();
-  if (!force && now - liveMembersCache.fetchedAt < 30000 && liveMembersCache.members.length > 0) {
-    return liveMembersCache.members;
-  }
-
-  const liveData = await apiCall('/api/discord/live-members');
-  const members = Array.isArray(liveData?.liveMembers) ? liveData.liveMembers : [];
-  recordRecentlyLiveChannels(members, now);
-  const map = new Map();
-
-  for (const member of members) {
-    const login = (member?.twitchUsername || '').toLowerCase();
-    if (!login) continue;
-    map.set(login, member);
-  }
-
-  liveMembersCache = {
-    fetchedAt: now,
-    members,
-    map,
-  };
-
-  return members;
+  return (await liveMembersRead.read(force)) || [];
 }
 
 async function sendChatWithSharedFallback(client, targetChannel, rawMessage, options = {}) {
@@ -939,15 +936,20 @@ async function sendChatWithSharedFallback(client, targetChannel, rawMessage, opt
 
   const message = await withCrowns(rawMessage);
 
-  const mutedChannels = await getMutedChannelsCached();
-  if (!options.forceChat && mutedChannels.has(normalized)) {
+  const mutedChannels = typeof options.knownMuted === 'boolean' && Date.now() - Number(options.knownMutedAt || 0) < MUTED_CHANNELS_CACHE_MS
+    ? (options.knownMuted ? new Set([normalized]) : new Set())
+    : await getMutedChannelsCached();
+  if (!options.forceChat && !mutedChannels) return;
+  if (!options.forceChat && mutedChannels?.has(normalized)) {
     await sendOverlayMessage(normalized, message);
     return;
   }
 
-  await getLiveMembersCached();
-  const member = liveMembersCache.map.get(normalized);
-  const inSharedChat = Boolean(member?.isSharedChat);
+  // Membership decoration must not hold a reply behind a 45-second API read.
+  void getLiveMembersCached();
+  const member = liveMembersRead.peek() ? liveMembersCache.map.get(normalized) : null;
+  const sharedSeenAt = observedSharedChannels.get(normalized) || 0;
+  const inSharedChat = Boolean(member?.isSharedChat || (sharedSeenAt && Date.now() - sharedSeenAt < 300_000));
 
   if (inSharedChat) {
     const sendResult = await sendMessageViaAPI(normalized, message, true);
@@ -1066,7 +1068,9 @@ async function broadcastToPlayers(client, message, excludeChannel = null) {
 }
 
 const username = env.TWITCH_BOT_USERNAME;
-const recentMessages = new Set();
+const recentMessages = new Set(); // retained for build patch compatibility
+const incomingMessages = createMessageDeduper();
+const observedSharedChannels = new Map();
 const pendingGameChoices = new Map();
 const BOT_TEST_CHANNEL = (env.BOT_TEST_CHANNEL || '').toLowerCase().replace(/^#/, '');
 const ALWAYS_JOINED_CHANNELS = ['mtman1987']; // Channels the bot should keep joined even while offline
@@ -1952,7 +1956,11 @@ console.log = (...args) => {
   console.log('[Bot] Twitch chat uses the authorized bot account via TMI.js. Optional EventSub integration is off; this is not a bot authentication error.');
 
   client.on('message', async (channel, tags, message, self) => {
-    if (self) return;
+    if (self || !incomingMessages.accept(channel, tags)) return;
+    if (tags['source-room-id']) {
+      observedSharedChannels.set(String(channel).replace(/^#/, '').toLowerCase(), Date.now());
+      while (observedSharedChannels.size > 500) observedSharedChannels.delete(observedSharedChannels.keys().next().value);
+    }
     
     const senderLogin = (tags['username'] || '').toLowerCase();
     const senderUserId = tags['user-id'] ? `user_${tags['user-id']}` : null;
@@ -1989,13 +1997,14 @@ console.log = (...args) => {
     // Resolve shared chat source so lastSeenChannel reflects the actual streamer
     if (senderLogin && senderUserId && !isIgnoredSender(senderLogin, channel)) {
       const rawCh = channel.replace('#', '').toLowerCase();
-      const srcRoomId = tags['source-room-id'] || tags['source-id'];
+      const srcRoomId = tags['source-room-id'];
       const roomId = tags['room-id'];
       const isShared = Boolean(roomId && srcRoomId && roomId !== srcRoomId);
       const resolvedChannel = isShared
         ? await resolveChannelFromRoomId(srcRoomId, rawCh)
         : rawCh;
       const activityChannel = (resolvedChannel !== senderLogin) ? resolvedChannel : undefined;
+      if (tags['source-room-id']) observedSharedChannels.set(resolvedChannel, Date.now());
       // A bare numeric reply can be a pending game-choice confirmation. Do not
       // feed that confirmation into Word Chain/Phrase Guess as ordinary gameplay
       // before the command router consumes it below.
@@ -2074,19 +2083,16 @@ console.log = (...args) => {
     // In shared chat, process mirrored partner messages too, but map to source channel context.
     const rawChannelName = channel.replace('#', '');
     const roomId = tags['room-id'];
-    const sourceRoomId = tags['source-room-id'] || tags['source-id'];
+    const sourceRoomId = tags['source-room-id'];
     const isMirroredSharedMessage = Boolean(roomId && sourceRoomId && roomId !== sourceRoomId);
     const channelName = isMirroredSharedMessage
       ? await resolveChannelFromRoomId(sourceRoomId, rawChannelName)
       : rawChannelName;
+    if (tags['source-room-id']) observedSharedChannels.set(channelName, Date.now());
     const reply = async (text) =>
-      sendChatWithSharedFallback(client, channelName, text, { warnOnFallback: true });
+      sendChatWithSharedFallback(client, channelName, text, { warnOnFallback: true, knownMuted: isMuted, knownMutedAt: permissionReadAt });
 
-    // Extra short dedup window by message id.
-    const msgId = tags.id;
-    if (recentMessages.has(msgId)) return;
-    recentMessages.add(msgId);
-    setTimeout(() => recentMessages.delete(msgId), 5000);
+    // Canonical source-message dedup already ran before any asynchronous work.
     
     let args = normalizedMsg.toLowerCase().split(/\s+/).slice(1);
     let cmd = args[0];
@@ -2102,6 +2108,8 @@ console.log = (...args) => {
     if (isIgnoredSender(user, channelName)) return;
 
     const { blacklistData, mutedData } = await readCommandGates();
+    if (!blacklistData?.__ok || !mutedData?.__ok) return; // fail closed on permission-read failure
+    const permissionReadAt = Date.now();
     const channelIsBlacklisted = blacklistData?.blacklisted?.includes(channelName);
     const isExplicitSelfRejoin = (cmd === 'join' && !args[1]);
     if (channelIsBlacklisted && isExplicitSelfRejoin) {
@@ -2155,7 +2163,7 @@ console.log = (...args) => {
           username: senderLogin,
           displayName: user,
           message: rawMessage,
-          messageId: tags.id || '',
+          messageId: tags['source-id'] || tags.id || '',
           selectedChoice: selectedChoice?.choice ? { gameId: selectedChoice.gameId, word: selectedChoice.word, choice: selectedChoice.choice } : null,
           isBroadcaster: tags?.badges?.broadcaster === '1' || senderLogin === channelName,
           isModerator: Boolean(tags?.mod),
@@ -3002,49 +3010,28 @@ console.log = (...args) => {
         : 'pack opened';
       reply(`🦆 @${user} opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`);
 
-      const rarityCounts = packCards.reduce((acc, card) => {
-        const rarity = card?.rarity || 'Unknown';
-        acc[rarity] = (acc[rarity] || 0) + 1;
-        return acc;
-      }, {});
-      const packCardLines = packCards.map((card) => `${card?.name || 'Unknown'} (${card?.rarity || 'Unknown'})`).join('\n') || 'pack opened';
-      const collectionCards = Array.isArray(res?.cards) ? res.cards : [];
-      const collectionTotal = collectionCards.length;
-      const collectionUnique = new Set(collectionCards).size;
-      const rarityText = Object.entries(rarityCounts)
-        .map(([rarity, count]) => `${rarity}: ${count}`)
-        .join(' | ') || 'Unknown';
-
-      if (packCards.length > 0) {
-        const cardEmbeds = packCards.slice(0, 5).map((card) => ({
-          title: `#${card?.id || '?'} ${card?.name || 'Unknown Card'}`,
-          description: `${card?.rarity || 'Unknown'} · ${card?.type || 'Quackverse'}`,
-          color: 0x00d9ff,
-          image: { url: card?.cardImageUrl },
-        })).filter((embed) => embed.image.url);
-        const announceRes = await apiCall('/api/discord/announce', {
+      if (packCards.length > 0 && res?.packId) {
+        // PACK_PRESENT_CANONICAL_WEB_ROUTE: the web app owns the one Discord
+        // message, GIF render/edit, failure state and ten-minute cleanup.
+        // This does not reopen the pack; it only presents the cards just drawn.
+        void apiCall('/api/quackverse/pack/present', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            embeds: [
-              {
-                title: '🦆 Quackverse Pack Opened',
-                description: `**@${user}** opened a Quackverse pack: ${packNames}. ${Number(res?.packsRemaining || 0)}/3 packs left today.`,
-                color: 0x00d9ff,
-                fields: [
-                  { name: 'Pack', value: packCardLines, inline: false },
-                  { name: 'Collection', value: `${collectionTotal} total cards | ${collectionUnique} unique`, inline: true },
-                  { name: 'Rarity Breakdown', value: rarityText, inline: false },
-                ],
-                footer: { text: 'SPMT Chat Tag' },
-              },
-              ...cardEmbeds,
-            ],
+            packId: res.packId,
+            username: user,
+            pack: packCards,
+            packsRemaining: Number(res?.packsRemaining || 0),
+            cards: Array.isArray(res?.cards) ? res.cards : [],
+            streamweaverTenantId: channelName,
           }),
+        }).then((presented) => {
+          if (presented?.__ok === false || presented?.success === false) {
+            console.error(`[Bot] Quackverse pack presentation failed: ${presented?.error || presented?.render?.error || presented?.__status || 'unknown error'}`);
+          }
+        }).catch((error) => {
+          console.error('[Bot] Quackverse pack presentation request failed:', error?.message || error);
         });
-        if (announceRes?.__ok === false || announceRes?.success === false) {
-          console.error(`[Bot] Quackverse Discord announcement failed: ${announceRes?.error || announceRes?.__status || 'unknown error'}`);
-        }
       }
     }
 
@@ -3342,4 +3329,5 @@ console.log = (...args) => {
     }
   });
 })();
+
 

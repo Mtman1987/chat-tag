@@ -71,7 +71,7 @@ let commandReplacement = `    const mutedData = await apiCall('/api/bot/muted');
 commandReplacement = commandReplacement
   .replace(
     '          message: rawMessage,',
-    "          message: rawMessage,\n          messageId: tags.id || '',",
+    "          message: rawMessage,\n          messageId: tags['source-id'] || tags.id || '',",
   )
   .replace(
     '    if (!legacyChatTagCommands.has(cmd)) {',
@@ -144,7 +144,7 @@ if (
   !source.includes(choiceStoreMarker) ||
   !source.includes(numericChoiceMarker) ||
   !source.includes(mosaicShortcutMarker) ||
-  !source.includes("messageId: tags.id || ''") ||
+  !source.includes("messageId: tags['source-id'] || tags.id || ''") ||
   !source.includes('gamesHubCommand?.choices') ||
   !source.includes(apiTimeoutMarker) ||
   !source.includes(healthContract) ||
@@ -156,3 +156,4 @@ if (
 
 if (source !== original) fs.writeFileSync(file, source, 'utf8');
 console.log('Games Hub bot chat-event + legacy-safe command + IRC-health diagnostics patch applied.');
+

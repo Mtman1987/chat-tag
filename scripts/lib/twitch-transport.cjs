@@ -106,4 +106,51 @@ function createTwitchSendQueue({ now = Date.now, wait = sleep } = {}) {
   return queue;
 }
 
-module.exports = { twitchChannels, createTwitchSendQueue, splitChatMessage };
+function createMessageDeduper({ now = Date.now, ttlMs = 120_000, maxEntries = 10_000 } = {}) {
+  const seen = new Map();
+  return {
+    accept(channel, tags = {}) {
+      const id = tags['source-id'] || tags.id;
+      // Missing IDs must never collapse different legitimate messages.
+      if (!id) return true;
+      const room = tags['source-room-id'] || tags['room-id'] || normalize(channel);
+      const key = `${room}:${id}`;
+      const at = now();
+      for (const [k, expires] of seen) {
+        if (expires > at) break;
+        seen.delete(k);
+      }
+      if ((seen.get(key) || 0) > at) return false;
+      seen.delete(key);
+      seen.set(key, at + ttlMs);
+      while (seen.size > maxEntries) seen.delete(seen.keys().next().value);
+      return true;
+    },
+  };
+}
+
+function createReadCache({ load, now = Date.now, ttlMs = 30_000, retryMs = 10_000, maxStaleMs = 300_000 }) {
+  let value = null, loadedAt = 0, retryAt = 0, pending = null;
+  const peek = () => value !== null && now() - loadedAt <= maxStaleMs ? value : null;
+  return {
+    peek,
+    read(force = false) {
+      if (!force && value !== null && now() - loadedAt < ttlMs) return Promise.resolve(value);
+      if (pending) return pending;
+      if (now() < retryAt) return Promise.resolve(peek());
+      pending = Promise.resolve().then(load).then(next => {
+        if (next === null || next === undefined) throw new Error('read_unavailable');
+        value = next;
+        loadedAt = now();
+        retryAt = 0;
+        return value;
+      }).catch(() => {
+        retryAt = now() + retryMs;
+        return peek();
+      }).finally(() => { pending = null; });
+      return pending;
+    },
+  };
+}
+
+module.exports = { twitchChannels, createTwitchSendQueue, splitChatMessage, createMessageDeduper, createReadCache };
