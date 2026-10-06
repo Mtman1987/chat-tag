@@ -950,9 +950,10 @@ async function sendChatWithSharedFallback(client, targetChannel, rawMessage, opt
   void getLiveMembersCached();
   const member = liveMembersRead.peek() ? liveMembersCache.map.get(normalized) : null;
   const sharedSeenAt = observedSharedChannels.get(normalized) || 0;
-  const inSharedChat = Boolean(member?.isSharedChat || (sharedSeenAt && Date.now() - sharedSeenAt < 300_000));
+  const inSharedChat = Boolean(member?.isSharedChat);
+  const observedSharedChat = Boolean(sharedSeenAt && Date.now() - sharedSeenAt < 300_000);
 
-  if (inSharedChat) {
+  if (inSharedChat || observedSharedChat) {
     const sendResult = await sendMessageViaAPI(normalized, message, true);
     if (sendResult?.success || sendResult?.allowFallback === false) return;
 
