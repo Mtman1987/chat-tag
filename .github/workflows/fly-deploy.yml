@@ -88,6 +88,12 @@ jobs:
         run: node --import tsx --test tests/word-chain-tenants.test.ts tests/word-chain-routes.test.cjs tests/word-chain-delivery.test.cjs
       - name: Run canonical Personal overlay regression
         run: node --import tsx --test tests/canonical-personal-overlay.test.ts tests/admin-shell-parity.test.ts tests/layout-cleanup.test.ts
+      - name: Validate bot Docker patches
+        run: |
+          node scripts/patch-game-hub-bot.mjs
+          node scripts/patch-live-chat-pressure.mjs
+          node scripts/patch-quackverse-pack-bot.mjs
+          node --check bot.js
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
