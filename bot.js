@@ -1216,7 +1216,7 @@ console.log = (...args) => {
     send: (channel, message) => sendChatWithSharedFallback(client, channel, message, { warnOnFallback: true }),
   });
   setInterval(() => {
-    if (isIrcConnected) void tickGameLifecycle()
+    void tickGameLifecycle()
       .catch(error => console.warn('[Nebula] Lifecycle cleanup/results failed:', error.message));
   }, 30_000);
 
