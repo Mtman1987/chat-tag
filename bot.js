@@ -2062,6 +2062,10 @@ console.log = (...args) => {
       }
     }
     
+    // StreamWeaver owns the tenant shared-bot wake toggle. Keep Chat Tag's
+    // away command separate so these controls produce one authoritative reply.
+    if (/^!?@?spmt\s+wake(?:\s|$)/i.test(message.trim())) return;
+
     let rawMessage = message.trim();
     let msg = rawMessage.toLowerCase();
     const rawChoiceKey = channel.replace('#', '').toLowerCase() + ':' + senderLogin;
