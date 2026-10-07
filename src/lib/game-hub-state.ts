@@ -332,7 +332,7 @@ export function setChannelGameRunning(state: any, channelValue: unknown, gameIdV
       }
     }
     if (game.id === 'pixelbattle' && runtime.mosaic?.current?.status === 'active') {
-      runtime.mosaic.current.status = 'suspended';
+      if (runtime.mosaic.current.status === 'active') runtime.mosaic.current.status = 'suspended';
       runtime.mosaic.saves = [runtime.mosaic.current, ...(runtime.mosaic.saves || []).filter((item: any) => item.id !== runtime.mosaic.current.id)].slice(0, 20);
     }
     for (const [playerId, focus] of Object.entries(settings.playerGameFocus || {})) {
@@ -349,29 +349,10 @@ export function setChannelGameRunning(state: any, channelValue: unknown, gameIdV
 
 export const GAME_INACTIVITY_MS = 30 * 60_000;
 
-export function stopInactiveChannelGames(state: any, channelValue: unknown, now = Date.now()) {
-  const channel = normalizeGameHubChannel(channelValue);
-  const settings = getChannelGameSettings(state, channel);
-  const stopped: string[] = [];
-  for (const id of resolveChannelGameIds(state, channel)) {
-    if (id === 'chat-tag') continue;
-    settings.gameStartedAt ||= {};
-    // Give legacy active runs a defined baseline, rather than treating reads as play.
-    settings.gameStartedAt[id] ||= settings.gameRunIds?.[id]?.split('#')[0] || new Date(now).toISOString();
-    let last = Date.parse(settings.gameStartedAt[id]);
-    const actions = state.gameSettings?.default?.gameHubRuntime?.channels?.[channel]?.games?.[id]?.actions || [];
-    for (const action of actions) {
-      if (action.action !== 'stop') last = Math.max(last, Date.parse(action.at) || 0);
-    }
-    for (const focus of Object.values(settings.playerGameFocus || {})) {
-      if (focus.gameId === id) last = Math.max(last, Date.parse(focus.lastUsedAt) || 0);
-    }
-    if (id === 'pixelbattle') last = Math.max(last, Date.parse((settings as any).mosaic?.current?.lastInteractionAt || '') || 0);
-    if (now - last < GAME_INACTIVITY_MS) continue;
-    setChannelGameRunning(state, channel, id, false);
-    stopped.push(id);
-  }
-  return stopped;
+// Kept for lifecycle callers and the public stopped-results contract. Community
+// games stay available until the owner/mod explicitly stops them.
+export function stopInactiveChannelGames(_state: any, _channelValue: unknown, _now = Date.now()): string[] {
+  return [];
 }
 
 function normalizeMembership(value: any): GameHubMembership {

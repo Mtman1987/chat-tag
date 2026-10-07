@@ -142,6 +142,7 @@ test('Mosaic brush equipment resets with each new artwork', () => {
   const queued = queueMosaicTheme(draft, {
     channel: 'spacemountainlive', userId: '8', username: 'maker', displayName: 'Maker', theme: 'dragon', now: 60,
   });
+  finishMosaicForPreview(draft, 'spacemountainlive', 60);
   installMosaicTemplate(draft, 'spacemountainlive', queued.request.id, Array.from({ length: 2_000 }, () => 'Y'), {}, 61);
   const status = setMosaicBrush(draft, {
     channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist', brush: 'status', now: 62,
@@ -241,7 +242,7 @@ test('Mosaic scores correct and incorrect colors and persists exact board progre
   assert.equal(snapshot.artwork?.painted[11 * 20 + 3], 'Y');
 });
 
-test('Mosaic inactivity saves and suspends without losing cells', () => {
+test('Mosaic inactivity saves and stays active without losing cells', () => {
   const draft = readyMosaic();
   paintMosaicCell(draft, {
     channel: 'spacemountainlive', userId: '7', username: 'artist', displayName: 'Artist',
@@ -251,7 +252,7 @@ test('Mosaic inactivity saves and suspends without losing cells', () => {
     observeMosaicActiveTime(draft, 'spacemountainlive', 1_000 + step * 30_000);
   }
   const snapshot = mosaicPublicSnapshot(draft, 'spacemountainlive', 2_000_000);
-  assert.equal(snapshot.artwork?.status, 'suspended');
+  assert.equal(snapshot.artwork?.status, 'active');
   assert.equal(snapshot.artwork?.painted[11 * 20 + 3], 'Y');
 });
 

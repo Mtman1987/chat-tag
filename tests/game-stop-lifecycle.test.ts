@@ -22,19 +22,6 @@ test('stop ends treasure turns and challenge and preserves another channel', () 
   assert.equal(getTreasureHuntState(draft, 'other').rotation.length, 1);
 });
 
-test('inactivity stops all games, reads do not postpone it, and gameplay resets it', () => {
-  const draft = state(), now = Date.now();
-  for (const id of ['wordchain', 'treasurehunt', 'pixelbattle', 'chatwars', 'bingo', 'emojirain']) {
-    setChannelGameRunning(draft, 'space', id, true);
-    getChannelGameSettings(draft, 'space').gameStartedAt![id] = new Date(now - GAME_INACTIVITY_MS).toISOString();
-  }
-  recordGameHubRuntimeAction(draft, { channel: 'space', gameId: 'wordchain', action: 'guess' });
-  resolveChannelGameIds(draft, 'space');
-  assert.deepEqual(stopInactiveChannelGames(draft, 'space', now).sort(), ['bingo', 'chatwars', 'emojirain', 'pixelbattle', 'treasurehunt']);
-  assert.deepEqual(resolveChannelGameIds(draft, 'space'), ['wordchain']);
-  assert.deepEqual(stopInactiveChannelGames(draft, 'space', now + GAME_INACTIVITY_MS + 1000), ['wordchain']);
-});
-
 test('mosaic stop saves artwork and explicit restart creates a fresh inactivity window', () => {
   const draft = state();
   setChannelGameRunning(draft, 'space', 'pixelbattle', true);
@@ -45,4 +32,12 @@ test('mosaic stop saves artwork and explicit restart creates a fresh inactivity 
   assert.deepEqual(settings.mosaic.saves[0].painted, ['R']);
   setChannelGameRunning(draft, 'space', 'pixelbattle', true);
   assert.deepEqual(stopInactiveChannelGames(draft, 'space'), []);
+});
+
+test('community games stay available after a day of inactivity by default', () => {
+  const draft = state(), now = Date.now();
+  const games = ['wordchain','treasurehunt','pixelbattle','chatwars','bingo','emojirain'];
+  for (const id of games) setChannelGameRunning(draft, 'space', id, true);
+  assert.deepEqual(stopInactiveChannelGames(draft, 'space', now + 24 * 60 * 60_000), []);
+  assert.deepEqual(resolveChannelGameIds(draft, 'space').sort(), games.sort());
 });

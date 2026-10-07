@@ -161,8 +161,8 @@ export function observeMosaicActiveTime(state: any, channelValue: unknown, now =
   current.lastHeartbeatAt = nowIso(now);
   current.activeIdleMs = Math.max(0, Number(current.activeIdleMs || 0)) + delta;
   if (current.activeIdleMs < MOSAIC_IDLE_MS) return true;
-  setChannelGameRunning(state, channelValue, 'pixelbattle', false);
-  current.status = 'suspended';
+  // Idle time checkpoints the painting; only an explicit stop suspends it.
+  current.activeIdleMs = 0;
   current.updatedAt = nowIso(now);
   mosaic.saves = [current, ...mosaic.saves.filter((item) => item.id !== current.id)].slice(0, 20);
   return true;
@@ -252,6 +252,7 @@ export function clearMosaicQueue(state: any, channelValue: unknown) {
 export function claimNextMosaicRequest(state: any, channelValue: unknown, now = Date.now()) {
   const mosaic = getMosaicChannelState(state, channelValue);
   if (mosaic.current && !['completed', 'archived'].includes(mosaic.current.status)) return null;
+  if (mosaic.queue.some(item => item.status === 'generating' && item.lastAttemptAt && now - Date.parse(item.lastAttemptAt) < MOSAIC_GENERATION_STALE_MS)) return null;
   // Give an already-requested, exhausted artwork one recovery cycle after the
   // production generator fix. Persist the marker so a real provider outage
   // cannot create an infinite retry loop.
@@ -292,10 +293,12 @@ export function installMosaicTemplate(
   const mosaic = getMosaicChannelState(state, channelValue);
   const request = mosaic.queue.find((item) => item.id === requestId);
   if (!request) throw new Error('Mosaic request was not found.');
+  if (mosaic.current && !['completed', 'archived'].includes(mosaic.current.status)) throw new Error('Another Mosaic is already active.');
   if (request.status === 'cancelled') throw new Error('Mosaic request was cancelled by a streamer or moderator.');
   const codes = new Set(Object.keys(MOSAIC_COLORS));
   const target = targetValue.map((code) => String(code || '').toUpperCase()).filter((code) => codes.has(code)) as MosaicColorCode[];
   if (target.length !== MOSAIC_WIDTH * MOSAIC_HEIGHT) throw new Error('Generated Mosaic did not contain exactly 2,000 cells.');
+  if (mosaic.current) mosaic.saves = [structuredClone(mosaic.current), ...mosaic.saves.filter(item => item.id !== mosaic.current!.id)].slice(0, 20);
   const createdAt = nowIso(now);
   const artwork: NebulaMosaicArtwork = {
     id: `mosaic:${normalizeGameHubChannel(channelValue)}:${now}`,
@@ -717,7 +720,7 @@ export function mosaicPublicSnapshot(state: any, channelValue: unknown, now = Da
       updatedAt: artwork.updatedAt,
       paletteId,
       palette: MOSAIC_PALETTES[paletteId],
-      finalImageUrl: artwork.status === 'completed' ? `/api/game-hub/mosaic/final?channel=${encodeURIComponent(channel)}` : '',
+      finalImageUrl: artwork.status === 'completed' ? `/api/game-hub/mosaic/final?channel=${encodeURIComponent(channel)}&artworkId=${encodeURIComponent(artwork.id)}` : '',
     },
     queueLength,
     queue,

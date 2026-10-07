@@ -1,16 +1,11 @@
+import { processNextMosaicRequest } from '@/lib/nebula-mosaic-runner';
 import { NextRequest, NextResponse } from 'next/server';
 import { getGameHubGameStats, normalizeGameHubChannel } from '@/lib/game-hub-state';
 import {
-  claimNextMosaicRequest,
-  failMosaicRequest,
-  installMosaicTemplate,
-  MOSAIC_GENERATION_MAX_ATTEMPTS,
   mosaicPublicSnapshot,
   observeMosaicActiveTime,
 } from '@/lib/nebula-mosaic';
-import { generateMosaicTemplate } from '@/lib/nebula-mosaic-generation';
-import { awardSpmtXp } from '@/lib/spmt-client';
-import { readAppState, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
+import { readAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -45,34 +40,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ heartbeat: true, ...payload });
   }
 
-  const request = await updateAppState((state) => claimNextMosaicRequest(state, channel));
-  if (!request) {
-    const state = await readAppState();
-    return NextResponse.json({ started: false, ...publicPayload(state, channel) });
-  }
-
-  try {
-    const generated = await generateMosaicTemplate(request.theme);
-    const payload = await updateAppState((state) => {
-      installMosaicTemplate(state, channel, request.id, generated.target, generated);
-      return publicPayload(state, channel);
-    });
-    return NextResponse.json({ started: true, theme: request.theme, ...payload });
-  } catch (error: any) {
-    const failed = await updateAppState((state) => failMosaicRequest(state, channel, request.id, error?.message || error));
-    if (request.xpCost > 0 && Number(failed?.attempts || 0) >= MOSAIC_GENERATION_MAX_ATTEMPTS) {
-      await awardSpmtXp({
-        userId: request.playerId.replace(/^twitch:/, ''),
-        eventType: 'nebula.mosaic.refund',
-        idempotencyKey: `${request.id}:refund`,
-        delta: request.xpCost,
-        metadata: { channel, theme: request.theme, reason: 'generation-failed' },
-      }).catch(() => null);
-    }
-    return NextResponse.json({
-      error: error?.message || 'Mosaic generation failed.',
-      retrying: Number(failed?.attempts || 0) < MOSAIC_GENERATION_MAX_ATTEMPTS,
-      refundedXp: Number(failed?.attempts || 0) >= MOSAIC_GENERATION_MAX_ATTEMPTS ? request.xpCost : 0,
-    }, { status: 502 });
-  }
+  const result = await processNextMosaicRequest(channel);
+  return NextResponse.json(result, { status: 'error' in result ? 502 : 200 });
 }

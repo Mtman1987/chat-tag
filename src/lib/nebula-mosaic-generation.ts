@@ -37,48 +37,54 @@ async function requestImage(theme: string) {
   const failures: string[] = [];
 
   for (const provider of providers) {
-    const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-mountainview-bridge': '1',
-        Authorization: `Bearer ${serviceSecret}`,
-        'x-bot-secret': serviceSecret,
-      },
-      body: JSON.stringify({
-        prompt: promptForTheme(theme),
-        scope: 'public',
-        tenantId: STREAMWEAVER_TENANT_ID,
-        // All configured providers accept this square source. Sharp crops the
-        // centered artwork to the final 40-by-50 board after download.
-        resolution: '1024x1024',
-        numImages: 1,
-        providerOverride: provider,
-        providerParams: {
-          quality: 'low',
-          negativePrompt: 'text, letters, numbers, words, UI, controls, grid labels, multiple subjects, collage, photo, gradients, blur, watermark, logo',
+    try {
+      const response = await fetch(`${STREAMWEAVER_URL}/api/ai/image`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(45_000),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-mountainview-bridge': '1',
+          Authorization: `Bearer ${serviceSecret}`,
+          'x-bot-secret': serviceSecret,
         },
-      }),
-    });
-    const raw = await response.json().catch(() => null);
-    const data = normalizeStreamWeaverPayload(raw);
-    const imageUrl = [
-      ...(Array.isArray(data?.persistedImageUrls) ? data.persistedImageUrls : []),
-      ...(Array.isArray(data?.images) ? data.images : []),
-      data?.persistedImageUrl,
-      data?.image,
-      data?.imageResourceUrl,
-    ].map((value) => String(value || '').trim()).find(Boolean);
-    if (response.ok && raw?.ok !== false && imageUrl) {
-      return {
-        imageUrl: new URL(imageUrl, STREAMWEAVER_URL).toString(),
-        provider: String(data?.provider || provider || 'streamweaver'),
-      };
+        body: JSON.stringify({
+          prompt: promptForTheme(theme),
+          scope: 'public',
+          tenantId: STREAMWEAVER_TENANT_ID,
+          // All configured providers accept this square source. Sharp crops the
+          // centered artwork to the final 40-by-50 board after download.
+          resolution: '1024x1024',
+          numImages: 1,
+          providerOverride: provider,
+          providerParams: {
+            quality: 'low',
+            negativePrompt: 'text, letters, numbers, words, UI, controls, grid labels, multiple subjects, collage, photo, gradients, blur, watermark, logo',
+          },
+        }),
+      });
+      const raw = await response.json().catch(() => null);
+      const data = normalizeStreamWeaverPayload(raw);
+      const imageUrl = [
+        ...(Array.isArray(data?.persistedImageUrls) ? data.persistedImageUrls : []),
+        ...(Array.isArray(data?.images) ? data.images : []),
+        data?.persistedImageUrl,
+        data?.image,
+        data?.imageResourceUrl,
+      ].map((value) => String(value || '').trim()).find(Boolean);
+      if (response.ok && raw?.ok !== false && imageUrl) {
+        return {
+          imageUrl: new URL(imageUrl, STREAMWEAVER_URL).toString(),
+          provider: String(data?.provider || provider || 'streamweaver'),
+        };
+      }
+      const reason = raw?.error || data?.error || raw?.message || data?.message
+        || (imageUrl ? `invalid response (${response.status})` : `no artwork (${response.status})`);
+      failures.push(`${provider}: ${String(reason).slice(0, 300)}`);
+      console.warn(`[Nebula Mosaic] ${provider} generation failed; trying the next provider.`, reason);
+    } catch (error) {
+      failures.push(`${provider}: ${error instanceof Error ? error.message : 'Provider unavailable'}`);
+      console.warn(`[Nebula Mosaic] ${provider} request failed; trying the next provider.`);
     }
-    const reason = raw?.error || data?.error || raw?.message || data?.message
-      || (imageUrl ? `invalid response (${response.status})` : `no artwork (${response.status})`);
-    failures.push(`${provider}: ${String(reason).slice(0, 300)}`);
-    console.warn(`[Nebula Mosaic] ${provider} generation failed; trying the next provider.`, reason);
   }
 
   throw new Error(`Mosaic image generation failed across all providers: ${failures.join(' | ')}`);
@@ -127,7 +133,7 @@ async function imageToTarget(bytes: Buffer) {
 
 export async function generateMosaicTemplate(theme: string) {
   const generated = await requestImage(theme);
-  const response = await fetch(generated.imageUrl);
+  const response = await fetch(generated.imageUrl, { signal: AbortSignal.timeout(45_000) });
   if (!response.ok) throw new Error(`Generated Mosaic could not be downloaded (${response.status}).`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!bytes.length || bytes.length > 20 * 1024 * 1024) throw new Error('Generated Mosaic image was empty or too large.');

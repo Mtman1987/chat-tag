@@ -7,6 +7,7 @@ const PREFIX = 'nebula-game:';
 const keyFor = (channel: string, gameId: string) => `${PREFIX}${channel}:${gameId}`;
 type Sealed = { iv: string; tag: string; ciphertext: string };
 type Connection = { channel: string; gameId: string; revision: string; sealed: Sealed; fingerprint: string; discordChannelId: string; webhookName: string;
+  lastCompletedArtworkId?: string;
   messageId?: string; lastHash?: string; lastSyncedAt?: string; nextAttempt: number; leaseUntil: number;
   status: 'ready' | 'sending' | 'connected' | 'retrying' | 'paused'; error?: string };
 export class GameDiscordError extends Error { constructor(message: string, public status = 400) { super(message); } }
@@ -84,9 +85,11 @@ async function syncOne(key: string) {
   if (!record) return;
   const patch: Partial<Connection> = { leaseUntil: 0, nextAttempt: Date.now() + 30_000 };
   try {
-    const card = buildGameDiscordCard(await readAppState(), record.channel, record.gameId);
+    const cardState = await readAppState();
+    const completed = record.gameId === 'pixelbattle' ? cardState.gameSettings?.default?.gameHub?.channels?.[record.channel]?.mosaic?.current : null;
+    const card = buildGameDiscordCard(cardState, record.channel, record.gameId);
     const hash = createHash('sha256').update(JSON.stringify(card)).digest('hex');
-    if (record.messageId && hash === record.lastHash) { patch.status = 'connected'; patch.error = ''; }
+    if (record.messageId && hash === record.lastHash) { patch.status = 'connected'; patch.error = ''; if (completed?.status === 'completed') patch.lastCompletedArtworkId = completed.id; }
     else {
       const url = unseal(record.sealed);
       const { username, ...editCard } = card;
@@ -95,6 +98,7 @@ async function syncOne(key: string) {
       });
       const body = await response.json().catch(() => null);
       if (response.ok && /^\d+$/.test(String(body?.id || ''))) {
+        if (completed?.status === 'completed') patch.lastCompletedArtworkId = completed.id;
         Object.assign(patch, { status: 'connected', messageId: String(body.id), lastHash: hash, lastSyncedAt: new Date().toISOString(), error: '' });
       } else if (response.status === 429) {
         Object.assign(patch, { status: 'retrying', nextAttempt: Date.now() + Math.max(30_000, Math.min(3600_000, Number(body?.retry_after || 30) * 1000)), error: 'Discord asked us to wait. Updates will resume automatically.' });

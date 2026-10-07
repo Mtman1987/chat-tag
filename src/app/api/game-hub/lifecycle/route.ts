@@ -1,3 +1,4 @@
+import { advanceQueuedMosaics } from '@/lib/nebula-mosaic-runner';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { isBotRequest } from '@/lib/auth';
 import { advanceWordChainRound, getGameHubStore, resolveChannelGameIds, stopInactiveChannelGames } from '@/lib/game-hub-state';
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     }).slice(0, 50);
     return { changed: before !== JSON.stringify(store), result: { stopped, wordChainResults: body.ackOnly ? [] : wordChainResults } };
   });
-  if (!body.ackOnly) after(() => syncGameDiscordConnections());
+  if (!body.ackOnly) after(async () => { await syncGameDiscordConnections(); await advanceQueuedMosaics(); });
   return NextResponse.json(result);
 }
 

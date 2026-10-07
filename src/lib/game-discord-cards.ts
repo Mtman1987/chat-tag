@@ -21,7 +21,7 @@ export function buildGameDiscordCard(stateValue: any, channel: string, gameId: s
     if (art) {
       fields.push({ name: `${clean(art.theme, 180)} · Board ${art.activeBoard}`, value: `${art.progress}/${art.total} correct (${Math.round(art.progress / Math.max(1, art.total) * 100)}%) · ${clean(art.status)}` });
       const version = createHash('sha256').update(JSON.stringify([art.id, art.activeBoard, art.target, art.painted, art.paletteId])).digest('hex').slice(0, 16);
-      image = { url: `${origin}/api/overlay/game-hub/mosaic-card?channel=${encodeURIComponent(channel)}&v=${version}` };
+      image = { url: `${origin}/api/overlay/game-hub/mosaic-card?channel=${encodeURIComponent(channel)}&artworkId=${encodeURIComponent(art.id)}&v=${version}` };
     }
   } else if (gameId === 'wordchain' && running) {
     const round = wordChainPublicSnapshot(state, channel);

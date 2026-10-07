@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MosaicProjectLibrary } from '@/components/mosaic-project-library';
 import { useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
@@ -79,7 +80,7 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
   const params = useSearchParams();
   const { user } = useSession();
   const channel = channelOf(params.get('channel') || user?.twitchUsername || '');
-  const [tab,setTab] = useState<Tab>(initialTab || (game.id === 'quackverse' && params.get('tab')?.toLowerCase() === 'quackdex' ? 'Quackdex' : game.id === 'pixelbattle' ? 'Board' : 'Live'));
+  const [tab,setTab] = useState<Tab>(initialTab || (game.id === 'quackverse' && params.get('tab')?.toLowerCase() === 'quackdex' ? 'Quackdex' : game.id === 'pixelbattle' ? (params.get('tab')?.toLowerCase() === 'saves' ? 'Saves' : 'Board') : 'Live'));
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     if (!expanded) return;
@@ -196,10 +197,7 @@ export function NebulaController({ game, initialTab }: { game: GameHubGame; init
           {mosaic.queue?.length ? mosaic.queue.map(item=><div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[.025] p-3"><div className="min-w-0"><strong className="block truncate">#{item.position} · {item.theme}</strong><span className="text-xs text-slate-500">{item.displayName} · {item.status}</span></div><button onClick={()=>void run(`spmt mosaic remove ${item.position}`)} className="rounded-full border border-rose-300/20 bg-rose-300/10 px-3 py-1.5 text-xs font-bold text-rose-100">Remove</button></div>) : <p className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-slate-500">Queue is empty.</p>}
           <button onClick={()=>void run('spmt mosaic clearqueue')} className="rounded-full border border-rose-300/20 bg-rose-300/10 px-4 py-2 text-xs font-bold text-rose-100">Clear queue</button>
         </div> : null}
-        {tab==='Saves' && isMosaic ? <div className="space-y-4"><div><h2 className="text-2xl font-black">Saved mosaics</h2><p className="text-sm text-slate-400">Completed and suspended work is durable. During testing, project features are unlocked.</p></div>
-          <div className="grid gap-3 md:grid-cols-2">{mosaic.saves?.length ? mosaic.saves.map(save=><article key={save.id} className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><strong>{save.theme}</strong><div className="mt-1 text-xs text-slate-500">{save.status} · {save.paletteId} · {save.requestedBy}</div></article>) : <p className="text-sm text-slate-500">No saved mosaics yet.</p>}</div>
-          <button onClick={()=>void run('spmt mosaic replay')} className="rounded-full bg-violet-300 px-4 py-2 text-xs font-black text-slate-950">Replay current/saved Mosaic</button>
-        </div> : null}
+        {tab==='Saves' && isMosaic ? <MosaicProjectLibrary channel={channel}/> : null}
         {tab==='Palette' && isMosaic ? <div className="space-y-5"><div><h2 className="text-2xl font-black">Palette remix</h2><p className="text-sm text-slate-400">Change the presentation without changing the puzzle. Test period: free/unlocked.</p></div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{['classic','neon','pastel','mono','ocean'].map(name=><button key={name} onClick={()=>void run(`spmt mosaic palette ${name}`)} className={`rounded-2xl border p-4 text-left ${mosaic.artwork?.paletteId===name?'border-violet-300/60 bg-violet-300/10':'border-white/10 bg-white/[.025]'}`}><strong className="capitalize">{name}</strong><span className="mt-1 block text-xs text-slate-500">Apply to live + reveal</span></button>)}</div>
         </div> : null}
