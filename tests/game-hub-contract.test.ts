@@ -811,7 +811,8 @@ test('Nebula Controllers replace instruction-only popouts with private real-comm
   assert.match(controller, /Player controls/);
   assert.match(controller, /Streamer controls/);
   assert.match(controller, /Theme queue/);
-  assert.match(controller, /Saved mosaics/);
+  assert.match(controller, /MosaicProjectLibrary channel=\{channel\}/);
+  assert.match(read('src/components/mosaic-project-library.tsx'), /Saved mosaics/);
   assert.match(controller, /Palette remix/);
   assert.match(controller, /Private #\{channel\} test chat/);
   assert.match(controller, /Open this stream overlay/);

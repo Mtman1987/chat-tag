@@ -8,12 +8,13 @@ export async function GET(req: NextRequest) {
   const state = await readAppState();
   const params = req.nextUrl.searchParams;
   const shared = sharedMosaicProjects(state);
-  const shareId = params.get('shared');
+  const publicRead = params.get('scope') === 'gallery' || params.has('shared');
+  const access = publicRead ? { ok: false as const, status: 401, error: 'Sign in to manage your paintings.' } : controllerAccess(req, { channel: params.get('channel'), gameId: 'pixelbattle' });
+  const shareId = params.get('shared') || params.get('selected');
   const project = shareId ? shared.find(item => item.id === shareId) : null;
   if (shareId && !project) return NextResponse.json({ error: 'This painting is no longer shared.' }, { status: 404 });
   const format = params.get('format');
   if (format) {
-    const access = controllerAccess(req, { channel: params.get('channel'), gameId: 'pixelbattle' });
     if (!project && !access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
     const art = !project && access.ok ? findMosaicArtwork(state, access.channel, params.get('artworkId')) : null;
     const template = project?.template || (art ? mosaicTemplate(art) : null);
@@ -24,7 +25,6 @@ export async function GET(req: NextRequest) {
     const image = await sharp(Buffer.from(mosaicTemplateSvg(template))).png().toBuffer();
     return new NextResponse(new Uint8Array(image), { headers: { ...headers, 'Content-Type': 'image/png' } });
   }
-  const access = controllerAccess(req, { channel: params.get('channel'), gameId: 'pixelbattle' });
   const mosaic = access.ok ? state.gameSettings?.default?.gameHub?.channels?.[access.channel]?.mosaic : null;
   const own = [mosaic?.current, ...(mosaic?.saves || [])].filter((art, index, items) => art && items.findIndex(item => item?.id === art.id) === index)
     .map(art => ({ id: art.id, theme: art.theme, status: art.status, sharedId: shared.find(item => item.channel === (access.ok ? access.channel : null) && item.artworkId === art.id)?.id || '' }));

@@ -46,3 +46,10 @@ test('download returns a real PNG attachment at full painting resolution', async
  assert.equal(r.status,200);assert.equal(r.headers['Content-Type'],'image/png');assert.match(r.headers['Content-Disposition'],/attachment/);
  const metadata=await require('sharp')(Buffer.from(r.body)).metadata();assert.equal(metadata.width,800);assert.equal(metadata.height,1000);
 });
+
+test('public gallery ignores forged identity headers and never includes private projects', async () => {
+ const h=harness();
+ const r=await h.route.GET(h.req({},'scope=gallery&channel=tenant1'));
+ assert.equal(r.body.own.length,0);assert.equal(r.body.canManage,false);
+ assert.equal((await h.route.GET(h.req({},'scope=gallery&channel=tenant1&format=json'))).status,401);
+});

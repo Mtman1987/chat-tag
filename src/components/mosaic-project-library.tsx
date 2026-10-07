@@ -12,13 +12,20 @@ export function MosaicProjectLibrary({ channel }: { channel: string }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [replace, setReplace] = useState(false);
-  async function refresh() {
-    const response = await fetch(`${api}?channel=${encodeURIComponent(channel)}${selected ? `&shared=${encodeURIComponent(selected)}` : ''}`, { cache: 'no-store' });
+  async function readLibrary() {
+    const selection = selected ? `&selected=${encodeURIComponent(selected)}` : '';
+    let response = await fetch(`${api}?channel=${encodeURIComponent(channel)}${selection}`, { cache: 'no-store' });
+    if (response.status === 401) response = await fetch(`${api}?scope=gallery${selected ? `&shared=${encodeURIComponent(selected)}` : ''}`, { cache: 'no-store' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not load paintings.');
-    setLibrary(data);
+    return data as Library;
   }
-  useEffect(() => { let mounted = true; void refresh().catch(error => { if (mounted) setMessage(error.message); }); return () => { mounted = false; }; }, [channel, selected]);
+  async function refresh() { setLibrary(await readLibrary()); }
+  useEffect(() => {
+    let mounted = true;
+    void readLibrary().then(data => { if (mounted) setLibrary(data); }).catch(error => { if (mounted) setMessage(error.message); });
+    return () => { mounted = false; };
+  }, [channel, selected]);
   async function act(body: Record<string, unknown>) {
     setBusy(true); setMessage('');
     try {

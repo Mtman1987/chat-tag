@@ -164,3 +164,10 @@ test('front-seat awards remain protected from anonymous and wrong-secret callers
     assert.equal(response.status, 401);
   }
 });
+
+test('Mosaic gallery is public, while private downloads and all project writes require authentication', async () => {
+  assert.equal((await middleware(request('/api/game-hub/mosaic/projects?scope=gallery'))).status, 200);
+  assert.equal((await middleware(request('/api/game-hub/mosaic/projects?shared=example&format=png'))).status, 200);
+  assert.equal((await middleware(request('/api/game-hub/mosaic/projects?channel=tenant&format=json', { headers: { 'x-spmt-user-id': 'forged', 'x-spmt-display-name': 'tenant', 'x-spmt-is-admin': '1' } }))).status, 401);
+  assert.equal((await middleware(request('/api/game-hub/mosaic/projects', { method: 'POST' }))).status, 401);
+});
