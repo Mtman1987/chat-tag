@@ -149,3 +149,18 @@ test('legacy sign-in cannot supply forged SPMT owner or admin headers', async ()
   assert.equal(response.headers.get('x-middleware-request-x-spmt-is-admin'), null);
   assert.ok(!response.headers.get('x-middleware-override-headers')?.includes('x-spmt-is-admin'));
 });
+
+test('StreamWeaver can reach the front-seat bonus with its scoped service secret', async () => {
+  const response = await middleware(request('/api/game-hub/checkin-bonus', {
+    method: 'POST', headers: { 'x-bot-secret': 'streamweaver-game-hub-test-secret' },
+  }));
+  assert.equal(response.headers.get('x-middleware-next'), '1');
+});
+test('front-seat awards remain protected from anonymous and wrong-secret callers', async () => {
+  for (const secret of ['', 'incorrect-service-secret']) {
+    const response = await middleware(request('/api/game-hub/checkin-bonus', {
+      method: 'POST', headers: { 'x-bot-secret': secret },
+    }));
+    assert.equal(response.status, 401);
+  }
+});

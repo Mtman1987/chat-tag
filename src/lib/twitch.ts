@@ -29,6 +29,7 @@ async function getAppAccessToken(): Promise<string> {
   try {
     const res = await fetch(TWITCH_TOKEN_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(4000),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: 'client_credentials' }),
     });
@@ -55,6 +56,7 @@ export async function lookupTwitchUser(login: string): Promise<TwitchUser | null
 
   try {
     const res = await fetch(`${TWITCH_USERS_URL}?login=${encodeURIComponent(login.toLowerCase())}`, {
+      signal: AbortSignal.timeout(4000),
       headers: { 'Client-ID': clientId, Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -77,7 +79,8 @@ export async function lookupTwitchUsers(logins: string[]): Promise<TwitchUser[]>
     const query = batch.map(l => `login=${encodeURIComponent(l.toLowerCase())}`).join('&');
     try {
       const res = await fetch(`${TWITCH_USERS_URL}?${query}`, {
-        headers: { 'Client-ID': clientId, Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(4000),
+      headers: { 'Client-ID': clientId, Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();

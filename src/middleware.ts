@@ -51,7 +51,7 @@ function hasValidBotSecret(request: NextRequest): boolean {
 
 function hasStreamWeaverGameHubAccess(request: NextRequest): boolean {
   const path = request.nextUrl.pathname;
-  if (path !== '/api/game-hub/command' && path !== '/api/game-hub/bot-overlays') return false;
+  if (path !== '/api/game-hub/command' && path !== '/api/game-hub/bot-overlays' && path !== '/api/game-hub/checkin-bonus') return false;
   const supplied = String(request.headers.get('x-bot-secret') || '').trim();
   if (!supplied) return false;
   try {

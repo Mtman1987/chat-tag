@@ -334,7 +334,11 @@ async function apiCall(endpoint, options = {}) {
     };
     const defaultTimeoutMs = Number.parseInt(process.env.CHAT_TAG_API_TIMEOUT_MS || '10000', 10);
     const slowTimeoutMs = Number.parseInt(process.env.CHAT_TAG_SLOW_API_TIMEOUT_MS || '45000', 10);
-    const requestedTimeoutMs = endpoint === '/api/discord/live-members' ? slowTimeoutMs : defaultTimeoutMs;
+    let checkinCommand = false;
+    if (endpoint === '/api/game-hub/command' && typeof options.body === 'string') {
+      try { checkinCommand = /^!?@?spmt\s+checkin(?:\s|$)/i.test(String(JSON.parse(options.body).message || '')); } catch {}
+    }
+    const requestedTimeoutMs = checkinCommand ? 100000 : endpoint === '/api/discord/live-members' ? slowTimeoutMs : defaultTimeoutMs;
     const fallbackTimeoutMs = endpoint === '/api/discord/live-members' ? 45000 : 10000;
     const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0 ? requestedTimeoutMs : fallbackTimeoutMs;
     const signal = options.signal || AbortSignal.timeout(timeoutMs);
