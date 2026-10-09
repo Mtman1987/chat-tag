@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { GAME_HUB_CATALOG, type GameHubGame } from '@/lib/game-hub-registry';
 import { GameHubSurface } from '@/components/game-hub-surface';
 import type { GameHubChatEvent } from '@/components/game-hub-prototype-surface';
@@ -42,6 +42,8 @@ function isSpmtCommand(message: string) {
 export default function GameHubOverlayPage() {
   const params = useParams<{ profileId: string }>();
   const profileId = String(params?.profileId || '');
+  const searchParams = useSearchParams();
+  const cleanDisplay = searchParams.get('chrome') === '0';
   const [profile, setProfile] = useState<PublicOverlayProfile | null>(null);
   const [activeGameIds, setActiveGameIds] = useState<string[]>([]);
   const [suspendedGameIds, setSuspendedGameIds] = useState<string[]>([]);
@@ -231,7 +233,7 @@ export default function GameHubOverlayPage() {
     ? nebulaRotationIndexAt(rotationNow, games.length)
     : 0;
   const renderedGames = profile.layout === 'focus' ? games.slice(0, 1) : games;
-  const systemProfile = profile.id.startsWith('system-');
+  const systemProfile = profile.id.startsWith('system-') || cleanDisplay;
 
   return (
     <main className={`min-h-screen w-screen overflow-hidden ${profile.transparent ? 'bg-transparent' : 'bg-slate-950'}`}>
@@ -246,7 +248,7 @@ export default function GameHubOverlayPage() {
                 events={events}
                 channel={profile.ownerLogin || 'chat'}
                 ownerUserId={profile.ownerUserId}
-                chrome={!profile.id.startsWith('system-')}
+                chrome={!systemProfile}
               />
             </div>
           );
