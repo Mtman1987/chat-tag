@@ -9,6 +9,7 @@ const { decorateCrownsDeep, getWinners } = require('./src/lib/chat-tag-crowns');
 // Load environment variables
 const env = process.env;
 
+const { fetchBotApi } = require('./scripts/lib/api-read-retry.cjs');
 const API_BASE = process.env.API_BASE || 'https://chat-tag-new.fly.dev';
 function getBotSecret() {
   if (process.env.BOT_SECRET_KEY) return process.env.BOT_SECRET_KEY;
@@ -342,7 +343,7 @@ async function apiCall(endpoint, options = {}) {
     const fallbackTimeoutMs = endpoint === '/api/discord/live-members' ? 45000 : 10000;
     const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0 ? requestedTimeoutMs : fallbackTimeoutMs;
     const signal = options.signal || AbortSignal.timeout(timeoutMs);
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, signal });
+    const res = await fetchBotApi(`${API_BASE}${endpoint}`, { ...options, headers, signal });
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
     updateWinnersCache(data);
