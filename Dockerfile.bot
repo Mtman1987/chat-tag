@@ -13,6 +13,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY bot.js ./
 COPY scripts/lib/twitch-transport.cjs ./scripts/lib/twitch-transport.cjs
+COPY scripts/lib/api-read-retry.cjs ./scripts/lib/api-read-retry.cjs
 COPY scripts/lib/word-chain-lifecycle.cjs ./scripts/lib/word-chain-lifecycle.cjs
 COPY scripts/patch-game-hub-bot.mjs ./scripts/patch-game-hub-bot.mjs
 COPY scripts/patch-live-chat-pressure.mjs ./scripts/patch-live-chat-pressure.mjs
@@ -23,6 +24,6 @@ COPY src/lib/chat-tag-crowns.js ./src/lib/chat-tag-crowns.js
 RUN node scripts/patch-game-hub-bot.mjs
 RUN node scripts/patch-live-chat-pressure.mjs
 RUN node scripts/patch-quackverse-pack-bot.mjs
-RUN node -e "require('./src/lib/chat-tag-crowns')"
+RUN node -e "require('./src/lib/chat-tag-crowns'); require('./scripts/lib/api-read-retry.cjs')"
 CMD ["node", "bot.js"]
 
