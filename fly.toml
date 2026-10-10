@@ -33,5 +33,5 @@ primary_region = 'ord'
 [[vm]]
   memory = '2gb'
   cpu_kind = 'shared'
-  cpus = 2
+  cpus = 4
   memory_mb = 2048
