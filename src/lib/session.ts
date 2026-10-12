@@ -1,3 +1,4 @@
+import { isAccountRevoked } from './account-revocation';
 import crypto from 'crypto';
 
 function getSessionSecret(): string {
@@ -18,6 +19,7 @@ export interface SessionUser {
 }
 
 export function createSessionToken(user: SessionUser): string {
+  if (isAccountRevoked(user as unknown as Record<string, unknown>)) throw new Error('Account access revoked');
   const SECRET = getSessionSecret();
   const payload = JSON.stringify({ ...user, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 }); // 30 days
   const b64 = Buffer.from(payload).toString('base64url');
@@ -34,6 +36,7 @@ export function verifySessionToken(token: string): SessionUser | null {
     if (sig !== expected) return null;
     const payload = JSON.parse(Buffer.from(b64, 'base64url').toString());
     if (payload.exp && payload.exp < Date.now()) return null;
+    if (isAccountRevoked(payload)) return null;
     return { id: payload.id, twitchUsername: payload.twitchUsername, avatarUrl: payload.avatarUrl };
   } catch {
     return null;

@@ -1,3 +1,4 @@
+import { isAccountRevoked } from './account-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionToken, type SessionUser } from '@/lib/session';
 import { getBotSecret, getStreamweaverSecret } from '@/lib/runtime-secrets';
@@ -10,6 +11,7 @@ export function getSessionUserFromRequest(req: NextRequest): SessionUser | null 
       || req.headers.get('x-spmt-username')
       || 'spmt-user',
     );
+    if (isAccountRevoked({ id: spmtUserId, username: displayName })) return null;
     return {
       id: spmtUserId,
       twitchUsername: displayName,

@@ -1,3 +1,4 @@
+import { isAccountRevoked } from '@/lib/account-revocation';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getBotSecret, getStreamweaverSecret } from '@/lib/runtime-secrets';
@@ -275,6 +276,11 @@ export async function middleware(request: NextRequest) {
     }
   }
   const legacySession = await verifyLegacySession(request);
+  if (isAccountRevoked(identity) || isAccountRevoked(legacySession)) {
+    const response = NextResponse.json({ error: 'Account access revoked' }, { status: 403 });
+    for (const name of ['session', SPMT_COOKIE, SPMT_REFRESH_COOKIE]) response.cookies.delete(name);
+    return response;
+  }
   if (!identity && !legacySession) {
     if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Sign in with SPMT or Twitch to continue' }, { status: 401 });
     return NextResponse.redirect(new URL('/', request.url));
@@ -307,6 +313,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  runtime: 'nodejs',
   matcher: ['/((?!_next/static|_next/image).*)'],
 };
 
