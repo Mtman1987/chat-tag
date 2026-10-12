@@ -496,7 +496,7 @@ export async function POST(req: NextRequest) {
 
   if (parseMosaicRevealCommand(body.message)) {
     if (!activeForDirectRouting.includes('pixelbattle')) return NextResponse.json({ handled: true, reply: 'Nebula Mosaic is not ACTIVE in this channel.' });
-    if (body.source !== 'nebula-controller' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
+    if (body.source !== 'nebula-controller' && body.source !== 'discord-game-card' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
       return NextResponse.json({ handled: true, reply: 'Mosaic is waiting in the activity rotation. Try reveal when it is displayed; no points were charged.' });
     }
     try {
@@ -569,7 +569,7 @@ export async function POST(req: NextRequest) {
     if (!activeForDirectRouting.includes('pixelbattle')) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
     }
-    if (body.source !== 'nebula-controller' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
+    if (body.source !== 'nebula-controller' && body.source !== 'discord-game-card' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is waiting in the activity rotation; commands currently belong to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'}.`) });
     }
     try {
@@ -595,7 +595,7 @@ export async function POST(req: NextRequest) {
     if (!activeForDirectRouting.includes('pixelbattle')) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
     }
-    if (body.source !== 'nebula-controller' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
+    if (body.source !== 'nebula-controller' && body.source !== 'discord-game-card' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is waiting in the activity rotation; brushes can be changed when it returns.`) });
     }
     try {
@@ -617,7 +617,7 @@ export async function POST(req: NextRequest) {
     if (!activeForDirectRouting.includes('pixelbattle')) {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} Nebula Mosaic is not ACTIVE in #${channel}.`) });
     }
-    if (body.source !== 'nebula-controller' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
+    if (body.source !== 'nebula-controller' && body.source !== 'discord-game-card' && activeActivityGame && activeActivityGame !== 'pixelbattle') {
       return NextResponse.json({ handled: true, reply: gameReplyWithPopout(req, channel, 'pixelbattle', `@${displayName} that coordinate belongs to ${getGameHubGame(activeActivityGame)?.name || 'the displayed game'} right now. Nebula Mosaic will return in the rotation.`) });
     }
     try {
