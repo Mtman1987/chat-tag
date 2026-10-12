@@ -13,6 +13,7 @@ import { parseDiscordChatPayload } from '@/lib/discord-chat-payload';
 import { finalizePrivateDmDiscordMessage } from '@/lib/private-dm-finalizer';
 import { isBotRequest } from '@/lib/auth';
 import { resolveDiscordMosaicTarget } from '@/lib/discord-mosaic-command';
+import { sendMosaicDiscordReply } from '@/lib/mosaic-discord-replies';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ const SUPPORT_TICKET_COMMANDS = new Set(['support', 'ticket', 'doctor']);
 
 type DiscordReplyContext = {
   userName: string;
+  userId: string;
   command: string;
   userAvatarUrl: string;
   chatTagLogoUrl: string;
@@ -96,6 +98,10 @@ function replyEmbedIdentity(context: DiscordReplyContext) {
 }
 
 async function sendDiscordReply(channelId: string, content: string, context: DiscordReplyContext) {
+  if (context.gameTitle === 'Nebula Arcade · Mosaic') {
+    return sendMosaicDiscordReply({ channelId, userId: context.userId, userName: context.userName,
+      avatarUrl: context.userAvatarUrl, command: context.command, content, botToken: DISCORD_BOT_TOKEN });
+  }
   const result = await sendDiscordMessage({
     channelId,
     content: '',
@@ -303,6 +309,7 @@ export async function POST(req: NextRequest) {
     const userName = rawUserName || 'Unknown';
     const replyContext: DiscordReplyContext = {
       userName,
+      userId: String(discordUserId || userName),
       command: String(message || rawMessage),
       userAvatarUrl: absolutePublicUrl(req, data.userAvatar || data.avatarUrl || ''),
       chatTagLogoUrl: absolutePublicUrl(req, '/brand/chat-tag-icon-192.png'),
