@@ -11,6 +11,8 @@ import { normalizeChatHandle, findTargetPlayer, findPlayerForDiscordUser, replac
 import { getBotSecret } from '@/lib/runtime-secrets';
 import { parseDiscordChatPayload } from '@/lib/discord-chat-payload';
 import { finalizePrivateDmDiscordMessage } from '@/lib/private-dm-finalizer';
+import { isBotRequest } from '@/lib/auth';
+import { resolveDiscordMosaicTarget } from '@/lib/discord-mosaic-command';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +28,7 @@ type DiscordReplyContext = {
   userAvatarUrl: string;
   chatTagLogoUrl: string;
   isPrivate: boolean;
+  gameTitle?: string;
 };
 
 function debugEnabled(scope: string) {
@@ -100,7 +103,7 @@ async function sendDiscordReply(channelId: string, content: string, context: Dis
     avatarUrl: context.chatTagLogoUrl,
     embeds: [
       {
-        title: 'Nebula Arcade · Chat Tag',
+        title: context.gameTitle || 'Nebula Arcade · Chat Tag',
         description: content,
         color: 0x00d9ff,
         ...replyEmbedIdentity(context),
@@ -388,6 +391,40 @@ export async function POST(req: NextRequest) {
     const reply = async (text: string) => {
       return sendDiscordReply(channelId, text, replyContext);
     };
+
+    // The webhook card binds Discord input to its tenant's Mosaic, rather than
+    // the chatter's own stream or the legacy Chat Tag command list.
+    const mosaicTarget = resolveDiscordMosaicTarget(state, channelId, commandMessage);
+    if (mosaicTarget) {
+      if (!isBotRequest(req)) {
+        return NextResponse.json({ error: 'Bot service authentication required.' }, { status: 401 });
+      }
+      replyContext.gameTitle = 'Nebula Arcade · Mosaic';
+      if (mosaicTarget.ambiguous) {
+        await reply(`@${userName} Multiple Mosaic games are linked here. Open the controller for the painting you want to play.`);
+        return NextResponse.json({ success: true, handled: true, reason: 'ambiguous-mosaic-channel' });
+      }
+      const gameResponse = await fetch(`${getInternalAppOrigin()}/api/game-hub/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bot-secret': getBotSecret() },
+        body: JSON.stringify({
+          channel: mosaicTarget.channel,
+          message: commandMessage,
+          userId: gameUserId || `discord:${discordUserId}`,
+          username: player?.twitchUsername || `discord_${discordUserId}`,
+          displayName,
+          source: 'discord-game-card',
+          messageId,
+        }),
+      });
+      const gameResult = await gameResponse.json().catch(() => null);
+      if (!gameResponse.ok || !gameResult?.handled) {
+        await reply(`@${userName} Mosaic could not process that command right now. Please try again.`);
+        return NextResponse.json({ success: false, handled: true, reason: 'mosaic-command-failed' });
+      }
+      if (gameResult.reply) await reply(String(gameResult.reply));
+      return NextResponse.json({ success: true, handled: true, game: 'pixelbattle', channel: mosaicTarget.channel });
+    }
 
     // Capture away state before any mutations (needed for away toggle)
     const wasAway = player ? (player.sleepingImmunity || player.offlineImmunity) : false;
