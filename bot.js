@@ -1194,6 +1194,14 @@ console.log = (...args) => {
   client.on('disconnected', (reason) => {
     console.log(`[Bot] Disconnected: ${reason}`);
     isIrcConnected = false;
+
+    // Twitch rejects revoked or mismatched credentials with a permanent IRC
+    // authentication failure. tmi.js otherwise keeps reconnecting forever,
+    // generating repeated errors while the bot cannot possibly recover.
+    if (/login authentication failed|authentication failed|invalid oauth|bad auth/i.test(String(reason || ''))) {
+      if (client.opts?.connection) client.opts.connection.reconnect = false;
+      console.error('[Bot] Twitch rejected the bot credentials; automatic IRC reconnect disabled until the credentials are re-authorized.');
+    }
   });
 
   client.on('reconnect', () => {
