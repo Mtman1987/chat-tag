@@ -3352,7 +3352,7 @@ console.log = (...args) => {
       res.end();
     }
   });
-  httpServer.listen(8091, () => console.log('[HTTP] Broadcast server on :8091'));
+  httpServer.listen(8091, process.env.CHAT_TAG_BIND_HOST || '0.0.0.0', () => console.log(`[HTTP] Broadcast server on ${process.env.CHAT_TAG_BIND_HOST || '0.0.0.0'}:8091`));
 
   client.connect().catch(async err => {
     console.error('[Bot] Connection error:', err);
@@ -3371,4 +3371,3 @@ console.log = (...args) => {
     }
   });
 })();
-
