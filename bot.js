@@ -1082,6 +1082,7 @@ const pendingGameChoices = new Map();
 const BOT_TEST_CHANNEL = (env.BOT_TEST_CHANNEL || '').toLowerCase().replace(/^#/, '');
 const ALWAYS_JOINED_CHANNELS = ['mtman1987']; // Channels the bot should keep joined even while offline
 let isIrcConnected = false;
+let ircAuthRejected = false;
 let lastPeriodicSuccessAt = Date.now();
 const logBuffer = [];
 const MAX_LOG_LINES = 100;
@@ -1194,6 +1195,15 @@ console.log = (...args) => {
   client.on('disconnected', (reason) => {
     console.log(`[Bot] Disconnected: ${reason}`);
     isIrcConnected = false;
+
+    // Twitch rejects revoked or mismatched credentials with a permanent IRC
+    // authentication failure. tmi.js otherwise keeps reconnecting forever,
+    // generating repeated errors while the bot cannot possibly recover.
+    if (/login authentication failed|authentication failed|invalid oauth|bad auth/i.test(String(reason || ''))) {
+      ircAuthRejected = true;
+      if (client.opts?.connection) client.opts.connection.reconnect = false;
+      console.error('[Bot] Twitch rejected the bot credentials; automatic IRC reconnect disabled until the credentials are re-authorized.');
+    }
   });
 
   client.on('reconnect', () => {
@@ -1577,7 +1587,7 @@ console.log = (...args) => {
   setInterval(async () => {
     try {
       const readyState = client.readyState ? client.readyState() : 'unknown';
-      if (!isIrcConnected && readyState === 'CLOSED') {
+      if (!isIrcConnected && readyState === 'CLOSED' && !ircAuthRejected) {
         console.error('[Bot] IRC appears closed; exiting for clean restart.');
         process.exit(1);
       }
