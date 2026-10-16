@@ -711,17 +711,17 @@ export async function POST(req: NextRequest) {
     }
 
     if (cmd === 'score' || cmd === 'rank') {
-      const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+      const tagCounts: Record<string, { tags: number; tagged: number; doublePointTags: number }> = {};
       const scoring = getScoringSettings(state);
       for (const entry of state.tagHistory || []) {
         if ((entry as any).blocked) continue;
         const from = (entry as any).taggerId || (entry as any).from;
         const to = (entry as any).taggedId || (entry as any).to;
-        if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 }; tagCounts[from].tags += 1; }
-        if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 }; tagCounts[to].tagged += 1; }
+        if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 }; tagCounts[from].tags += 1; if ((entry as any).doublePoints || (entry as any).passUsed) tagCounts[from].doublePointTags += 1; }
+        if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0, doublePointTags: 0 }; tagCounts[to].tagged += 1; }
       }
       const allPlayers = Object.values(state.tagPlayers || {}).map((p: any) => {
-        const c = tagCounts[p.id] || { tags: 0, tagged: 0 };
+        const c = tagCounts[p.id] || { tags: 0, tagged: 0, doublePointTags: 0 };
         return { ...p, score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0), tags: c.tags, tagged: c.tagged };
       }).sort((a, b) => b.score - a.score);
 
