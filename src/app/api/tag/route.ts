@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isBotRequest, requireAdminRequest } from '@/lib/auth';
+import { isAdminUsername } from '@/lib/admin';
 import { isTimedImmune, makeId, readAppState, toMillis, updateAppState, updateAppStateIfChanged } from '@/lib/volume-store';
 import { lookupTwitchUser } from '@/lib/twitch';
 import { getScoringSettings, scoreFromTagCounts } from '@/lib/scoring';
@@ -369,6 +370,12 @@ export async function POST(req: NextRequest) {
       'grant-pass',
       'set-it',
     ]);
+
+    // Bot credentials authenticate the service, not the human requesting a pass.
+    // A chat-originated grant must identify a configured ChatTag app admin.
+    if (action === 'grant-pass' && isBotRequest(req) && !isAdminUsername(performedBy)) {
+      return NextResponse.json({ error: 'ChatTag app admin access required to grant passes.' }, { status: 403 });
+    }
 
     if (adminOnlyActions.has(action) && !isBotRequest(req)) {
       const auth = requireAdminRequest(req);

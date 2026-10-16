@@ -3128,10 +3128,6 @@ console.log = (...args) => {
     }
     
     else if (cmd === 'givepass') {
-      if (!isAdminUser) {
-        reply(`@${user} Only mods/admins can give passes.`);
-        return;
-      }
       const target = normalizeChatHandle(args[1]);
       if (!target) {
         reply(`@${user} Usage: "spmt givepass @username"`);
@@ -3148,7 +3144,7 @@ console.log = (...args) => {
       const res = await apiCall('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: targetName, reason: `gifted by ${user}` })
+        body: JSON.stringify({ action: 'grant-pass', userId: targetPlayer.id, twitchUsername: targetName, performedBy: user, reason: `gifted by ${user}` })
       });
       if (res?.granted) {
         reply(`🎟️ @${targetName} got an SPMT Pass from ${user}! 🎁 Use "spmt pass @username" to tag ANYONE for DOUBLE POINTS!`);
@@ -3161,6 +3157,8 @@ console.log = (...args) => {
             doublePoints: true,
           });
         }
+      } else if (res?.error && /admin access required/i.test(res.error)) {
+        reply(`@${user} Only ChatTag app admins can give passes.`);
       } else if (res?.reason === 'max-passes') {
         reply(`@${user} ${targetName} already has the max 3/3 passes!`);
       } else {
