@@ -13,63 +13,63 @@ export async function GET() {
       (state.botSettings?.blacklistedChannels?.channels || []).map((channel: string) => normalize(channel))
     );
 
-    // Discord sync stores guild members in state.users. Prefer that roster so
-    // MountainView's generic “who's live?” command means everyone we know from
-    // Discord, not only channels that happen to be joined by the Chat Tag bot.
-    const discordMembers = Object.values(state.users || {})
-      .map((raw: any) => ({
-        ...raw,
-        twitchUsername: normalize(raw?.twitchUsername || raw?.discordUsername || raw?.username || raw?.id),
-      }))
-      .filter((member: any) =>
-        member.twitchUsername &&
-        !blacklisted.has(member.twitchUsername) &&
-        Boolean(member.discordId || member.discordUsername)
-      );
-
-    const discordByTwitch = new Map<string, any>();
-    for (const member of discordMembers) {
-      if (!discordByTwitch.has(member.twitchUsername)) {
-        discordByTwitch.set(member.twitchUsername, member);
-      }
+    // Chat Tag's registered game-player list is the source of truth for player
+    // live checks. Discord members and joined bot channels are not substitutes:
+    // either can contain people who are not registered players or omit players.
+    const players = Object.values(state.tagPlayers || {}) as any[];
+    const playerByTwitch = new Map<string, any>();
+    for (const player of players) {
+      const username = normalize(player?.twitchUsername || player?.username);
+      if (!username || blacklisted.has(username) || playerByTwitch.has(username)) continue;
+      playerByTwitch.set(username, player);
     }
 
-    // Keep the legacy/manual channel roster as a fallback for installations
-    // that have not run Discord sync yet, without narrowing a synced guild.
-    const channels = discordMembers.length > 0
-      ? [...discordByTwitch.keys()]
-      : Object.keys(state.botChannels || {})
-          .map(normalize)
-          .filter((channel) => channel && !blacklisted.has(channel));
-
+    const channels = [...playerByTwitch.keys()];
     if (channels.length === 0) {
-      return NextResponse.json({ liveMembers: [], allMembers: [], rosterSource: 'discord' });
+      return NextResponse.json({
+        liveMembers: [],
+        allMembers: [],
+        rosterSource: 'tag-players',
+        rosterCount: 0,
+      });
     }
 
-    // Never hold the shared volume write lock while waiting on Twitch. A slow
-    // external request previously stalled unrelated bot writes behind this call.
+    // Discord sync is metadata only; it must never decide who is checked.
+    const discordByTwitch = new Map<string, any>();
+    for (const raw of Object.values(state.users || {}) as any[]) {
+      const username = normalize(raw?.twitchUsername || raw?.discordUsername || raw?.username);
+      if (username && !discordByTwitch.has(username)) discordByTwitch.set(username, raw);
+    }
+
+    // Never hold the shared volume write lock while waiting on Twitch.
     const { liveUsers, allUsers } = await fetchTwitchLiveData(channels);
 
-    const liveMembers = (liveUsers || []).map((user: any, index: number) => {
-      const twitchUsername = normalize(user.login || user.username);
-      const discordMember = discordByTwitch.get(twitchUsername) || {};
-      return {
-        discordId: discordMember.discordId || user.id || `live-${index}`,
-        discordUsername: discordMember.discordUsername || discordMember.username || user.username || user.login,
-        discordDisplayName: discordMember.discordDisplayName || discordMember.displayName || discordMember.discordUsername || user.displayName || user.display_name || user.username,
-        twitchUsername: user.login || user.username,
-        twitchDisplayName: user.displayName || user.display_name || user.username,
-        streamTitle: user.title || '',
-        gameName: user.gameName || user.game_name || '',
-        viewerCount: user.viewerCount ?? user.viewer_count ?? 0,
-        thumbnailUrl: user.thumbnailUrl || user.thumbnail_url || '',
-        streamStartedAt: user.startedAt || user.started_at || null,
-        isSharedChat: Boolean(user.isSharedChat),
-        sharedSessionId: user.sharedSessionId || null,
-        isSharedHost: Boolean(user.isSharedHost),
-        sharedWith: user.sharedWith || [],
-      };
-    });
+    const liveMembers = (liveUsers || [])
+      .filter((user: any) => {
+        const username = normalize(user.login || user.username);
+        return username && playerByTwitch.has(username) && !blacklisted.has(username);
+      })
+      .map((user: any, index: number) => {
+        const twitchUsername = normalize(user.login || user.username);
+        const player = playerByTwitch.get(twitchUsername) || {};
+        const discordMember = discordByTwitch.get(twitchUsername) || {};
+        return {
+          discordId: discordMember.discordId || user.id || `live-${index}`,
+          discordUsername: discordMember.discordUsername || discordMember.username || user.username || user.login,
+          discordDisplayName: discordMember.discordDisplayName || discordMember.displayName || discordMember.discordUsername || player.displayName || user.displayName || user.display_name || user.username,
+          twitchUsername: user.login || user.username,
+          twitchDisplayName: user.displayName || user.display_name || player.displayName || user.username,
+          streamTitle: user.title || '',
+          gameName: user.gameName || user.game_name || '',
+          viewerCount: user.viewerCount ?? user.viewer_count ?? 0,
+          thumbnailUrl: user.thumbnailUrl || user.thumbnail_url || '',
+          streamStartedAt: user.startedAt || user.started_at || null,
+          isSharedChat: Boolean(user.isSharedChat),
+          sharedSessionId: user.sharedSessionId || null,
+          isSharedHost: Boolean(user.isSharedHost),
+          sharedWith: user.sharedWith || [],
+        };
+      });
 
     const liveUsernames = new Set(liveMembers.map((member: any) => normalize(member.twitchUsername)));
     if (liveUsernames.size > 0) {
@@ -89,15 +89,14 @@ export async function GET() {
       });
     }
 
-    const result = {
+    return NextResponse.json({
       liveMembers,
       allMembers: allUsers || [],
-      rosterSource: discordMembers.length > 0 ? 'discord' : 'legacy-bot-channels',
+      rosterSource: 'tag-players',
       rosterCount: channels.length,
-    };
-
-    return NextResponse.json(result);
-  } catch {
+    });
+  } catch (error) {
+    console.error('[Live Members] Failed to check registered player roster:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
