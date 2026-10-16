@@ -225,17 +225,17 @@ export async function POST(req: NextRequest) {
         if (!player) {
           return json({ reply: `@${displayName} You're not in the game! Use "spmt join"` });
         }
-        const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+        const tagCounts: Record<string, { tags: number; tagged: number; doublePointTags: number }> = {};
         const scoring = getScoringSettings(state);
         for (const entry of state.tagHistory) {
           if ((entry as any).blocked) continue;
-          const from = (entry as any).taggerId;
-          const to = (entry as any).taggedId;
-          if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 }; tagCounts[from].tags += 1; }
-          if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 }; tagCounts[to].tagged += 1; }
+          const from = (entry as any).taggerId || (entry as any).from;
+          const to = (entry as any).taggedId || (entry as any).to;
+          if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 }; tagCounts[from].tags += 1; if ((entry as any).doublePoints || (entry as any).passUsed) tagCounts[from].doublePointTags += 1; }
+          if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0, doublePointTags: 0 }; tagCounts[to].tagged += 1; }
         }
         const allPlayers = Object.values(state.tagPlayers).map((p: any) => {
-          const c = tagCounts[p.id] || { tags: 0, tagged: 0 };
+          const c = tagCounts[p.id] || { tags: 0, tagged: 0, doublePointTags: 0 };
           return { ...p, score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0) };
         }).sort((a, b) => b.score - a.score);
         const rank = allPlayers.findIndex((p) => p.id === resolvedUserId) + 1;
@@ -244,18 +244,18 @@ export async function POST(req: NextRequest) {
       }
 
       case 'rank': {
-        const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+        const tagCounts: Record<string, { tags: number; tagged: number; doublePointTags: number }> = {};
         const scoring = getScoringSettings(state);
         for (const entry of state.tagHistory) {
           if ((entry as any).blocked) continue;
-          const from = (entry as any).taggerId;
-          const to = (entry as any).taggedId;
-          if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 }; tagCounts[from].tags += 1; }
-          if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 }; tagCounts[to].tagged += 1; }
+          const from = (entry as any).taggerId || (entry as any).from;
+          const to = (entry as any).taggedId || (entry as any).to;
+          if (from && from !== 'system') { if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 }; tagCounts[from].tags += 1; if ((entry as any).doublePoints || (entry as any).passUsed) tagCounts[from].doublePointTags += 1; }
+          if (to && to !== 'system' && to !== 'free-for-all') { if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0, doublePointTags: 0 }; tagCounts[to].tagged += 1; }
         }
         const sorted = Object.values(state.tagPlayers)
           .filter((p: any) => (p.twitchUsername || '').toLowerCase() !== 'mtman1987')
-          .map((p: any) => { const c = tagCounts[p.id] || { tags: 0, tagged: 0 }; return { ...p, score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0) }; })
+          .map((p: any) => { const c = tagCounts[p.id] || { tags: 0, tagged: 0, doublePointTags: 0 }; return { ...p, score: scoreFromTagCounts(c, scoring) + (p.bingoPoints || 0) }; })
           .sort((a, b) => b.score - a.score);
         const top3 = sorted.slice(0, 3).map((p, i) => `#${i + 1} ${p.twitchUsername}: ${p.score}`).join(' | ');
         return json({ reply: `@${displayName} Top 3: ${top3}` });
@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
           const p = s.tagPlayers[resolvedUserId!];
           if (!p) return;
           if (isAway) {
-            p.sleepingImmunity = false; p.offlineImmunity = false; p.timedImmunityUntil = null; p.noTagbackFrom = null;
+            p.sleepingImmunity = false; p.offlineImmunity = false;
           } else {
             p.sleepingImmunity = true;
           }
