@@ -20,23 +20,27 @@ export async function GET(req: NextRequest) {
   const state = await readAppState();
   const scoring = getScoringSettings(state);
 
-  const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+  const tagCounts: Record<string, { tags: number; tagged: number; doublePointTags: number }> = {};
   for (const entry of state.tagHistory) {
     if (entry.blocked) continue;
     const from = entry.taggerId || entry.from;
+    if (from && from !== 'system' && (entry.doublePoints || entry.passUsed)) {
+      if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
+      tagCounts[from].doublePointTags += 1;
+    }
     const to = entry.taggedId || entry.to;
     if (from && from !== 'system') {
-      if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 };
+      if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
       tagCounts[from].tags += 1;
     }
     if (to && to !== 'system' && to !== 'free-for-all') {
-      if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 };
+      if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0, doublePointTags: 0 };
       tagCounts[to].tagged += 1;
     }
   }
 
   const players = Object.values(state.tagPlayers).map((p: any) => {
-    const c = tagCounts[p.id] || { tags: 0, tagged: 0 };
+    const c = tagCounts[p.id] || { tags: 0, tagged: 0, doublePointTags: 0 };
     return {
       id: p.id,
       twitchUsername: p.twitchUsername || p.username,
@@ -166,7 +170,7 @@ export async function GET(req: NextRequest) {
     try {
       const liveData = await fetchTwitchLiveData(trackedChannels);
       liveCount = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.length : 0;
-      liveUsers = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.slice(0, 12) : [];
+      liveUsers = Array.isArray(liveData?.liveUsers) ? liveData.liveUsers.slice(0, 50) : [];
     } catch {}
   }
 

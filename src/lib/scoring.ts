@@ -25,8 +25,8 @@ export function getScoringSettings(state: any): ScoringSettings {
 }
 
 export function scoreFromTagCounts(
-  counts: { tags?: number; tagged?: number },
+  counts: { tags?: number; tagged?: number; doublePointTags?: number },
   scoring: ScoringSettings
 ): number {
-  return (counts.tags || 0) * scoring.tagSuccessPoints - (counts.tagged || 0) * scoring.tagPenaltyPoints;
+  return ((counts.tags || 0) + (counts.doublePointTags || 0)) * scoring.tagSuccessPoints - (counts.tagged || 0) * scoring.tagPenaltyPoints;
 }

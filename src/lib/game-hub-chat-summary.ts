@@ -93,26 +93,34 @@ function chatTagSnapshot(state: any, hubPlayer: any, username: unknown) {
   const [key, player] = found as [string, any];
   let tags = 0;
   let tagged = 0;
+  let doublePointTags = 0;
   for (const event of state.tagHistory || []) {
     if (event?.blocked) continue;
-    if (tagReferenceMatches(event?.taggerId || event?.from, key, player)) tags += 1;
+    if (tagReferenceMatches(event?.taggerId || event?.from, key, player)) {
+      tags += 1;
+      if (event?.doublePoints || event?.passUsed) doublePointTags += 1;
+    }
     if (tagReferenceMatches(event?.taggedId || event?.to, key, player)) tagged += 1;
   }
-  const score = scoreFromTagCounts({ tags, tagged }, getScoringSettings(state));
+  const score = scoreFromTagCounts({ tags, tagged, doublePointTags }, getScoringSettings(state));
   const passes = number(player?.passCount || (player?.hasPass ? 1 : 0));
   const ranked = Object.entries(state.tagPlayers || {})
     .filter(([, candidate]: [string, any]) => !candidate?.optedOut)
     .map(([candidateKey, candidate]: [string, any]) => {
       let candidateTags = 0;
       let candidateTagged = 0;
+      let candidateDoublePointTags = 0;
       for (const event of state.tagHistory || []) {
         if (event?.blocked) continue;
-        if (tagReferenceMatches(event?.taggerId || event?.from, candidateKey, candidate)) candidateTags += 1;
+        if (tagReferenceMatches(event?.taggerId || event?.from, candidateKey, candidate)) {
+          candidateTags += 1;
+          if (event?.doublePoints || event?.passUsed) candidateDoublePointTags += 1;
+        }
         if (tagReferenceMatches(event?.taggedId || event?.to, candidateKey, candidate)) candidateTagged += 1;
       }
       return {
         key: candidateKey,
-        score: scoreFromTagCounts({ tags: candidateTags, tagged: candidateTagged }, getScoringSettings(state)),
+        score: scoreFromTagCounts({ tags: candidateTags, tagged: candidateTagged, doublePointTags: candidateDoublePointTags }, getScoringSettings(state)),
       };
     })
     .sort((left, right) => right.score - left.score || left.key.localeCompare(right.key));

@@ -78,13 +78,10 @@ export async function GET() {
         for (const player of Object.values(draft.tagPlayers || {}) as any[]) {
           const username = normalize(player.twitchUsername || player.username);
           if (liveUsernames.has(username) && (
-            player.offlineImmunity || player.sleepingImmunity ||
-            player.timedImmunityUntil != null || player.noTagbackFrom != null
+            player.offlineImmunity || player.sleepingImmunity
           )) {
             player.offlineImmunity = false;
             player.sleepingImmunity = false;
-            player.timedImmunityUntil = null;
-            player.noTagbackFrom = null;
             changed = true;
           }
         }
