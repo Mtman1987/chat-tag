@@ -295,6 +295,10 @@ export async function GET() {
 
       const from = entry.taggerId || entry.from;
       const to = entry.taggedId || entry.to;
+      if (from && from !== 'system' && (entry.doublePoints || entry.passUsed)) {
+        if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
+        tagCounts[from].doublePointTags += 1;
+      }
 
       if (from && from !== 'system') {
         if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
