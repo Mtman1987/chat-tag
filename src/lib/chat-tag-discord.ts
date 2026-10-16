@@ -69,23 +69,27 @@ function getWebhookMessageUrl(messageId?: string) {
 
 export function buildGameStatePayload(state: AppState) {
   const scoring = getScoringSettings(state);
-  const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+  const tagCounts: Record<string, { tags: number; tagged: number; doublePointTags: number }> = {};
   for (const entry of state.tagHistory || []) {
     if (entry.blocked) continue;
     const from = entry.taggerId || entry.from;
+    if (from && from !== 'system' && (entry.doublePoints || entry.passUsed)) {
+      if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
+      tagCounts[from].doublePointTags += 1;
+    }
     const to = entry.taggedId || entry.to;
     if (from && from !== 'system') {
-      if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 };
+      if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
       tagCounts[from].tags += 1;
     }
     if (to && to !== 'system' && to !== 'free-for-all') {
-      if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 };
+      if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0, doublePointTags: 0 };
       tagCounts[to].tagged += 1;
     }
   }
 
   const players = Object.values(state.tagPlayers || {}).map((p: any) => {
-    const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
+    const counts = tagCounts[p.id] || { tags: 0, tagged: 0, doublePointTags: 0 };
     const score = scoreFromTagCounts(counts, scoring) + (p.bingoPoints || 0);
     return {
       id: p.id,
