@@ -259,11 +259,19 @@ function migrateManualPlayer(state: any, realUserId: string, username: string): 
 
 function isPlayerImmune(state: any, player: TagPlayer | undefined, taggerId: string): { immune: boolean; reason?: string } {
   if (!player) return { immune: true, reason: 'player-not-found' };
-  if (player.sleepingImmunity) return { immune: true, reason: 'sleeping' };
-  if (player.offlineImmunity) return { immune: true, reason: 'offline' };
-  if (player.noTagbackFrom === taggerId) return { immune: true, reason: 'no-tagback' };
+
+  // No-tag-back is a separate rule from the global 20-minute immunity.
+  // Resolve aliases/legacy IDs so the check still works when a player was
+  // migrated from a manual username key to their Twitch user ID.
+  const tagger = state.tagPlayers?.[taggerId] as TagPlayer | undefined;
+  if (player.noTagbackFrom && samePlayerReference(state, player.noTagbackFrom, tagger)) {
+    return { immune: true, reason: 'no-tagback' };
+  }
+
   if (isTimedImmune(player)) return { immune: true, reason: 'timed' };
   if (recentSuccessfulTagByPlayer(state, player)) return { immune: true, reason: 'timed' };
+  if (player.sleepingImmunity) return { immune: true, reason: 'sleeping' };
+  if (player.offlineImmunity) return { immune: true, reason: 'offline' };
   return { immune: false };
 }
 
