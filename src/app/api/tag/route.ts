@@ -288,7 +288,7 @@ export async function GET() {
       return !player?.optedOut && !blacklisted.has(username);
     });
 
-    const tagCounts: Record<string, { tags: number; tagged: number }> = {};
+    const tagCounts: Record<string, { tags: number; tagged: number; doublePointTags: number }> = {};
     const scoring = getScoringSettings(state);
     for (const entry of state.tagHistory) {
       if (entry.blocked) continue;
@@ -297,17 +297,17 @@ export async function GET() {
       const to = entry.taggedId || entry.to;
 
       if (from && from !== 'system') {
-        if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0 };
+        if (!tagCounts[from]) tagCounts[from] = { tags: 0, tagged: 0, doublePointTags: 0 };
         tagCounts[from].tags += 1;
       }
       if (to && to !== 'system' && to !== 'free-for-all') {
-        if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0 };
+        if (!tagCounts[to]) tagCounts[to] = { tags: 0, tagged: 0, doublePointTags: 0 };
         tagCounts[to].tagged += 1;
       }
     }
 
     players = players.map((p: any) => {
-      const counts = tagCounts[p.id] || { tags: 0, tagged: 0 };
+      const counts = tagCounts[p.id] || { tags: 0, tagged: 0, doublePointTags: 0 };
       const score = scoreFromTagCounts(counts, scoring) + (p.bingoPoints || 0);
       return { ...p, score, tags: counts.tags, tagged: counts.tagged, bingoPoints: p.bingoPoints || 0, lastChatAt: p.lastChatAt || 0, lastSeenChannel: p.lastSeenChannel || null, hasPass: (p.passCount || (p.hasPass ? 1 : 0)) > 0, passCount: p.passCount || (p.hasPass ? 1 : 0), passGrantedAt: p.passGrantedAt || 0, overlayMode: Boolean(p.overlayMode), wins: p.wins || 0 };
     });
