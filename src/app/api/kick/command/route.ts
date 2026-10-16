@@ -8,12 +8,23 @@ import { getStreamweaverSecret } from '@/lib/runtime-secrets';
 
 export const dynamic = 'force-dynamic';
 
-function isPlayerImmune(player: any, taggerId: string): { immune: boolean; reason?: string } {
+function isPlayerImmune(player: any, taggerId: string, tagger?: any): { immune: boolean; reason?: string } {
   if (!player) return { immune: true, reason: 'player-not-found' };
+
+  // Enforce no-tag-back before the existing global cooldown and away checks.
+  const blockedTagger = String(player.noTagbackFrom || '').replace(/^@+/, '').toLowerCase();
+  const attemptedTagger = [taggerId, tagger?.id, tagger?.twitchUsername, tagger?.username, tagger?.displayName]
+    .map((value) => String(value || '').replace(/^@+/, '').toLowerCase())
+    .filter(Boolean);
+  const blockedTaggerNames = [blockedTagger, player.noTagbackFrom && String(player.noTagbackFrom)]
+    .filter(Boolean);
+  if (blockedTagger && attemptedTagger.some((name) => blockedTaggerNames.some((blocked) => name === String(blocked).toLowerCase()))) {
+    return { immune: true, reason: 'no-tagback' };
+  }
+
+  if (isTimedImmune(player)) return { immune: true, reason: 'timed' };
   if (player.sleepingImmunity) return { immune: true, reason: 'sleeping' };
   if (player.offlineImmunity) return { immune: true, reason: 'offline' };
-  if (player.noTagbackFrom === taggerId) return { immune: true, reason: 'no-tagback' };
-  if (isTimedImmune(player)) return { immune: true, reason: 'timed' };
   return { immune: false };
 }
 
@@ -158,7 +169,7 @@ export async function POST(req: NextRequest) {
             return { error: `You are not it! ${whoIsIt?.twitchUsername || 'Unknown'} is it.` };
           }
 
-          const immuneCheck = isPlayerImmune(tgt, resolvedUserId!);
+          const immuneCheck = isPlayerImmune(tgt, resolvedUserId!, tagger);
           if (immuneCheck.immune) {
             return { error: `${tgt.twitchUsername || 'Target'} is immune (${immuneCheck.reason})` };
           }
