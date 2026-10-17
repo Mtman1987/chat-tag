@@ -60,6 +60,14 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
+
+test('admin Controller Bay exposes the SpaceMountainLive system channel without granting member access', () => {
+  const bay = read('src/components/nebula-controller-bay.tsx');
+  const access = read('src/lib/controller-access.ts');
+  assert.match(bay, /user\?\.isAdmin \? <option value="spacemountainlive">SpaceMountainLive — system channel<\/option> : null/);
+  assert.match(access, /req\.headers\.get\('x-spmt-is-admin'\) !== '1'/);
+});
+
 test('per-player game focus follows run IDs and expires after inactivity', () => {
   const state: any = { gameSettings: { default: {} } };
   const channel = 'spacemountainlive';
