@@ -18,7 +18,7 @@ const MOSAIC_FALLBACK_PROVIDERS = String(process.env.MOSAIC_IMAGE_FALLBACK_PROVI
 function promptForTheme(theme: string) {
   // Treat the submitted theme as data, not as extra prompt instructions. Keep
   // it short and single-line so a chat command cannot smuggle in a new prompt.
-  const subject = String(theme || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 120);
+  const subject = String(theme || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
   if (!subject) throw new Error('Enter a subject for the Mosaic theme.');
 
   return [
