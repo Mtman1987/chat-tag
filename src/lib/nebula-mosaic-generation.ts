@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import sharp from 'sharp';
 import { MOSAIC_COLORS, MOSAIC_HEIGHT, MOSAIC_WIDTH, type MosaicColorCode } from '@/lib/nebula-mosaic';
 import { getStreamweaverSecret } from '@/lib/runtime-secrets';
@@ -68,7 +67,7 @@ async function requestImage(theme: string) {
             quality: 'low',
             // A fresh seed prevents providers that honor seeds (especially free
             // URL-backed fallbacks) from serving the same cached artwork again.
-            seed: randomInt(1, 2_147_483_647),
+            seed: Math.floor(Math.random() * 2_147_483_646) + 1,
             negativePrompt: 'unrelated subject, substituted subject, people, animals, character portrait, duck, collage, multiple main subjects, text, letters, numbers, words, UI, controls, grid labels, photo, gradients, blur, watermark, logo',
           },
         }),
