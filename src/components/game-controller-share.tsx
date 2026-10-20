@@ -13,6 +13,7 @@ export function GameControllerShare({ game, channel, canManage }: { game: GameHu
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    setCopied(false);
     if (!channel) { setInteractiveBoardUrl(''); setObsOverlayUrl(''); return; }
     try {
       const links = buildGameHubLinks(window.location.origin, channel, game.id);
