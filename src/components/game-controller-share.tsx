@@ -1,16 +1,27 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { GameHubGame } from '@/lib/game-hub-catalog';
+import { buildGameHubLinks } from '@/lib/game-hub-links';
 
 type Connection = { configured: boolean; status?: string; error?: string; webhookName?: string; lastSyncedAt?: string | null };
 export function GameControllerShare({ game, channel, canManage }: { game: GameHubGame; channel: string; canManage: boolean }) {
-  const [url, setUrl] = useState('');
+  const [interactiveBoardUrl, setInteractiveBoardUrl] = useState('');
+  const [obsOverlayUrl, setObsOverlayUrl] = useState('');
   const [webhook, setWebhook] = useState('');
   const [connection, setConnection] = useState<Connection>({ configured: false });
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setUrl(channel ? new URL(`/overlay/game-hub/instant.${channel}.${game.id}`, window.location.origin).toString() : ''); }, [channel, game.id]);
+  useEffect(() => {
+    if (!channel) { setInteractiveBoardUrl(''); setObsOverlayUrl(''); return; }
+    try {
+      const links = buildGameHubLinks(window.location.origin, channel, game.id);
+      setInteractiveBoardUrl(links.interactiveBoardUrl);
+      setObsOverlayUrl(links.obsOverlayUrl);
+    } catch {
+      setInteractiveBoardUrl(''); setObsOverlayUrl('');
+    }
+  }, [channel, game.id]);
   useEffect(() => {
     let cancelled = false;
     setConnection({ configured: false }); setMessage(''); setWebhook('');
@@ -37,18 +48,25 @@ export function GameControllerShare({ game, channel, canManage }: { game: GameHu
     finally { setBusy(false); }
   }
   return <div className="space-y-6">
-    <div><h2 className="text-2xl font-black">Share {game.name}</h2><p className="mt-2 text-sm text-slate-300">One game, one link. Your channel is already selected: <strong>#{channel || 'choose a channel first'}</strong>.</p></div>
+    <div><h2 className="text-2xl font-black">Share {game.name}</h2><p className="mt-2 text-sm text-slate-300">The interactive game board and read-only OBS overlay use separate links. Your channel is already selected: <strong>#{channel || 'choose a channel first'}</strong>.</p></div>
+    <section className="space-y-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/[.04] p-5">
+      <h3 className="text-lg font-bold">Open the interactive game</h3>
+      <p className="text-sm text-slate-300">Open the player-facing game board in a separate browser tab. The link is scoped to #{channel || 'your channel'}{game.id === 'quackverse' ? ' and the default Quackverse room' : ''}.</p>
+      <label className="block text-xs font-bold text-emerald-100" htmlFor="game-interactive-board-link">Interactive game board URL</label>
+      <input id="game-interactive-board-link" readOnly value={interactiveBoardUrl} onFocus={event => event.target.select()} className="w-full rounded-xl border border-white/15 bg-black/40 p-3 text-xs text-slate-200" />
+      {interactiveBoardUrl ? <a href={interactiveBoardUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-full bg-emerald-300 px-4 py-2 text-sm font-bold text-slate-950">Open interactive board</a> : null}
+    </section>
     <section className="space-y-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/[.04] p-5">
-      <h3 className="text-lg font-bold">Show on your stream</h3>
-      <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-300"><li>Copy the OBS link below.</li><li>In OBS, add a <strong>Browser Source</strong> and paste it into URL.</li><li>Set width to <strong>1920</strong> and height to <strong>1080</strong>. Start the game from the Command tab.</li></ol>
-      <label className="block text-xs font-bold text-cyan-100" htmlFor="game-overlay-link">OBS browser source URL</label>
-      <input id="game-overlay-link" readOnly value={url} onFocus={event => event.target.select()} className="w-full rounded-xl border border-white/15 bg-black/40 p-3 text-xs text-slate-200" />
-      <div className="flex flex-wrap gap-2"><button disabled={!url} onClick={async () => { try { await navigator.clipboard.writeText(url); setCopied(true); } catch { setMessage('Select the URL above and copy it.'); } }} className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-40">{copied ? 'Copied!' : 'Copy OBS link'}</button>{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="rounded-full border border-white/20 px-4 py-2 text-sm text-white">Open preview</a> : null}</div>
+      <h3 className="text-lg font-bold">Show the read-only overlay on your stream</h3>
+      <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-300"><li>Copy the OBS overlay link below.</li><li>In OBS, add a <strong>Browser Source</strong> and paste it into URL.</li><li>Set width to <strong>1920</strong> and height to <strong>1080</strong>. Start the game from the Command tab.</li></ol>
+      <label className="block text-xs font-bold text-cyan-100" htmlFor="game-overlay-link">Read-only OBS browser-source URL</label>
+      <input id="game-overlay-link" readOnly value={obsOverlayUrl} onFocus={event => event.target.select()} className="w-full rounded-xl border border-white/15 bg-black/40 p-3 text-xs text-slate-200" />
+      <div className="flex flex-wrap gap-2"><button disabled={!obsOverlayUrl} onClick={async () => { try { await navigator.clipboard.writeText(obsOverlayUrl); setCopied(true); } catch { setMessage('Select the URL above and copy it.'); } }} className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-40">{copied ? 'Copied!' : 'Copy OBS link'}</button>{obsOverlayUrl ? <a href={obsOverlayUrl} target="_blank" rel="noopener noreferrer" className="rounded-full border border-white/20 px-4 py-2 text-sm text-white">Open overlay preview</a> : null}</div>
       <p className="text-xs text-slate-400">This link always follows {game.name} in #{channel || 'your channel'}. No overlay profile setup is needed.</p>
     </section>
     <section className="space-y-3 rounded-2xl border border-violet-300/20 bg-violet-300/[.04] p-5">
       <h3 className="text-lg font-bold">Send this game to Discord</h3>
-      <p className="text-sm text-slate-300">Paste a webhook from your Discord text channel. We’ll send one game card and update its progress and scores about every 30 seconds, even when this controller is closed. Players use the card’s link to play in Twitch chat.</p>
+      <p className="text-sm text-slate-300">Paste a webhook from your Discord text channel. We’ll send one game card and update its progress and scores about every 30 seconds, even when this controller is closed. The card opens the interactive game board; players can also use the listed Twitch chat commands.</p>
       <details className="text-sm text-slate-400"><summary className="cursor-pointer text-violet-100">Where do I get a webhook?</summary><p className="mt-2">In Discord, edit the destination text channel → Integrations → Webhooks → New Webhook → Copy Webhook URL. You need permission to manage webhooks. Each game can use a different channel.</p></details>
       {canManage ? <form onSubmit={event => { event.preventDefault(); void update('POST'); }} className="space-y-3">
         <label htmlFor="game-discord-webhook" className="block text-xs font-bold text-violet-100">{connection.configured ? 'Replace or reconnect webhook' : 'Discord webhook URL'}</label>
