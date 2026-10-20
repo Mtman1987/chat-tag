@@ -9,7 +9,7 @@ test('Nebula Mosaic falls back when its preferred image provider is unavailable'
   assert.match(source, /PRIMARY SUBJECT/);
   assert.match(source, /depict this exact subject clearly and literally/);
   assert.match(source, /Do not reinterpret, replace, or omit the named subject/);
-  assert.match(source, /seed: randomInt\\(1, 2_147_483_647\\)/);
+  assert.match(source, /seed: randomInt\(1, 2_147_483_647\)/);
   assert.match(source, /unrelated subject, substituted subject/);
   assert.match(source, /quality: 'low'/);
   assert.match(source, /for \(const provider of providers\)/);
