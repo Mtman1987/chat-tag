@@ -127,18 +127,34 @@ test('controller connections require channel ownership or verified admin', () =>
   user = null; assert.equal(access.controllerAccess(req(false), { channel: 'alice', gameId: 'wordchain' }).status, 401);
 });
 
-test('game cards use public puzzle snapshots and disable Discord mentions', () => {
+test('game card links keep the interactive board separate from the read-only OBS overlay', () => {
+  const links = load('src/lib/game-hub-links.ts');
+  const quackverse = links.buildGameHubLinks('https://chat-tag.test', '#Alice', 'quackverse');
+  const board = new URL(quackverse.interactiveBoardUrl);
+  assert.equal(board.pathname, '/games/quackverse');
+  assert.equal(board.searchParams.get('channel'), 'alice');
+  assert.equal(board.searchParams.get('roomId'), 'default');
+  assert.equal(new URL(quackverse.obsOverlayUrl).pathname, '/overlay/game-hub/instant.alice.quackverse');
+  assert.throws(() => links.buildGameHubLinks('https://chat-tag.test', 'alice?token=private', 'quackverse'));
+});
+
+test('game cards use public puzzle snapshots and link to the interactive board, not the OBS overlay', () => {
+  const links = load('src/lib/game-hub-links.ts');
   const card = load('src/lib/game-discord-cards.ts', {
     '@/lib/game-hub-catalog': { getGameHubGame: id => ({ id, name: 'Test game', howToPlay: 'Play along.' }) },
     '@/lib/game-hub-commands': { canonicalPlayerCommands: () => [] },
     '@/lib/game-hub-state': { resolveChannelGameIds: () => ['phraseguess', 'wordchain'], getGameHubGameStats: () => ({ leaderboard: [] }), phraseGuessPublicSnapshot: () => ({ solved: false, maskedPhrase: '•••' }), wordChainPublicSnapshot: () => ({ roundNumber: 1, phase: 'play', theme: 'animals', currentWord: 'cat', requiredLetter: 't', chainLength: 1 }) },
     '@/lib/nebula-mosaic': { mosaicPublicSnapshot: () => ({ artwork: null }) },
     '@/lib/public-origin': { getPublicAppOrigin: () => 'https://chat-tag.test' },
+    '@/lib/game-hub-links': links,
   });
   const result = card.buildGameDiscordCard({ secretAnswer: 'hidden-answer' }, 'alice', 'phraseguess');
   assert.doesNotMatch(JSON.stringify(result), /hidden-answer/);
   assert.match(JSON.stringify(result), /•••/);
   assert.equal(result.allowed_mentions.parse.length, 0);
+  assert.equal(result.embeds[0].url, 'https://chat-tag.test/games/phraseguess?channel=alice');
+  assert.match(result.embeds[0].description, /\[Open interactive board\]\(https:\/\/chat-tag\.test\/games\/phraseguess\?channel=alice\)/);
+  assert.match(result.embeds[0].description, /\[OBS overlay \(read-only\)\]\(https:\/\/chat-tag\.test\/overlay\/game-hub\/instant\.alice\.phraseguess\)/);
 });
 
 test('healthy theme responses preserve signed Personal URL and clean canonical outputs', async () => {

@@ -4,6 +4,7 @@ import { canonicalPlayerCommands } from '@/lib/game-hub-commands';
 import { getGameHubGameStats, resolveChannelGameIds, wordChainPublicSnapshot, phraseGuessPublicSnapshot } from '@/lib/game-hub-state';
 import { mosaicPublicSnapshot } from '@/lib/nebula-mosaic';
 import { getPublicAppOrigin } from '@/lib/public-origin';
+import { buildGameHubLinks } from '@/lib/game-hub-links';
 
 const clean = (value: unknown, limit = 900) => String(value ?? '').replace(/([\\`*_~|>])/g, '\\$1').slice(0, limit);
 export function buildGameDiscordCard(stateValue: any, channel: string, gameId: string) {
@@ -12,7 +13,7 @@ export function buildGameDiscordCard(stateValue: any, channel: string, gameId: s
   // Snapshot helpers may initialize defaults; public cards never persist them.
   const state = structuredClone(stateValue);
   const origin = getPublicAppOrigin();
-  const url = `${origin}/overlay/game-hub/instant.${channel}.${gameId}`;
+  const { interactiveBoardUrl, obsOverlayUrl } = buildGameHubLinks(origin, channel, gameId);
   const running = resolveChannelGameIds(state, channel).includes(gameId);
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [];
   let image: { url: string } | undefined;
@@ -39,8 +40,8 @@ export function buildGameDiscordCard(stateValue: any, channel: string, gameId: s
   if (commands.length) fields.push({ name: 'Play in Twitch chat', value: commands.map(command => `\`${command.trigger.slice(0, 150)}\` — ${clean(command.description, 100)}`).join('\n').slice(0, 1000) });
   return {
     username: 'Nebula Arcade', allowed_mentions: { parse: [] },
-    embeds: [{ title: `${game.name} · #${channel}`, url, color: running ? 0x22d3ee : 0x64748b,
-      description: `**${running ? 'Live' : 'Waiting to start'}**\n${clean(game.howToPlay, 550)}\n\n[Watch the game](${url}) · [Play in Twitch chat](https://twitch.tv/${channel})`,
+    embeds: [{ title: `${game.name} · #${channel}`, url: interactiveBoardUrl, color: running ? 0x22d3ee : 0x64748b,
+      description: `**${running ? 'Live' : 'Waiting to start'}**\n${clean(game.howToPlay, 550)}\n\n[Open interactive board](${interactiveBoardUrl}) · [OBS overlay (read-only)](${obsOverlayUrl}) · [Play in Twitch chat](https://twitch.tv/${encodeURIComponent(channel)})`,
       fields, ...(image ? { image } : {}), footer: { text: 'Updates about every 30 seconds · One card per game' } }],
   };
 }
