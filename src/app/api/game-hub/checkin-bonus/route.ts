@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   }
   try {
     const award = await updateAppState(state => awardCheckinNebulaBonus(state, { ...input, userId }));
+    console.info('CURRENCY_SWEEP_V1', JSON.stringify({ schema: 'spmt.currency-source.v1', sourceId: 'nebula.checkin.front-seat', currency: 'GP', operation: 'award', delta: award.duplicate ? 0 : Number(award.amount || 0), eventId: String(award.awardId || input.awardId), duplicate: Boolean(award.duplicate), occurredAt: new Date().toISOString(), tenantId: input.channel }));
     console.info('[CheckinNebulaBonus]', JSON.stringify({ channel: input.channel, ...award }));
     return NextResponse.json({ ok: true, award });
   } catch (error) {
