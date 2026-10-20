@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import sharp from 'sharp';
 import { MOSAIC_COLORS, MOSAIC_HEIGHT, MOSAIC_WIDTH, type MosaicColorCode } from '@/lib/nebula-mosaic';
 import { getStreamweaverSecret } from '@/lib/runtime-secrets';
@@ -15,12 +16,19 @@ const MOSAIC_FALLBACK_PROVIDERS = String(process.env.MOSAIC_IMAGE_FALLBACK_PROVI
   .filter(Boolean);
 
 function promptForTheme(theme: string) {
+  // Treat the submitted theme as data, not as extra prompt instructions. Keep
+  // it short and single-line so a chat command cannot smuggle in a new prompt.
+  const subject = String(theme || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 120);
+  if (!subject) throw new Error('Enter a subject for the Mosaic theme.');
+
   return [
-    `Create one recognizable ${theme} as a finished collaborative pixel-art mosaic.`,
-    'Portrait 4:5 composition with one centered subject, a complete readable silhouette, and generous dark background around the edges.',
+    `PRIMARY SUBJECT — depict this exact subject clearly and literally: “${subject}”.`,
+    'Make one finished collaborative pixel-art mosaic. The named subject must be the dominant, unmistakable subject and occupy most of the canvas.',
+    'Do not reinterpret, replace, or omit the named subject. Do not introduce unrelated people, animals, characters, objects, or a collage. Extra decoration must never obscure or substitute for the requested subject.',
+    'Portrait 4:5 composition, one centered subject, complete readable silhouette, generous dark background around the edges.',
     'Use only ten flat colors: red, blue, green, yellow, purple, orange, pink, white, black, and cyan.',
     'Large connected color regions, crisp hard edges, no gradients, no antialiasing, and no tiny isolated details.',
-    'The artwork will be reduced to exactly 40 columns by 50 rows and split into four equal 20-by-25 work boards.',
+    'The artwork will be reduced to exactly 40 columns by 50 rows and split into four equal 20-by-25 work boards. Prioritize recognizable shape and strong contrast at tiny pixel size.',
     'ARTWORK ONLY. No grid lines, letters, numbers, captions, labels, frame, interface, logo, or watermark.',
   ].join(' ');
 }
@@ -58,7 +66,10 @@ async function requestImage(theme: string) {
           providerOverride: provider,
           providerParams: {
             quality: 'low',
-            negativePrompt: 'text, letters, numbers, words, UI, controls, grid labels, multiple subjects, collage, photo, gradients, blur, watermark, logo',
+            // A fresh seed prevents providers that honor seeds (especially free
+            // URL-backed fallbacks) from serving the same cached artwork again.
+            seed: randomInt(1, 2_147_483_647),
+            negativePrompt: 'unrelated subject, substituted subject, people, animals, character portrait, duck, collage, multiple main subjects, text, letters, numbers, words, UI, controls, grid labels, photo, gradients, blur, watermark, logo',
           },
         }),
       });
