@@ -51,6 +51,7 @@ export function NebulaControllerBay() {
                 Stream
                 <select value={channel} onChange={(event) => setChannel(event.target.value)} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white">
                   <option value="">{isLoading ? 'Loading community…' : 'Choose a stream…'}</option>
+                  {user?.isAdmin ? <option value="spacemountainlive">SpaceMountainLive — system channel</option> : null}
                   {liveStreamers.map((streamer) => (
                     <option key={`live:${streamer.id}`} value={streamer.username}>● {streamer.username} — LIVE</option>
                   ))}
